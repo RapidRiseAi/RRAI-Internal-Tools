@@ -1,4 +1,4 @@
-import type { ReactNode } from "react";
+import type { ButtonHTMLAttributes, ReactNode } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { labelize } from "@/lib/constants";
@@ -7,7 +7,7 @@ export function Card({ children, className }: { children: ReactNode; className?:
   return <section className={clsx("rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/20", className)}>{children}</section>;
 }
 
-export function Button({ children, className, ...props }: React.ButtonHTMLAttributes<HTMLButtonElement>) {
+export function Button({ children, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
   return <button className={clsx("rounded-xl bg-gradient-to-r from-rapid-blue to-rapid-cyan px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:scale-[1.01]", className)} {...props}>{children}</button>;
 }
 

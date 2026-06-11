@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BarChart3, BriefcaseBusiness, Building2, CircleDollarSign, ClipboardCheck, FileText, Gauge, Handshake, Headset, Library, Megaphone, Settings, Shield, Target, Users } from "lucide-react";
+import { BarChart3, BriefcaseBusiness, Building2, CircleDollarSign, ClipboardCheck, FileText, Gauge, Handshake, Headset, Library, Megaphone, Settings, Shield, Target } from "lucide-react";
 import { getCurrentUser } from "@/lib/auth";
 import { logoutAction } from "@/lib/actions";
 
