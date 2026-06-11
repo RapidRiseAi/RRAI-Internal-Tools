@@ -32,12 +32,24 @@ The initial migration creates the first owner account if it does not already exi
 
 Change this password immediately after the first successful login. If you want different first-login credentials before the first production migration runs, edit the owner seed in the migration or create the user manually in Supabase before deploying.
 
-## App environment variables
+## Vercel app environment variables
 
-The web app must have these runtime environment variables configured wherever it is hosted:
+Your Vercel screenshot uses the correct variable names for this app. Keep these names exactly as shown in Vercel for both Production and Preview:
 
-- `NEXT_PUBLIC_SUPABASE_URL`
-- `SUPABASE_SERVICE_ROLE_KEY`
-- `SESSION_SECRET`
+- `SUPABASE_SERVICE_ROLE_KEY` — required by `lib/supabase.ts` for server-side database access.
+- `NEXT_PUBLIC_SUPABASE_ANON_KEY` — safe publishable Supabase anon key for browser-compatible Supabase clients.
+- `NEXT_PUBLIC_SUPABASE_URL` — your Supabase project URL, for example `https://lakisdthcuejvazgsbxz.supabase.co`.
 
-`NEXT_PUBLIC_SUPABASE_ANON_KEY` is kept in `.env.example` for Supabase client compatibility, but the current server-side app login uses the service role key.
+The current login and internal data access code reads `NEXT_PUBLIC_SUPABASE_URL` and `SUPABASE_SERVICE_ROLE_KEY` on the server. Do not rename these to `SUPABASE_URL`, `SUPABASE_KEY`, or `SUPABASE_ANON_KEY`, because the app will not find them.
+
+`SESSION_SECRET` should also be set in Vercel before production use so login sessions are signed with your own stable secret instead of the development fallback.
+
+## GitHub Actions secrets are separate from Vercel variables
+
+The Vercel variables above make the deployed web app talk to Supabase. They do not give GitHub Actions permission to run database migrations. The migration workflow still needs these GitHub repository secrets under **GitHub > Settings > Secrets and variables > Actions**:
+
+- `SUPABASE_ACCESS_TOKEN`
+- `SUPABASE_PROJECT_ID`
+- `SUPABASE_DB_PASSWORD`
+
+You do not need to put `SUPABASE_DB_PASSWORD` in Vercel unless another part of the app starts connecting directly to Postgres. Keep database migration credentials in GitHub Actions only.
