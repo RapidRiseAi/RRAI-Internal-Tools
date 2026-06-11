@@ -1,0 +1,6 @@
+import { AppShell } from "@/components/app-shell";
+import { ModulePage } from "@/components/module-page";
+import { genericList } from "@/lib/data";
+import type { Campaign, ContentItem } from "@/lib/types";
+export const dynamic = "force-dynamic";
+export default async function Marketing() { const [campaigns, content] = await Promise.all([genericList<Campaign>("campaigns"), genericList<ContentItem>("content_items")]); return <AppShell><ModulePage eyebrow="Growth" title="Marketing & outreach" description="Campaigns, platforms, target industries, offer messages, replies, calls booked, quotes sent, deals closed and content performance." metrics={[["Campaigns", campaigns.length], ["Contacted", campaigns.reduce((sum, campaign) => sum + campaign.number_contacted, 0)], ["Replies", campaigns.reduce((sum, campaign) => sum + campaign.replies, 0)], ["Calls booked", campaigns.reduce((sum, campaign) => sum + campaign.calls_booked, 0)], ["Content items", content.length]]} records={[...campaigns.map((campaign) => ({ id: campaign.id, title: campaign.name, subtitle: campaign.platform, status: "CAMPAIGN", value: `${campaign.deals_closed} deals` })), ...content.map((item) => ({ id: item.id, title: item.title, subtitle: item.platform ?? "Content", status: item.status, value: `${item.leads_generated} leads` }))]} emptyTitle="No marketing records yet" /></AppShell>; }
