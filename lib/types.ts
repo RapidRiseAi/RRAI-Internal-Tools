@@ -57,6 +57,16 @@ export type Client = {
   updated_at: string;
 };
 
+export type Contact = {
+  id: string;
+  client_id: string;
+  name: string;
+  email: string | null;
+  phone: string | null;
+  role: string | null;
+  is_primary: boolean;
+};
+
 export type Task = {
   id: string;
   title: string;
@@ -85,6 +95,16 @@ export type Service = {
   is_active: boolean;
 };
 
+export type Package = {
+  id: string;
+  service_id: string;
+  name: string;
+  description: string;
+  once_off_cents: number;
+  monthly_cents: number;
+  is_active: boolean;
+};
+
 export type ActivityLog = {
   id: string;
   action: string;
@@ -94,16 +114,68 @@ export type ActivityLog = {
   actor_id: string | null;
   lead_id: string | null;
   client_id: string | null;
+  quote_id: string | null;
+  project_id: string | null;
   task_id: string | null;
   created_at: string;
 };
 
-export type Quote = { id: string; quote_number: string; title: string; status: string; once_off_total_cents: number; monthly_total_cents: number; client_id: string | null; lead_id: string | null; updated_at: string; };
-export type Project = { id: string; name: string; status: string; progress: number; blocker: string | null; client_id: string; updated_at: string; };
-export type Invoice = { id: string; invoice_number: string; status: string; amount_cents: number; client_id: string; updated_at: string; };
-export type Retainer = { id: string; type: string; status: string; monthly_amount_cents: number; client_id: string; updated_at: string; };
-export type SupportTicket = { id: string; title: string; category: string; priority: string; status: string; client_id: string | null; project_id: string | null; updated_at: string; };
-export type Affiliate = { id: string; name: string; email: string; tracking_code: string; status: string; updated_at: string; };
-export type Campaign = { id: string; name: string; platform: string; number_contacted: number; replies: number; calls_booked: number; quotes_sent: number; deals_closed: number; updated_at: string; };
-export type ContentItem = { id: string; title: string; status: string; platform: string | null; leads_generated: number; updated_at: string; };
-export type KnowledgeBaseItem = { id: string; title: string; category: string; body: string; visibility: string; updated_at: string; };
+export type Quote = {
+  id: string;
+  quote_number: string;
+  title: string;
+  status: string;
+  once_off_total_cents: number;
+  monthly_total_cents: number;
+  client_id: string | null;
+  lead_id: string | null;
+  valid_until: string | null;
+  sent_at: string | null;
+  accepted_at: string | null;
+  internal_notes: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type QuoteItem = {
+  id: string;
+  quote_id: string;
+  service_id: string | null;
+  description: string;
+  quantity: number;
+  once_off_cents: number;
+  monthly_cents: number;
+  sort_order: number;
+};
+
+export type Project = {
+  id: string;
+  name: string;
+  status: string;
+  stage: string | null;
+  priority: string;
+  progress: number;
+  blocker: string | null;
+  deadline: string | null;
+  client_id: string;
+  quote_id: string | null;
+  created_at: string;
+  updated_at: string;
+};
+
+export type ChecklistTemplate = { id: string; name: string; service_id: string | null; description: string | null; is_active: boolean; };
+export type ChecklistItem = { id: string; template_id: string; title: string; description: string | null; sort_order: number; };
+export type ProjectChecklist = { id: string; project_id: string; template_item_id: string | null; title: string; status: string; completed_at: string | null; created_at: string; updated_at: string; };
+export type Note = { id: string; body: string; entity_type: string; entity_id: string; client_id: string | null; lead_id: string | null; project_id: string | null; created_at: string; updated_at: string; };
+export type FileRecord = { id: string; filename: string; url: string; mime_type: string | null; entity_type: string; entity_id: string; client_id: string | null; project_id: string | null; created_at: string; updated_at: string; };
+export type Invoice = { id: string; invoice_number: string; status: string; amount_cents: number; client_id: string; due_date: string | null; issued_at: string | null; created_at: string; updated_at: string; };
+export type Payment = { id: string; invoice_id: string; amount_cents: number; status: string; paid_at: string | null; method: string | null; reference: string | null; created_at: string; updated_at: string; };
+export type Retainer = { id: string; type: string; status: string; monthly_amount_cents: number; client_id: string; next_billing_date: string | null; created_at: string; updated_at: string; };
+export type SupportTicket = { id: string; title: string; category: string; priority: string; status: string; client_id: string | null; project_id: string | null; assigned_to: string | null; internal_notes: string | null; client_update_notes: string | null; resolution_notes: string | null; resolved_at: string | null; created_at: string; updated_at: string; };
+export type Affiliate = { id: string; name: string; email: string; tracking_code: string; status: string; default_commission_type: string; default_commission_rate: number; created_at: string; updated_at: string; };
+export type Referral = { id: string; affiliate_id: string; lead_id: string | null; client_id: string | null; status: string; created_at: string; updated_at: string; };
+export type Commission = { id: string; affiliate_id: string; quote_id: string | null; project_id: string | null; payment_id: string | null; status: string; amount_cents: number; commission_type: string; paid_at: string | null; created_at: string; updated_at: string; };
+export type Campaign = { id: string; name: string; platform: string; target_industry: string | null; offer_message: string | null; number_contacted: number; replies: number; calls_booked: number; quotes_sent: number; deals_closed: number; created_at: string; updated_at: string; };
+export type ContentItem = { id: string; title: string; status: string; platform: string | null; post_url: string | null; performance_notes: string | null; leads_generated: number; created_at: string; updated_at: string; };
+export type KnowledgeBaseItem = { id: string; title: string; category: string; body: string; visibility: string; created_at: string; updated_at: string; };
+export type Notification = { id: string; title: string; body: string; user_id: string | null; status: string; created_at: string; updated_at: string; };
