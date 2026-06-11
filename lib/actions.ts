@@ -28,6 +28,21 @@ function trackingCode(name: string) {
   return `${name.replace(/[^a-z0-9]/gi, "").slice(0, 6).toUpperCase() || "RRAI"}-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
 
+async function reserveSubmission(userId: string, formData: FormData, action: string) {
+  const submissionKey = str(formData, "submissionKey");
+  if (!submissionKey) return true;
+
+  const { error } = await getSupabaseAdmin().from("form_submissions").insert({
+    user_id: userId,
+    submission_key: submissionKey,
+    action,
+  });
+
+  if (!error) return true;
+  if (error.code === "23505") return false;
+  throw error;
+}
+
 async function logActivity(input: { action: string; entityType: string; entityId: string; message: string; actorId?: string; leadId?: string | null; clientId?: string | null; quoteId?: string | null; projectId?: string | null; taskId?: string | null }) {
   await getSupabaseAdmin().from("activity_logs").insert({
     action: input.action,
@@ -78,6 +93,7 @@ export async function logoutAction() {
 export async function upsertLead(formData: FormData) {
   const user = await requirePermission(permissions.leadsWrite);
   const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "lead:create"))) redirect("/leads");
   const parsed = leadSchema.parse({ companyName: str(formData, "companyName"), contactName: str(formData, "contactName"), email: str(formData, "email"), phone: str(formData, "phone"), source: str(formData, "source"), serviceInterest: str(formData, "serviceInterest"), stage: str(formData, "stage"), score: formData.get("score"), followUpDate: str(formData, "followUpDate"), nextAction: str(formData, "nextAction"), painPoints: str(formData, "painPoints"), assignedToId: str(formData, "assignedToId") });
   const payload = { company_name: parsed.companyName, contact_name: parsed.contactName, email: parsed.email ?? null, phone: parsed.phone ?? null, source: parsed.source, service_interest: parsed.serviceInterest, stage: parsed.stage, score: parsed.score, follow_up_date: parsed.followUpDate?.toISOString() ?? null, next_action: parsed.nextAction ?? null, pain_points: parsed.painPoints ?? null, assigned_to: parsed.assignedToId ?? null, ...(id ? {} : { created_by: user.id }) };
   const result = id ? await getSupabaseAdmin().from("leads").update(payload).eq("id", id).select("id,company_name").single() : await getSupabaseAdmin().from("leads").insert(payload).select("id,company_name").single();
@@ -100,6 +116,7 @@ export async function archiveLead(formData: FormData) {
 
 export async function convertLeadToClient(formData: FormData) {
   const user = await requirePermission(permissions.clientsWrite);
+  if (!(await reserveSubmission(user.id, formData, "lead:convert"))) redirect("/clients");
   const leadId = str(formData, "leadId");
   const supabase = getSupabaseAdmin();
   const { data: lead, error: leadError } = await supabase.from("leads").select("*").eq("id", leadId).single();
@@ -118,6 +135,7 @@ export async function convertLeadToClient(formData: FormData) {
 export async function upsertClient(formData: FormData) {
   const user = await requirePermission(permissions.clientsWrite);
   const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "client:create"))) redirect("/clients");
   const parsed = clientSchema.parse({ companyName: str(formData, "companyName"), accountStatus: str(formData, "accountStatus"), industry: str(formData, "industry"), website: str(formData, "website"), primaryEmail: str(formData, "primaryEmail"), primaryPhone: str(formData, "primaryPhone"), nextAction: str(formData, "nextAction"), mrrCents: formData.get("mrrCents") });
   const payload = { company_name: parsed.companyName, account_status: parsed.accountStatus, industry: parsed.industry ?? null, website: parsed.website ?? null, primary_email: parsed.primaryEmail ?? null, primary_phone: parsed.primaryPhone ?? null, next_action: parsed.nextAction ?? null, mrr_cents: parsed.mrrCents };
   const result = id ? await getSupabaseAdmin().from("clients").update(payload).eq("id", id).select("id,company_name").single() : await getSupabaseAdmin().from("clients").insert(payload).select("id,company_name").single();
@@ -130,6 +148,7 @@ export async function upsertClient(formData: FormData) {
 export async function upsertTask(formData: FormData) {
   const user = await requirePermission(permissions.tasksWrite);
   const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "task:create"))) redirect(path(formData, "/tasks"));
   const parsed = taskSchema.parse({ title: str(formData, "title"), description: str(formData, "description"), type: str(formData, "type"), status: str(formData, "status"), priority: str(formData, "priority"), dueDate: str(formData, "dueDate"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId"), assignedToId: str(formData, "assignedToId") });
   const payload = { title: parsed.title, description: parsed.description ?? null, type: parsed.type, status: parsed.status, priority: parsed.priority, due_date: parsed.dueDate?.toISOString() ?? null, client_id: parsed.clientId ?? null, project_id: parsed.projectId ?? null, assigned_to: parsed.assignedToId ?? null, completed_at: parsed.status === "DONE" ? new Date().toISOString() : null, ...(id ? {} : { created_by: user.id }) };
   const result = id ? await getSupabaseAdmin().from("tasks").update(payload).eq("id", id).select("id,title").single() : await getSupabaseAdmin().from("tasks").insert(payload).select("id,title").single();
@@ -140,7 +159,8 @@ export async function upsertTask(formData: FormData) {
 }
 
 export async function upsertUser(formData: FormData) {
-  await requirePermission(permissions.settingsManage);
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "user:create"))) redirect("/settings");
   const parsed = userSchema.parse({ name: str(formData, "name"), email: str(formData, "email").toLowerCase(), password: str(formData, "password"), roleId: str(formData, "roleId"), title: str(formData, "title"), phone: str(formData, "phone"), status: str(formData, "status") });
   if (!parsed.password) throw new Error("Password is required for new users.");
   const { error } = await getSupabaseAdmin().from("users").insert({ name: parsed.name, email: parsed.email, password_hash: await bcrypt.hash(parsed.password, 12), role_id: parsed.roleId, title: parsed.title ?? null, phone: parsed.phone ?? null, status: parsed.status });
@@ -152,6 +172,7 @@ export async function upsertUser(formData: FormData) {
 export async function upsertQuote(formData: FormData) {
   const user = await requirePermission(permissions.quotesWrite);
   const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "quote:create"))) redirect("/quotes");
   const parsed = quoteSchema.parse({ title: str(formData, "title"), status: str(formData, "status"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), validUntil: str(formData, "validUntil"), internalNotes: str(formData, "internalNotes"), itemDescription: str(formData, "itemDescription"), itemQuantity: formData.get("itemQuantity"), itemOnceOffCents: formData.get("itemOnceOffCents"), itemMonthlyCents: formData.get("itemMonthlyCents"), serviceId: str(formData, "serviceId") });
   const onceOff = parsed.itemQuantity * parsed.itemOnceOffCents;
   const monthly = parsed.itemQuantity * parsed.itemMonthlyCents;
@@ -168,6 +189,7 @@ export async function upsertQuote(formData: FormData) {
 
 export async function acceptQuote(formData: FormData) {
   const user = await requirePermission(permissions.quotesWrite);
+  if (!(await reserveSubmission(user.id, formData, "quote:accept"))) redirect("/quotes");
   const id = str(formData, "id");
   const supabase = getSupabaseAdmin();
   const { data: quote, error } = await supabase.from("quotes").select("*").eq("id", id).single();
@@ -199,6 +221,7 @@ export async function acceptQuote(formData: FormData) {
 export async function upsertProject(formData: FormData) {
   const user = await requirePermission(permissions.projectsWrite);
   const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "project:create"))) redirect("/projects");
   const parsed = projectSchema.parse({ name: str(formData, "name"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), stage: str(formData, "stage"), priority: str(formData, "priority"), deadline: str(formData, "deadline"), progress: formData.get("progress"), blocker: str(formData, "blocker"), seedChecklist: bool(formData, "seedChecklist") });
   const payload = { name: parsed.name, client_id: parsed.clientId, quote_id: parsed.quoteId ?? null, status: parsed.status, stage: parsed.stage ?? null, priority: parsed.priority, deadline: parsed.deadline?.toISOString() ?? null, progress: parsed.progress, blocker: parsed.blocker ?? null };
   const result = id ? await getSupabaseAdmin().from("projects").update(payload).eq("id", id).select("id,name,client_id").single() : await getSupabaseAdmin().from("projects").insert(payload).select("id,name,client_id").single();
@@ -210,7 +233,8 @@ export async function upsertProject(formData: FormData) {
 }
 
 export async function updateProjectChecklist(formData: FormData) {
-  await requirePermission(permissions.projectsWrite);
+  const user = await requirePermission(permissions.projectsWrite);
+  if (!(await reserveSubmission(user.id, formData, "project-checklist:update"))) return;
   const parsed = projectChecklistSchema.parse({ id: str(formData, "id"), status: str(formData, "status") });
   await getSupabaseAdmin().from("project_checklists").update({ status: parsed.status, completed_at: parsed.status === "DONE" ? new Date().toISOString() : null }).eq("id", parsed.id);
   revalidatePath(path(formData, "/projects"));
@@ -218,6 +242,7 @@ export async function updateProjectChecklist(formData: FormData) {
 
 export async function upsertInvoice(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "invoice:create"))) redirect("/billing");
   const parsed = invoiceSchema.parse({ invoiceNumber: str(formData, "invoiceNumber"), clientId: str(formData, "clientId"), status: str(formData, "status"), amountCents: formData.get("amountCents"), dueDate: str(formData, "dueDate") });
   const { data, error } = await getSupabaseAdmin().from("invoices").insert({ invoice_number: parsed.invoiceNumber ?? numberCode("INV"), client_id: parsed.clientId, status: parsed.status, amount_cents: parsed.amountCents, due_date: parsed.dueDate?.toISOString() ?? null, issued_at: new Date().toISOString() }).select("id,invoice_number,client_id").single();
   if (error) throw error;
@@ -228,6 +253,7 @@ export async function upsertInvoice(formData: FormData) {
 
 export async function recordPayment(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "payment:create"))) redirect("/billing");
   const parsed = paymentSchema.parse({ invoiceId: str(formData, "invoiceId"), amountCents: formData.get("amountCents"), status: str(formData, "status"), method: str(formData, "method"), reference: str(formData, "reference") });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("payments").insert({ invoice_id: parsed.invoiceId, amount_cents: parsed.amountCents, status: parsed.status, method: parsed.method ?? null, reference: parsed.reference ?? null, paid_at: parsed.status === "PAID" ? new Date().toISOString() : null }).select("id,invoice_id").single();
@@ -240,6 +266,7 @@ export async function recordPayment(formData: FormData) {
 
 export async function upsertRetainer(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "retainer:create"))) redirect("/retainers");
   const parsed = retainerSchema.parse({ clientId: str(formData, "clientId"), type: str(formData, "type"), status: str(formData, "status"), monthlyAmountCents: formData.get("monthlyAmountCents"), nextBillingDate: str(formData, "nextBillingDate") });
   const { data, error } = await getSupabaseAdmin().from("retainers").insert({ client_id: parsed.clientId, type: parsed.type, status: parsed.status, monthly_amount_cents: parsed.monthlyAmountCents, next_billing_date: parsed.nextBillingDate?.toISOString() ?? null }).select("id,type,client_id").single();
   if (error) throw error;
@@ -251,6 +278,7 @@ export async function upsertRetainer(formData: FormData) {
 export async function upsertSupportTicket(formData: FormData) {
   const user = await requirePermission(permissions.supportWrite);
   const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "support-ticket:create"))) redirect("/support");
   const parsed = supportTicketSchema.parse({ title: str(formData, "title"), category: str(formData, "category"), priority: str(formData, "priority"), status: str(formData, "status"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId"), assignedToId: str(formData, "assignedToId"), internalNotes: str(formData, "internalNotes"), clientUpdateNotes: str(formData, "clientUpdateNotes"), resolutionNotes: str(formData, "resolutionNotes") });
   const payload = { title: parsed.title, category: parsed.category, priority: parsed.priority, status: parsed.status, client_id: parsed.clientId ?? null, project_id: parsed.projectId ?? null, assigned_to: parsed.assignedToId ?? null, internal_notes: parsed.internalNotes ?? null, client_update_notes: parsed.clientUpdateNotes ?? null, resolution_notes: parsed.resolutionNotes ?? null, resolved_at: ["RESOLVED", "CLOSED"].includes(parsed.status) ? new Date().toISOString() : null };
   const result = id ? await getSupabaseAdmin().from("support_tickets").update(payload).eq("id", id).select("id,title,client_id,project_id").single() : await getSupabaseAdmin().from("support_tickets").insert(payload).select("id,title,client_id,project_id").single();
@@ -261,7 +289,8 @@ export async function upsertSupportTicket(formData: FormData) {
 }
 
 export async function upsertAffiliate(formData: FormData) {
-  await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.marketingWrite);
+  if (!(await reserveSubmission(user.id, formData, "affiliate:create"))) redirect("/affiliates");
   const parsed = affiliateSchema.parse({ name: str(formData, "name"), email: str(formData, "email"), trackingCode: str(formData, "trackingCode"), status: str(formData, "status"), defaultCommissionType: str(formData, "defaultCommissionType"), defaultCommissionRate: formData.get("defaultCommissionRate") });
   const { error } = await getSupabaseAdmin().from("affiliates").insert({ name: parsed.name, email: parsed.email, tracking_code: parsed.trackingCode ?? trackingCode(parsed.name), status: parsed.status, default_commission_type: parsed.defaultCommissionType, default_commission_rate: parsed.defaultCommissionRate });
   if (error) throw error;
@@ -270,7 +299,8 @@ export async function upsertAffiliate(formData: FormData) {
 }
 
 export async function createReferral(formData: FormData) {
-  await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.marketingWrite);
+  if (!(await reserveSubmission(user.id, formData, "referral:create"))) redirect("/affiliates");
   const parsed = referralSchema.parse({ affiliateId: str(formData, "affiliateId"), leadId: str(formData, "leadId"), clientId: str(formData, "clientId"), status: str(formData, "status") || "PENDING" });
   await getSupabaseAdmin().from("referrals").insert({ affiliate_id: parsed.affiliateId, lead_id: parsed.leadId ?? null, client_id: parsed.clientId ?? null, status: parsed.status });
   revalidatePath("/affiliates");
@@ -278,7 +308,8 @@ export async function createReferral(formData: FormData) {
 }
 
 export async function createCommission(formData: FormData) {
-  await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.marketingWrite);
+  if (!(await reserveSubmission(user.id, formData, "commission:create"))) redirect("/affiliates");
   const parsed = commissionSchema.parse({ affiliateId: str(formData, "affiliateId"), quoteId: str(formData, "quoteId"), projectId: str(formData, "projectId"), paymentId: str(formData, "paymentId"), status: str(formData, "status"), amountCents: formData.get("amountCents"), commissionType: str(formData, "commissionType") });
   await getSupabaseAdmin().from("commissions").insert({ affiliate_id: parsed.affiliateId, quote_id: parsed.quoteId ?? null, project_id: parsed.projectId ?? null, payment_id: parsed.paymentId ?? null, status: parsed.status, amount_cents: parsed.amountCents, commission_type: parsed.commissionType, paid_at: parsed.status === "PAID" ? new Date().toISOString() : null });
   revalidatePath("/affiliates");
@@ -286,7 +317,8 @@ export async function createCommission(formData: FormData) {
 }
 
 export async function upsertCampaign(formData: FormData) {
-  await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.marketingWrite);
+  if (!(await reserveSubmission(user.id, formData, "campaign:create"))) redirect("/marketing");
   const parsed = campaignSchema.parse({ name: str(formData, "name"), platform: str(formData, "platform"), targetIndustry: str(formData, "targetIndustry"), offerMessage: str(formData, "offerMessage"), numberContacted: formData.get("numberContacted"), replies: formData.get("replies"), callsBooked: formData.get("callsBooked"), quotesSent: formData.get("quotesSent"), dealsClosed: formData.get("dealsClosed") });
   await getSupabaseAdmin().from("campaigns").insert({ name: parsed.name, platform: parsed.platform, target_industry: parsed.targetIndustry ?? null, offer_message: parsed.offerMessage ?? null, number_contacted: parsed.numberContacted, replies: parsed.replies, calls_booked: parsed.callsBooked, quotes_sent: parsed.quotesSent, deals_closed: parsed.dealsClosed });
   revalidatePath("/marketing");
@@ -294,7 +326,8 @@ export async function upsertCampaign(formData: FormData) {
 }
 
 export async function upsertContentItem(formData: FormData) {
-  await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.marketingWrite);
+  if (!(await reserveSubmission(user.id, formData, "content-item:create"))) redirect("/marketing");
   const parsed = contentItemSchema.parse({ title: str(formData, "title"), status: str(formData, "status"), platform: str(formData, "platform"), postUrl: str(formData, "postUrl"), performanceNotes: str(formData, "performanceNotes"), leadsGenerated: formData.get("leadsGenerated") });
   await getSupabaseAdmin().from("content_items").insert({ title: parsed.title, status: parsed.status, platform: parsed.platform ?? null, post_url: parsed.postUrl ?? null, performance_notes: parsed.performanceNotes ?? null, leads_generated: parsed.leadsGenerated });
   revalidatePath("/marketing");
@@ -302,7 +335,8 @@ export async function upsertContentItem(formData: FormData) {
 }
 
 export async function upsertKnowledgeBaseItem(formData: FormData) {
-  await requirePermission(permissions.settingsManage);
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "knowledge-base:create"))) redirect("/knowledge-base");
   const parsed = knowledgeBaseSchema.parse({ title: str(formData, "title"), category: str(formData, "category"), body: str(formData, "body"), visibility: str(formData, "visibility") });
   await getSupabaseAdmin().from("knowledge_base_items").insert({ title: parsed.title, category: parsed.category, body: parsed.body, visibility: parsed.visibility });
   revalidatePath("/knowledge-base");
@@ -311,6 +345,7 @@ export async function upsertKnowledgeBaseItem(formData: FormData) {
 
 export async function addNote(formData: FormData) {
   const user = await requirePermission(permissions.clientsWrite);
+  if (!(await reserveSubmission(user.id, formData, "note:create"))) return;
   const parsed = noteSchema.parse({ body: str(formData, "body"), entityType: str(formData, "entityType"), entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), projectId: str(formData, "projectId") });
   const { error } = await getSupabaseAdmin().from("notes").insert({ body: parsed.body, entity_type: parsed.entityType, entity_id: parsed.entityId, client_id: parsed.clientId ?? null, lead_id: parsed.leadId ?? null, project_id: parsed.projectId ?? null });
   if (error) throw error;
@@ -319,14 +354,16 @@ export async function addNote(formData: FormData) {
 }
 
 export async function addFileRecord(formData: FormData) {
-  await requirePermission(permissions.clientsWrite);
+  const user = await requirePermission(permissions.clientsWrite);
+  if (!(await reserveSubmission(user.id, formData, "file-record:create"))) return;
   const parsed = fileRecordSchema.parse({ filename: str(formData, "filename"), url: str(formData, "url"), mimeType: str(formData, "mimeType"), entityType: str(formData, "entityType"), entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId") });
   await getSupabaseAdmin().from("files").insert({ filename: parsed.filename, url: parsed.url, mime_type: parsed.mimeType ?? null, entity_type: parsed.entityType, entity_id: parsed.entityId, client_id: parsed.clientId ?? null, project_id: parsed.projectId ?? null });
   revalidatePath(path(formData, "/dashboard"));
 }
 
 export async function createChecklistTemplate(formData: FormData) {
-  await requirePermission(permissions.settingsManage);
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "checklist-template:create"))) redirect("/settings");
   const parsed = checklistTemplateSchema.parse({ name: str(formData, "name"), serviceId: str(formData, "serviceId"), description: str(formData, "description"), firstItemTitle: str(formData, "firstItemTitle") });
   const { data, error } = await getSupabaseAdmin().from("checklist_templates").insert({ name: parsed.name, service_id: parsed.serviceId ?? null, description: parsed.description ?? null, is_active: true }).select("id").single();
   if (error) throw error;
@@ -336,7 +373,8 @@ export async function createChecklistTemplate(formData: FormData) {
 }
 
 export async function createChecklistItem(formData: FormData) {
-  await requirePermission(permissions.settingsManage);
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "checklist-item:create"))) redirect("/settings");
   const parsed = checklistItemSchema.parse({ templateId: str(formData, "templateId"), title: str(formData, "title"), description: str(formData, "description") });
   await getSupabaseAdmin().from("checklist_items").insert({ template_id: parsed.templateId, title: parsed.title, description: parsed.description ?? null, sort_order: Number(formData.get("sortOrder") ?? 0) });
   revalidatePath("/settings");
