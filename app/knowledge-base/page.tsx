@@ -1,0 +1,4 @@
+import { AppShell } from "@/components/app-shell";
+import { ModulePage } from "@/components/module-page";
+import { prisma } from "@/lib/db";
+export default async function Knowledge(){const items=await prisma.knowledgeBaseItem.findMany({orderBy:{updatedAt:"desc"}}); return <AppShell><ModulePage eyebrow="Procedures" title="Knowledge base" description="SOPs, sales scripts, discovery questions, pricing rules, proposal templates, troubleshooting and handover guides." metrics={[["Articles",items.length],["SOPs",items.filter(i=>i.category==="SOP").length],["Sales",items.filter(i=>i.category==="Sales").length],["Troubleshooting",items.filter(i=>i.category==="Troubleshooting").length],["Internal",items.filter(i=>i.visibility==="INTERNAL").length]]} records={items.map(i=>({id:i.id,title:i.title,subtitle:i.category,status:i.visibility}))} emptyTitle="No knowledge base items yet"/></AppShell>}

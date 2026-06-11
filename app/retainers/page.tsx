@@ -1,0 +1,5 @@
+import { AppShell } from "@/components/app-shell";
+import { ModulePage } from "@/components/module-page";
+import { prisma } from "@/lib/db";
+import { money } from "@/lib/format";
+export default async function Retainers(){const retainers=await prisma.retainer.findMany({include:{client:true},orderBy:{updatedAt:"desc"}}); return <AppShell><ModulePage eyebrow="Recurring revenue" title="Retainers" description="Track hosting, maintenance, SEO, AI bot, dashboard, portal, automation monitoring and support retainers." metrics={[["Retainers",retainers.length],["Active MRR",money(retainers.filter(r=>r.status==="ACTIVE").reduce((a,r)=>a+r.monthlyAmountCents,0))],["Overdue",retainers.filter(r=>r.status==="OVERDUE").length],["Paused",retainers.filter(r=>r.status==="PAUSED").length],["Upgrade pending",retainers.filter(r=>r.status==="UPGRADE_PENDING").length]]} records={retainers.map(r=>({id:r.id,title:r.type,subtitle:r.client.companyName,status:r.status,value:money(r.monthlyAmountCents)}))} emptyTitle="No retainers yet"/></AppShell>}

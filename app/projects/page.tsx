@@ -1,0 +1,4 @@
+import { AppShell } from "@/components/app-shell";
+import { ModulePage } from "@/components/module-page";
+import { prisma } from "@/lib/db";
+export default async function Projects(){const projects=await prisma.project.findMany({include:{client:true,tasks:true},orderBy:{updatedAt:"desc"}}); return <AppShell><ModulePage eyebrow="Delivery" title="Projects" description="Delivery workflow foundation with project statuses, client links, tasks, checklists, blockers, deadlines and progress." metrics={[["Total projects",projects.length],["Active",projects.filter(p=>p.status!=="COMPLETED").length],["Waiting client",projects.filter(p=>p.status==="WAITING_FOR_CLIENT_INFO").length],["Blocked",projects.filter(p=>p.blocker).length],["Tasks",projects.reduce((a,p)=>a+p.tasks.length,0)]]} records={projects.map(p=>({id:p.id,title:p.name,subtitle:p.client.companyName,status:p.status,value:`${p.progress}%`}))} emptyTitle="No projects yet"/></AppShell>}

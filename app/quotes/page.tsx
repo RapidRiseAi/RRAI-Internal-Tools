@@ -1,0 +1,5 @@
+import { AppShell } from "@/components/app-shell";
+import { ModulePage } from "@/components/module-page";
+import { prisma } from "@/lib/db";
+import { money } from "@/lib/format";
+export default async function Quotes(){const quotes=await prisma.quote.findMany({include:{client:true,lead:true},orderBy:{updatedAt:"desc"}}); const agg=await prisma.quote.aggregate({_sum:{onceOffTotalCents:true,monthlyTotalCents:true}}); return <AppShell><ModulePage eyebrow="Sales" title="Quotes" description="Quote builder foundation with statuses, line items, once-off pricing, monthly pricing and quote-to-project conversion model." metrics={[["Total quotes",quotes.length],["Quoted once-off",money(agg._sum.onceOffTotalCents??0)],["Quoted monthly",money(agg._sum.monthlyTotalCents??0)],["Accepted",quotes.filter(q=>q.status==="ACCEPTED").length],["Follow-up due",quotes.filter(q=>q.status==="FOLLOW_UP_DUE").length]]} records={quotes.map(q=>({id:q.id,title:q.title,subtitle:q.client?.companyName??q.lead?.companyName??q.quoteNumber,status:q.status,value:money(q.onceOffTotalCents+q.monthlyTotalCents)}))} emptyTitle="No quotes created yet"/></AppShell>}

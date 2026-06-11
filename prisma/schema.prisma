@@ -1,0 +1,454 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "sqlite"
+  url      = env("DATABASE_URL")
+}
+
+model User {
+  id           String    @id @default(cuid())
+  name         String
+  email        String    @unique
+  passwordHash String
+  roleId       String
+  role         Role      @relation(fields: [roleId], references: [id])
+  status       String    @default("ACTIVE")
+  title        String?
+  phone        String?
+  lastLoginAt  DateTime?
+  createdAt    DateTime  @default(now())
+  updatedAt    DateTime  @updatedAt
+
+  assignedLeads Lead[]    @relation("LeadAssignee")
+  createdLeads  Lead[]    @relation("LeadCreator")
+  assignedTasks Task[]    @relation("TaskAssignee")
+  createdTasks  Task[]    @relation("TaskCreator")
+  activities    ActivityLog[]
+}
+
+model Role {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String
+  permissions Json
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  users       User[]
+}
+
+model Lead {
+  id              String   @id @default(cuid())
+  companyName     String
+  contactName     String
+  email           String?
+  phone           String?
+  source          String
+  serviceInterest String
+  stage           String   @default("NEW_LEAD")
+  score           Int      @default(50)
+  followUpDate    DateTime?
+  nextAction      String?
+  painPoints      String?
+  lostReason      String?
+  assignedToId    String?
+  assignedTo      User?    @relation("LeadAssignee", fields: [assignedToId], references: [id])
+  createdById     String?
+  createdBy       User?    @relation("LeadCreator", fields: [createdById], references: [id])
+  convertedClientId String?
+  convertedClient Client?  @relation("ConvertedLead", fields: [convertedClientId], references: [id])
+  archivedAt      DateTime?
+  createdAt       DateTime @default(now())
+  updatedAt       DateTime @updatedAt
+  notes           Note[]
+  activities      ActivityLog[]
+  quotes          Quote[]
+  referrals       Referral[]
+}
+
+model Client {
+  id             String   @id @default(cuid())
+  companyName    String
+  accountStatus  String   @default("ACTIVE")
+  industry       String?
+  website        String?
+  primaryEmail   String?
+  primaryPhone   String?
+  nextAction     String?
+  mrrCents       Int      @default(0)
+  createdAt      DateTime @default(now())
+  updatedAt      DateTime @updatedAt
+  archivedAt     DateTime?
+  convertedFrom  Lead[]   @relation("ConvertedLead")
+  contacts       Contact[]
+  notes          Note[]
+  files          FileAsset[]
+  projects       Project[]
+  quotes         Quote[]
+  invoices       Invoice[]
+  retainers      Retainer[]
+  supportTickets SupportTicket[]
+  referrals      Referral[]
+  activities     ActivityLog[]
+}
+
+model Contact {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  name      String
+  email     String?
+  phone     String?
+  role      String?
+  isPrimary Boolean  @default(false)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Service {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  category    String
+  description String
+  baseOnceOffCents Int @default(0)
+  baseMonthlyCents Int @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  packages    Package[]
+  quoteItems  QuoteItem[]
+  templates   ChecklistTemplate[]
+}
+
+model Package {
+  id          String   @id @default(cuid())
+  serviceId   String
+  service     Service  @relation(fields: [serviceId], references: [id])
+  name        String
+  description String
+  onceOffCents Int     @default(0)
+  monthlyCents Int     @default(0)
+  isActive    Boolean  @default(true)
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Quote {
+  id          String   @id @default(cuid())
+  quoteNumber String   @unique
+  leadId      String?
+  lead        Lead?    @relation(fields: [leadId], references: [id])
+  clientId    String?
+  client      Client?  @relation(fields: [clientId], references: [id])
+  status      String   @default("DRAFT")
+  title       String
+  onceOffTotalCents Int @default(0)
+  monthlyTotalCents Int @default(0)
+  validUntil  DateTime?
+  sentAt      DateTime?
+  acceptedAt  DateTime?
+  internalNotes String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  items       QuoteItem[]
+  projects    Project[]
+  commissions Commission[]
+  activities  ActivityLog[]
+}
+
+model QuoteItem {
+  id          String   @id @default(cuid())
+  quoteId     String
+  quote       Quote    @relation(fields: [quoteId], references: [id])
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id])
+  description String
+  quantity    Int      @default(1)
+  onceOffCents Int     @default(0)
+  monthlyCents Int     @default(0)
+  sortOrder   Int      @default(0)
+}
+
+model Project {
+  id          String   @id @default(cuid())
+  clientId    String
+  client      Client   @relation(fields: [clientId], references: [id])
+  quoteId     String?
+  quote       Quote?   @relation(fields: [quoteId], references: [id])
+  name        String
+  status      String   @default("NOT_STARTED")
+  stage       String?
+  priority    String   @default("MEDIUM")
+  deadline    DateTime?
+  progress    Int      @default(0)
+  blocker     String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  tasks       Task[]
+  notes       Note[]
+  files       FileAsset[]
+  checklists  ProjectChecklist[]
+  tickets     SupportTicket[]
+  commissions Commission[]
+  activities  ActivityLog[]
+}
+
+model Task {
+  id          String   @id @default(cuid())
+  title       String
+  description String?
+  type        String   @default("ADMIN_TASK")
+  status      String   @default("TO_DO")
+  priority    String   @default("MEDIUM")
+  dueDate     DateTime?
+  clientId    String?
+  projectId   String?
+  project     Project? @relation(fields: [projectId], references: [id])
+  assignedToId String?
+  assignedTo  User?    @relation("TaskAssignee", fields: [assignedToId], references: [id])
+  createdById String?
+  createdBy   User?    @relation("TaskCreator", fields: [createdById], references: [id])
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+  activities  ActivityLog[]
+}
+
+model ChecklistTemplate {
+  id          String   @id @default(cuid())
+  name        String
+  serviceId   String?
+  service     Service? @relation(fields: [serviceId], references: [id])
+  description String?
+  isActive    Boolean  @default(true)
+  items       ChecklistItem[]
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model ChecklistItem {
+  id          String   @id @default(cuid())
+  templateId  String
+  template    ChecklistTemplate @relation(fields: [templateId], references: [id])
+  title       String
+  description String?
+  sortOrder   Int      @default(0)
+  projectItems ProjectChecklist[]
+}
+
+model ProjectChecklist {
+  id          String   @id @default(cuid())
+  projectId   String
+  project     Project  @relation(fields: [projectId], references: [id])
+  templateItemId String?
+  templateItem ChecklistItem? @relation(fields: [templateItemId], references: [id])
+  title       String
+  status      String   @default("TO_DO")
+  completedAt DateTime?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+}
+
+model Note {
+  id        String   @id @default(cuid())
+  body      String
+  entityType String
+  entityId  String
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model FileAsset {
+  id        String   @id @default(cuid())
+  filename  String
+  url       String
+  mimeType  String?
+  entityType String
+  entityId  String
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Invoice {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  invoiceNumber String @unique
+  status    String   @default("DRAFT")
+  amountCents Int
+  dueDate   DateTime?
+  issuedAt  DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  payments  Payment[]
+}
+
+model Payment {
+  id        String   @id @default(cuid())
+  invoiceId String
+  invoice   Invoice  @relation(fields: [invoiceId], references: [id])
+  amountCents Int
+  status    String   @default("PENDING")
+  paidAt    DateTime?
+  method    String?
+  reference String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  commissions Commission[]
+}
+
+model Retainer {
+  id        String   @id @default(cuid())
+  clientId  String
+  client    Client   @relation(fields: [clientId], references: [id])
+  type      String
+  status    String   @default("ACTIVE")
+  monthlyAmountCents Int
+  nextBillingDate DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model SupportTicket {
+  id        String   @id @default(cuid())
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  title     String
+  category  String
+  priority  String   @default("MEDIUM")
+  status    String   @default("NEW")
+  assignedToId String?
+  assignedTo User? @relation("TicketAssignee", fields: [assignedToId], references: [id])
+  internalNotes String?
+  clientUpdateNotes String?
+  resolutionNotes String?
+  resolvedAt DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Affiliate {
+  id        String   @id @default(cuid())
+  name      String
+  email     String   @unique
+  trackingCode String @unique
+  status    String   @default("ACTIVE")
+  defaultCommissionType String @default("ONCE_OFF")
+  defaultCommissionRate Int @default(10)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  referrals Referral[]
+  commissions Commission[]
+}
+
+model Referral {
+  id        String   @id @default(cuid())
+  affiliateId String
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id])
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  status    String   @default("PENDING")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Commission {
+  id        String   @id @default(cuid())
+  affiliateId String
+  affiliate Affiliate @relation(fields: [affiliateId], references: [id])
+  quoteId   String?
+  quote     Quote?   @relation(fields: [quoteId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  paymentId String?
+  payment   Payment? @relation(fields: [paymentId], references: [id])
+  status    String   @default("PENDING")
+  amountCents Int
+  commissionType String @default("ONCE_OFF")
+  paidAt    DateTime?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Campaign {
+  id        String   @id @default(cuid())
+  name      String
+  platform  String
+  targetIndustry String?
+  offerMessage String?
+  numberContacted Int @default(0)
+  replies   Int @default(0)
+  callsBooked Int @default(0)
+  quotesSent Int @default(0)
+  dealsClosed Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ContentItem {
+  id        String   @id @default(cuid())
+  title     String
+  status    String   @default("IDEA")
+  platform  String?
+  postUrl   String?
+  performanceNotes String?
+  leadsGenerated Int @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model KnowledgeBaseItem {
+  id        String   @id @default(cuid())
+  title     String
+  category  String
+  body      String
+  visibility String @default("INTERNAL")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  action    String
+  entityType String
+  entityId  String
+  message   String
+  actorId   String?
+  actor     User?    @relation(fields: [actorId], references: [id])
+  leadId    String?
+  lead      Lead?    @relation(fields: [leadId], references: [id])
+  clientId  String?
+  client    Client?  @relation(fields: [clientId], references: [id])
+  quoteId   String?
+  quote     Quote?   @relation(fields: [quoteId], references: [id])
+  projectId String?
+  project   Project? @relation(fields: [projectId], references: [id])
+  taskId    String?
+  task      Task?    @relation(fields: [taskId], references: [id])
+  createdAt DateTime @default(now())
+}
+
+model Notification {
+  id        String   @id @default(cuid())
+  title     String
+  body      String
+  userId    String?
+  status    String   @default("UNREAD")
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}

@@ -1,0 +1,5 @@
+import { AppShell } from "@/components/app-shell";
+import { ModulePage } from "@/components/module-page";
+import { prisma } from "@/lib/db";
+import { money } from "@/lib/format";
+export default async function Affiliates(){const affiliates=await prisma.affiliate.findMany({include:{referrals:true,commissions:true},orderBy:{updatedAt:"desc"}}); const owed=affiliates.flatMap(a=>a.commissions).filter(c=>["APPROVED","PAYABLE"].includes(c.status)).reduce((a,c)=>a+c.amountCents,0); return <AppShell><ModulePage eyebrow="Partners" title="Affiliates" description="Partner profiles, tracking codes, referred leads, closed clients, commission status and payment history." metrics={[["Affiliates",affiliates.length],["Referrals",affiliates.reduce((a,f)=>a+f.referrals.length,0)],["Commission owed",money(owed)],["Paid records",affiliates.flatMap(a=>a.commissions).filter(c=>c.status==="PAID").length],["Disputes",affiliates.flatMap(a=>a.commissions).filter(c=>c.status==="DISPUTED").length]]} records={affiliates.map(a=>({id:a.id,title:a.name,subtitle:a.email,status:a.status,value:a.trackingCode}))} emptyTitle="No affiliates yet"/></AppShell>}
