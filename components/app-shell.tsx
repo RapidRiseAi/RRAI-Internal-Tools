@@ -64,7 +64,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-[1500px] px-6 py-8">{children}</main>
+        <main className="page-transition-in mx-auto max-w-[1500px] px-6 py-8">{children}</main>
       </div>
     </div>
   );
