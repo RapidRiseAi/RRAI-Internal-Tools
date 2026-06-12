@@ -385,28 +385,35 @@ export async function addFileRecord(formData: FormData) {
 
 export async function createChecklistTemplate(formData: FormData) {
   const user = await requirePermission(permissions.settingsManage);
-  if (!(await reserveSubmission(user.id, formData, "checklist-template:create"))) redirect("/settings");
-  const parsed = checklistTemplateSchema.parse({ name: str(formData, "name"), serviceId: str(formData, "serviceId"), description: str(formData, "description"), firstItemTitle: str(formData, "firstItemTitle") });
-  const { data, error } = await getSupabaseAdmin().from("checklist_templates").insert({ name: parsed.name, service_id: parsed.serviceId ?? null, description: parsed.description ?? null, is_active: true }).select("id").single();
-  if (error) throw error;
-  if (parsed.firstItemTitle) await getSupabaseAdmin().from("checklist_items").insert({ template_id: data.id, title: parsed.firstItemTitle, sort_order: 0 });
+  const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "checklist-template:create"))) redirect("/settings");
+  const parsed = checklistTemplateSchema.parse({ id, name: str(formData, "name"), serviceId: str(formData, "serviceId"), description: str(formData, "description"), firstItemTitle: str(formData, "firstItemTitle"), isActive: bool(formData, "isActive") });
+  const payload = { name: parsed.name, service_id: parsed.serviceId ?? null, description: parsed.description ?? null, is_active: parsed.isActive };
+  const result = id ? await getSupabaseAdmin().from("checklist_templates").update(payload).eq("id", id).select("id").single() : await getSupabaseAdmin().from("checklist_templates").insert(payload).select("id").single();
+  if (result.error) throw result.error;
+  if (!id && parsed.firstItemTitle) await getSupabaseAdmin().from("checklist_items").insert({ template_id: result.data.id, title: parsed.firstItemTitle, sort_order: 0 });
   revalidatePath("/settings");
   redirect("/settings");
 }
 
 export async function createChecklistItem(formData: FormData) {
   const user = await requirePermission(permissions.settingsManage);
-  if (!(await reserveSubmission(user.id, formData, "checklist-item:create"))) redirect("/settings");
-  const parsed = checklistItemSchema.parse({ templateId: str(formData, "templateId"), title: str(formData, "title"), description: str(formData, "description") });
-  await getSupabaseAdmin().from("checklist_items").insert({ template_id: parsed.templateId, title: parsed.title, description: parsed.description ?? null, sort_order: Number(formData.get("sortOrder") ?? 0) });
+  const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "checklist-item:create"))) redirect("/settings");
+  const parsed = checklistItemSchema.parse({ id, templateId: str(formData, "templateId"), title: str(formData, "title"), description: str(formData, "description"), sortOrder: formData.get("sortOrder") });
+  const payload = { template_id: parsed.templateId, title: parsed.title, description: parsed.description ?? null, sort_order: parsed.sortOrder };
+  const { error } = id ? await getSupabaseAdmin().from("checklist_items").update(payload).eq("id", id) : await getSupabaseAdmin().from("checklist_items").insert(payload);
+  if (error) throw error;
   revalidatePath("/settings");
   redirect("/settings");
 }
 
 export async function upsertService(formData: FormData) {
   await requirePermission(permissions.settingsManage);
-  const parsed = serviceSchema.parse({ name: str(formData, "name"), category: str(formData, "category"), description: str(formData, "description"), baseOnceOffCents: formData.get("baseOnceOffCents"), baseMonthlyCents: formData.get("baseMonthlyCents"), isActive: bool(formData, "isActive") });
-  const { error } = await getSupabaseAdmin().from("services").upsert({ name: parsed.name, category: parsed.category, description: parsed.description, base_once_off_cents: parsed.baseOnceOffCents, base_monthly_cents: parsed.baseMonthlyCents, is_active: parsed.isActive }, { onConflict: "name" });
+  const id = str(formData, "id") || undefined;
+  const parsed = serviceSchema.parse({ id, name: str(formData, "name"), category: str(formData, "category"), description: str(formData, "description"), baseOnceOffCents: formData.get("baseOnceOffCents"), baseMonthlyCents: formData.get("baseMonthlyCents"), isActive: bool(formData, "isActive") });
+  const payload = { name: parsed.name, category: parsed.category, description: parsed.description, base_once_off_cents: parsed.baseOnceOffCents, base_monthly_cents: parsed.baseMonthlyCents, is_active: parsed.isActive };
+  const { error } = id ? await getSupabaseAdmin().from("services").update(payload).eq("id", id) : await getSupabaseAdmin().from("services").upsert(payload, { onConflict: "name" });
   if (error) throw error;
   revalidatePath("/services");
   revalidatePath("/settings");

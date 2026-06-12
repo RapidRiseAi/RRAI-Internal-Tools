@@ -1,18 +1,36 @@
 import { NextResponse } from "next/server";
 import { getSupabaseAdmin } from "@/lib/supabase";
 import { dateShort, money } from "@/lib/format";
-import { simplePdf } from "@/lib/pdf";
+import { brandedPdf } from "@/lib/pdf";
 
 export async function GET(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
-  const { data: invoice } = await getSupabaseAdmin().from("invoices").select("*").eq("id", id).single();
+  const supabase = getSupabaseAdmin();
+  const { data: invoice } = await supabase.from("invoices").select("*").eq("id", id).single();
   if (!invoice) return new NextResponse("Invoice not found", { status: 404 });
-  const pdf = simplePdf(`Invoice ${invoice.invoice_number}`, [
-    `Status: ${invoice.status}`,
-    `Amount: ${money(invoice.amount_cents)}`,
-    `Due date: ${dateShort(invoice.due_date)}`,
-    invoice.quote_id ? `Based on quote: ${invoice.quote_id}` : "Custom invoice",
-    "Payment details are managed in Rapid Rise OS settings.",
-  ]);
+  const { data: client } = await supabase.from("clients").select("company_name,primary_email").eq("id", invoice.client_id).maybeSingle();
+  const { data: settings } = await supabase.from("company_settings").select("*").eq("id", true).maybeSingle();
+  const paymentDetails = [
+    settings?.bank_name ? `Bank: ${settings.bank_name}` : null,
+    settings?.bank_account_name ? `Account: ${settings.bank_account_name}` : null,
+    settings?.bank_account_number ? `Number: ${settings.bank_account_number}` : null,
+    settings?.bank_branch_code ? `Branch: ${settings.bank_branch_code}` : null,
+    settings?.payment_terms ?? null,
+  ].filter(Boolean) as string[];
+  const pdf = brandedPdf({
+    kind: "Invoice",
+    number: invoice.invoice_number,
+    title: `Invoice ${invoice.invoice_number}`,
+    status: invoice.status,
+    companyName: settings?.company_name,
+    billingEmail: settings?.billing_email,
+    clientName: client?.company_name,
+    clientEmail: client?.primary_email,
+    meta: [`Issued: ${dateShort(invoice.issued_at)}`, `Due: ${dateShort(invoice.due_date)}`, invoice.quote_id ? `Quote: ${invoice.quote_id}` : "Custom invoice"],
+    items: [{ description: invoice.quote_id ? "Accepted quote invoice" : "Professional services", amount: money(invoice.amount_cents), status: invoice.status }],
+    totals: [`Total due: ${money(invoice.amount_cents)}`, `Due date: ${dateShort(invoice.due_date)}`, `Status: ${invoice.status}`],
+    footer: settings?.invoice_footer,
+    paymentDetails,
+  });
   return new NextResponse(pdf, { headers: { "content-type": "application/pdf", "content-disposition": `attachment; filename="${invoice.invoice_number}.pdf"` } });
 }

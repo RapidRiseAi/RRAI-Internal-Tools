@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BarChart3, BriefcaseBusiness, Building2, CircleDollarSign, ClipboardCheck, FileText, Gauge, Handshake, Headset, Library, Megaphone, Settings, Shield, Target } from "lucide-react";
+import { BarChart3, BriefcaseBusiness, Building2, CalendarDays, CircleDollarSign, ClipboardCheck, FileText, Gauge, Handshake, Headset, Library, Megaphone, PlusCircle, Search, Settings, Shield, Target } from "lucide-react";
 import { getCurrentUser, permissionsFor } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 import { logoutAction } from "@/lib/actions";
@@ -13,6 +13,7 @@ const nav = [
   ["Quotes", "/quotes", FileText, permissions.quotesRead],
   ["Projects", "/projects", BriefcaseBusiness, permissions.projectsRead],
   ["Tasks", "/tasks", ClipboardCheck, permissions.tasksRead],
+  ["Calendar", "/calendar", CalendarDays, permissions.tasksRead],
   ["Billing", "/billing", CircleDollarSign, permissions.billingRead],
   ["Retainers", "/retainers", Shield, permissions.billingRead],
   ["Support", "/support", Headset, permissions.supportRead],
@@ -40,7 +41,11 @@ export async function AppShell({ children }: { children: ReactNode }) {
             <p className="text-xs text-slate-400">Internal command center</p>
           </div>
         </Link>
-        <nav className="mt-8 grid gap-1">
+        <div className="mt-6 grid grid-cols-2 gap-2">
+          <Link href="/leads/new" className="flex items-center justify-center gap-2 rounded-xl border border-rapid-cyan/30 bg-rapid-cyan/10 px-3 py-2 text-xs font-semibold text-rapid-cyan hover:bg-rapid-cyan/15"><PlusCircle className="size-3.5" /> Lead</Link>
+          <Link href="/tasks" className="flex items-center justify-center gap-2 rounded-xl border border-white/10 bg-white/5 px-3 py-2 text-xs font-semibold text-slate-200 hover:bg-white/10"><ClipboardCheck className="size-3.5" /> Task</Link>
+        </div>
+        <nav className="mt-5 grid gap-1">
           {nav.filter(([, , , permission]) => userPermissions.includes(permission)).map(([label, href, Icon]) => (
             <Link key={href} href={href} className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white">
               <Icon className="size-4 text-slate-500 group-hover:text-rapid-cyan" />
@@ -52,7 +57,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
       <div className="xl:pl-72">
         <header className="sticky top-0 z-10 border-b border-white/10 bg-slate-950/80 px-6 py-4 backdrop-blur">
           <div className="flex items-center justify-between gap-4">
-            <div className="hidden min-w-[28rem] rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-500 md:block">Search leads, clients, projects, quotes and tasks…</div>
+            <Link href="/dashboard" className="hidden min-w-[28rem] items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] px-4 py-2 text-sm text-slate-400 transition hover:border-rapid-cyan/40 hover:text-white md:flex"><Search className="size-4 text-rapid-cyan" /> Quick access: leads, clients, projects, quotes and tasks</Link>
             <div className="ml-auto flex items-center gap-3">
               <div className="text-right">
                 <p className="text-sm font-semibold text-white">{user.name}</p>
