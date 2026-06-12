@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState } from "react";
+import { useActionState, useEffect, useState } from "react";
 import { LoginTransition } from "@/components/login-transition";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, inputClass } from "@/components/ui";
@@ -8,6 +8,11 @@ import { loginAction } from "@/lib/actions";
 
 export default function LoginPage() {
   const [state, formAction] = useActionState(loginAction, null);
+  const [authenticating, setAuthenticating] = useState(false);
+
+  useEffect(() => {
+    if (state?.error) setAuthenticating(false);
+  }, [state]);
 
   return (
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#1d4ed833,transparent_34rem)] px-6 py-10">
@@ -28,13 +33,23 @@ export default function LoginPage() {
           <section className="p-8 lg:p-10">
             <h2 className="text-xl font-semibold text-white">Welcome back</h2>
             <p className="mt-2 text-sm text-slate-400">Enter your employee credentials to continue to the dashboard.</p>
-            <form action={formAction} className="mt-6 grid gap-4">
+            <form
+              action={formAction}
+              className="mt-6 grid gap-4"
+              onSubmit={(event) => {
+                if (authenticating) {
+                  event.preventDefault();
+                  return;
+                }
+                setAuthenticating(true);
+              }}
+            >
               <input className={inputClass} name="email" type="email" placeholder="owner@rapidrise.ai" autoComplete="email" required />
               <input className={inputClass} name="password" type="password" placeholder="Password" autoComplete="current-password" required />
               {state?.error ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{state.error}</p> : null}
-              <SubmitButton pendingLabel="Signing in…">Sign in</SubmitButton>
-              <LoginTransition />
-              <p className="text-xs leading-5 text-slate-500">The button will show progress while Rapid Rise OS verifies your details. If credentials are incorrect, it will unlock and show the error above.</p>
+              <SubmitButton forcePending={authenticating} pendingLabel="Signing in…">Sign in</SubmitButton>
+              <LoginTransition active={authenticating} />
+              <p className="text-xs leading-5 text-slate-500">Rapid Rise OS will keep showing progress while it verifies your details and opens the dashboard. If credentials are incorrect, the button unlocks and shows the error above.</p>
             </form>
           </section>
         </div>

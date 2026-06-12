@@ -5,16 +5,16 @@ import { useEffect, useRef, useState } from "react";
 import { useFormStatus } from "react-dom";
 import { clsx } from "clsx";
 
-export function SubmitButton({ children, pendingLabel = "Saving…", className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode; pendingLabel?: string }) {
+export function SubmitButton({ children, pendingLabel = "Saving…", forcePending = false, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement> & { children: ReactNode; pendingLabel?: string; forcePending?: boolean }) {
   const { pending } = useFormStatus();
   const [clicked, setClicked] = useState(false);
   const clickResetTimer = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const busy = pending || clicked;
-  const disabled = pending || props.disabled;
+  const busy = forcePending || pending || clicked;
+  const disabled = forcePending || pending || props.disabled;
 
   useEffect(() => {
-    if (!pending) setClicked(false);
-  }, [pending]);
+    if (!pending && !forcePending) setClicked(false);
+  }, [forcePending, pending]);
 
   useEffect(() => {
     return () => {
@@ -33,7 +33,7 @@ export function SubmitButton({ children, pendingLabel = "Saving…", className, 
         props.onClick?.(event);
         if (event.defaultPrevented) return;
 
-        if (clicked && !pending) {
+        if (clicked && !pending && !forcePending) {
           event.preventDefault();
           return;
         }
