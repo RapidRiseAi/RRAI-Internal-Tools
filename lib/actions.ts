@@ -70,7 +70,7 @@ async function seedProjectChecklist(projectId: string) {
   await supabase.from("project_checklists").insert(rows);
 }
 
-export async function loginAction(_previousState: { error?: string } | null, formData: FormData) {
+export async function loginAction(_previousState: { error?: string; success?: boolean } | null, formData: FormData) {
   const email = str(formData, "email").trim().toLowerCase();
   const password = str(formData, "password");
   const supabase = getSupabaseAdmin();
@@ -82,7 +82,7 @@ export async function loginAction(_previousState: { error?: string } | null, for
 
   await supabase.from("users").update({ last_login_at: new Date().toISOString() }).eq("id", user.id as string);
   await createSession(user.id as string);
-  redirect("/dashboard");
+  return { success: true };
 }
 
 export async function logoutAction() {

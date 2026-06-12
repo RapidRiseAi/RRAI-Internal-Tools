@@ -1,18 +1,29 @@
 "use client";
 
 import { useActionState, useEffect, useState } from "react";
+import { useRouter } from "next/navigation";
 import { LoginTransition } from "@/components/login-transition";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, inputClass } from "@/components/ui";
 import { loginAction } from "@/lib/actions";
 
 export default function LoginPage() {
-  const [state, formAction] = useActionState(loginAction, null);
-  const [authenticating, setAuthenticating] = useState(false);
+  const [state, formAction, pending] = useActionState(loginAction, null);
+  const [successTransition, setSuccessTransition] = useState(false);
+  const router = useRouter();
+  const loginSucceeded = successTransition || Boolean(state?.success);
 
   useEffect(() => {
-    if (state?.error) setAuthenticating(false);
-  }, [state]);
+    if (!state?.success) return;
+
+    setSuccessTransition(true);
+    const timer = setTimeout(() => {
+      router.replace("/dashboard");
+      router.refresh();
+    }, 950);
+
+    return () => clearTimeout(timer);
+  }, [router, state]);
 
   return (
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#1d4ed833,transparent_34rem)] px-6 py-10">
@@ -33,24 +44,15 @@ export default function LoginPage() {
           <section className="p-8 lg:p-10">
             <h2 className="text-xl font-semibold text-white">Welcome back</h2>
             <p className="mt-2 text-sm text-slate-400">Enter your employee credentials to continue to the dashboard.</p>
-            <form
-              action={formAction}
-              className="mt-6 grid gap-4"
-              onSubmit={(event) => {
-                if (authenticating) {
-                  event.preventDefault();
-                  return;
-                }
-                setAuthenticating(true);
-              }}
-            >
-              <input className={inputClass} name="email" type="email" placeholder="owner@rapidrise.ai" autoComplete="email" required />
-              <input className={inputClass} name="password" type="password" placeholder="Password" autoComplete="current-password" required />
+            <form action={formAction} className="mt-6 grid gap-4">
+              <input className={inputClass} name="email" type="email" placeholder="owner@rapidrise.ai" autoComplete="email" disabled={loginSucceeded} required />
+              <input className={inputClass} name="password" type="password" placeholder="Password" autoComplete="current-password" disabled={loginSucceeded} required />
               {state?.error ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{state.error}</p> : null}
-              <SubmitButton forcePending={authenticating} pendingLabel="Signing in…">Sign in</SubmitButton>
-              <LoginTransition active={authenticating} />
-              <p className="text-xs leading-5 text-slate-500">Rapid Rise OS will keep showing progress while it verifies your details and opens the dashboard. If credentials are incorrect, the button unlocks and shows the error above.</p>
+              <SubmitButton forcePending={loginSucceeded} pendingLabel={loginSucceeded ? "Opening dashboard…" : "Verifying credentials…"}>Sign in</SubmitButton>
+              <LoginTransition active={loginSucceeded} />
+              <p className="text-xs leading-5 text-slate-500">The button stays in verification mode until Rapid Rise OS receives the login result. The dashboard transition only starts after a successful sign-in.</p>
             </form>
+            {pending && !loginSucceeded ? <p className="mt-4 rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/10 px-4 py-3 text-xs font-semibold text-rapid-cyan">Checking credentials securely…</p> : null}
           </section>
         </div>
       </Card>
