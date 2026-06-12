@@ -2,24 +2,25 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
 import { BarChart3, BriefcaseBusiness, Building2, CircleDollarSign, ClipboardCheck, FileText, Gauge, Handshake, Headset, Library, Megaphone, Settings, Shield, Target } from "lucide-react";
-import { getCurrentUser } from "@/lib/auth";
+import { getCurrentUser, permissionsFor } from "@/lib/auth";
+import { permissions } from "@/lib/constants";
 import { logoutAction } from "@/lib/actions";
 
 const nav = [
-  ["Dashboard", "/dashboard", Gauge],
-  ["Leads", "/leads", Target],
-  ["Clients", "/clients", Building2],
-  ["Quotes", "/quotes", FileText],
-  ["Projects", "/projects", BriefcaseBusiness],
-  ["Tasks", "/tasks", ClipboardCheck],
-  ["Billing", "/billing", CircleDollarSign],
-  ["Retainers", "/retainers", Shield],
-  ["Support", "/support", Headset],
-  ["Affiliates", "/affiliates", Handshake],
-  ["Marketing", "/marketing", Megaphone],
-  ["Knowledge Base", "/knowledge-base", Library],
-  ["Reports", "/reports", BarChart3],
-  ["Settings", "/settings", Settings],
+  ["Dashboard", "/dashboard", Gauge, permissions.dashboard],
+  ["Leads", "/leads", Target, permissions.leadsRead],
+  ["Clients", "/clients", Building2, permissions.clientsRead],
+  ["Quotes", "/quotes", FileText, permissions.quotesRead],
+  ["Projects", "/projects", BriefcaseBusiness, permissions.projectsRead],
+  ["Tasks", "/tasks", ClipboardCheck, permissions.tasksRead],
+  ["Billing", "/billing", CircleDollarSign, permissions.billingRead],
+  ["Retainers", "/retainers", Shield, permissions.billingRead],
+  ["Support", "/support", Headset, permissions.supportRead],
+  ["Affiliates", "/affiliates", Handshake, permissions.marketingRead],
+  ["Marketing", "/marketing", Megaphone, permissions.marketingRead],
+  ["Knowledge Base", "/knowledge-base", Library, permissions.dashboard],
+  ["Reports", "/reports", BarChart3, permissions.dashboard],
+  ["Settings", "/settings", Settings, permissions.settingsManage],
 ] as const;
 
 export async function AppShell({ children }: { children: ReactNode }) {
@@ -27,6 +28,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
   if (!user) redirect("/login");
 
   const roleName = user.role?.name ?? "No role assigned";
+  const userPermissions = permissionsFor(user);
 
   return (
     <div className="min-h-screen bg-slate-950/40 text-slate-100">
@@ -39,7 +41,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
           </div>
         </Link>
         <nav className="mt-8 grid gap-1">
-          {nav.map(([label, href, Icon]) => (
+          {nav.filter(([, , , permission]) => userPermissions.includes(permission)).map(([label, href, Icon]) => (
             <Link key={href} href={href} className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white">
               <Icon className="size-4 text-slate-500 group-hover:text-rapid-cyan" />
               {label}
@@ -62,7 +64,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
             </div>
           </div>
         </header>
-        <main className="mx-auto max-w-[1500px] px-6 py-8">{children}</main>
+        <main className="page-transition-in mx-auto max-w-[1500px] px-6 py-8">{children}</main>
       </div>
     </div>
   );

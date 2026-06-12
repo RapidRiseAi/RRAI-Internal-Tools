@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { Metadata } from "next";
 import "./globals.css";
+import { NavigationFeedback } from "@/components/navigation-feedback";
 
 export const metadata: Metadata = {
   title: "Rapid Rise OS",
@@ -10,7 +11,7 @@ export const metadata: Metadata = {
 export default function RootLayout({ children }: Readonly<{ children: ReactNode }>) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body><NavigationFeedback />{children}</body>
     </html>
   );
 }

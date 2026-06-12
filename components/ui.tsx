@@ -1,18 +1,18 @@
-import type { ButtonHTMLAttributes, ReactNode } from "react";
+import type { ButtonHTMLAttributes, HTMLAttributes, ReactNode } from "react";
 import Link from "next/link";
 import { clsx } from "clsx";
 import { labelize } from "@/lib/constants";
 
-export function Card({ children, className }: { children: ReactNode; className?: string }) {
-  return <section className={clsx("rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/20", className)}>{children}</section>;
+export function Card({ children, className, ...props }: HTMLAttributes<HTMLElement> & { children: ReactNode }) {
+  return <section className={clsx("rounded-2xl border border-white/10 bg-white/[0.045] p-5 shadow-2xl shadow-black/20", className)} {...props}>{children}</section>;
 }
 
 export function Button({ children, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) {
-  return <button className={clsx("rounded-xl bg-gradient-to-r from-rapid-blue to-rapid-cyan px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition hover:scale-[1.01]", className)} {...props}>{children}</button>;
+  return <button className={clsx("rounded-xl bg-gradient-to-r from-rapid-blue to-rapid-cyan px-4 py-2 text-sm font-semibold text-white shadow-lg shadow-blue-950/40 transition duration-150 hover:scale-[1.01] active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-70", className)} {...props}>{children}</button>;
 }
 
 export function LinkButton({ href, children, variant = "primary" }: { href: string; children: ReactNode; variant?: "primary" | "ghost" }) {
-  return <Link href={href} className={clsx("rounded-xl px-4 py-2 text-sm font-semibold transition", variant === "primary" ? "bg-gradient-to-r from-rapid-blue to-rapid-cyan text-white shadow-lg shadow-blue-950/40" : "border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10")}>{children}</Link>;
+  return <Link href={href} className={clsx("rounded-xl px-4 py-2 text-sm font-semibold transition duration-150 active:scale-[0.98]", variant === "primary" ? "bg-gradient-to-r from-rapid-blue to-rapid-cyan text-white shadow-lg shadow-blue-950/40" : "border border-white/10 bg-white/5 text-slate-200 hover:bg-white/10")}>{children}</Link>;
 }
 
 export function StatusBadge({ value }: { value: string }) {
