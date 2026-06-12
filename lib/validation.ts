@@ -1,5 +1,5 @@
 import { z } from "zod";
-import { affiliateStatuses, clientStatuses, contentStatuses, invoiceStatuses, knowledgeCategories, leadStages, paymentStatuses, priorities, projectStatuses, quoteStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "./constants";
+import { affiliateStatuses, clientStatuses, contentStatuses, documentTemplateTypes, invoiceStatuses, knowledgeCategories, leadStages, paymentStatuses, priorities, projectStatuses, quoteStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "./constants";
 
 const optionalEmail = z.string().trim().email().or(z.literal("")).optional().transform((value) => value || undefined);
 const optionalText = z.string().trim().optional().transform((value) => value || undefined);
@@ -85,6 +85,7 @@ export const projectSchema = z.object({
 export const invoiceSchema = z.object({
   invoiceNumber: optionalText,
   clientId: z.string().min(1),
+  quoteId: optionalUuid,
   status: z.enum(invoiceStatuses),
   amountCents: z.coerce.number().int().min(1),
   dueDate: optionalDate,
@@ -138,3 +139,9 @@ export const fileRecordSchema = z.object({ filename: z.string().trim().min(2), u
 export const checklistTemplateSchema = z.object({ name: z.string().trim().min(2), serviceId: optionalUuid, description: optionalText, firstItemTitle: optionalText });
 export const checklistItemSchema = z.object({ templateId: z.string().min(1), title: z.string().trim().min(2), description: optionalText });
 export const projectChecklistSchema = z.object({ id: z.string().min(1), status: z.enum(taskStatuses) });
+
+export const serviceSchema = z.object({ name: z.string().trim().min(2), category: z.string().trim().min(2), description: z.string().trim().min(5), baseOnceOffCents: cents, baseMonthlyCents: cents, isActive: z.boolean().default(true) });
+export const leadCallSchema = z.object({ leadId: z.string().min(1), callSummary: z.string().trim().min(2), objections: optionalText, outcome: z.string().trim().min(2), nextAction: optionalText, bookedCallAt: optionalDate, assignedToId: optionalUuid });
+export const taskStatusSchema = z.object({ id: z.string().min(1), status: z.enum(taskStatuses), assignedToId: optionalUuid });
+export const companySettingsSchema = z.object({ companyName: z.string().trim().min(2), billingEmail: optionalEmail, bankName: optionalText, bankAccountName: optionalText, bankAccountNumber: optionalText, bankBranchCode: optionalText, paymentTerms: optionalText, quoteFooter: optionalText, invoiceFooter: optionalText });
+export const documentTemplateSchema = z.object({ name: z.string().trim().min(2), type: z.enum(documentTemplateTypes), content: z.string().trim().min(10), isDefault: z.boolean().default(false) });

@@ -168,7 +168,7 @@ export type ChecklistItem = { id: string; template_id: string; title: string; de
 export type ProjectChecklist = { id: string; project_id: string; template_item_id: string | null; title: string; status: string; completed_at: string | null; created_at: string; updated_at: string; };
 export type Note = { id: string; body: string; entity_type: string; entity_id: string; client_id: string | null; lead_id: string | null; project_id: string | null; created_at: string; updated_at: string; };
 export type FileRecord = { id: string; filename: string; url: string; mime_type: string | null; entity_type: string; entity_id: string; client_id: string | null; project_id: string | null; created_at: string; updated_at: string; };
-export type Invoice = { id: string; invoice_number: string; status: string; amount_cents: number; client_id: string; due_date: string | null; issued_at: string | null; created_at: string; updated_at: string; };
+export type Invoice = { id: string; invoice_number: string; status: string; amount_cents: number; client_id: string; quote_id: string | null; due_date: string | null; issued_at: string | null; created_at: string; updated_at: string; };
 export type Payment = { id: string; invoice_id: string; amount_cents: number; status: string; paid_at: string | null; method: string | null; reference: string | null; created_at: string; updated_at: string; };
 export type Retainer = { id: string; type: string; status: string; monthly_amount_cents: number; client_id: string; next_billing_date: string | null; created_at: string; updated_at: string; };
 export type SupportTicket = { id: string; title: string; category: string; priority: string; status: string; client_id: string | null; project_id: string | null; assigned_to: string | null; internal_notes: string | null; client_update_notes: string | null; resolution_notes: string | null; resolved_at: string | null; created_at: string; updated_at: string; };
@@ -179,3 +179,6 @@ export type Campaign = { id: string; name: string; platform: string; target_indu
 export type ContentItem = { id: string; title: string; status: string; platform: string | null; post_url: string | null; performance_notes: string | null; leads_generated: number; created_at: string; updated_at: string; };
 export type KnowledgeBaseItem = { id: string; title: string; category: string; body: string; visibility: string; created_at: string; updated_at: string; };
 export type Notification = { id: string; title: string; body: string; user_id: string | null; status: string; created_at: string; updated_at: string; };
+
+export type CompanySettings = { id: boolean; company_name: string; billing_email: string | null; bank_name: string | null; bank_account_name: string | null; bank_account_number: string | null; bank_branch_code: string | null; payment_terms: string | null; quote_footer: string | null; invoice_footer: string | null; updated_at: string; };
+export type DocumentTemplate = { id: string; name: string; type: string; content: string; is_default: boolean; created_at: string; updated_at: string; };

@@ -61,6 +61,7 @@ export const affiliateStatuses = ["ACTIVE", "PAUSED", "INACTIVE"] as const;
 export const commissionStatuses = ["PENDING", "APPROVED", "PAYABLE", "PAID", "CANCELLED", "DISPUTED"] as const;
 export const knowledgeCategories = ["SOP", "Sales", "Troubleshooting", "Handover", "Pricing", "Internal"] as const;
 export const contentStatuses = ["IDEA", "DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const;
+export const documentTemplateTypes = ["QUOTE", "INVOICE", "PROPOSAL", "HANDOVER"] as const;
 
 export const coreServices = [
   "Website development",

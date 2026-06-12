@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin, hasSupabaseConfig } from "./supabase";
-import type { ActivityLog, Affiliate, Campaign, ChecklistItem, ChecklistTemplate, Client, Commission, ContentItem, FileRecord, Invoice, KnowledgeBaseItem, Lead, Note, Package, Payment, Project, ProjectChecklist, Quote, QuoteItem, Referral, Retainer, Role, Service, SupportTicket, Task, User } from "./types";
+import type { ActivityLog, Affiliate, Campaign, ChecklistItem, ChecklistTemplate, Client, Commission, CompanySettings, ContentItem, DocumentTemplate, FileRecord, Invoice, KnowledgeBaseItem, Lead, Note, Package, Payment, Project, ProjectChecklist, Quote, QuoteItem, Referral, Retainer, Role, Service, SupportTicket, Task, User } from "./types";
 
 export async function tableCount(table: string, filters?: Record<string, string | number | boolean | null>) {
   if (!hasSupabaseConfig()) return 0;
@@ -34,5 +34,7 @@ export async function listChecklistItems() { if (!hasSupabaseConfig()) return []
 export async function listPayments() { return genericList<Payment>("payments"); }
 export async function listReferrals() { return genericList<Referral>("referrals"); }
 export async function listCommissions() { return genericList<Commission>("commissions"); }
+export async function listCompanySettings() { if (!hasSupabaseConfig()) return null; const { data } = await getSupabaseAdmin().from("company_settings").select("*").eq("id", true).maybeSingle(); return data as CompanySettings | null; }
+export async function listDocumentTemplates() { return genericList<DocumentTemplate>("document_templates"); }
 
 export type ModuleData = { quotes: Quote[]; projects: Project[]; invoices: Invoice[]; retainers: Retainer[]; tickets: SupportTicket[]; affiliates: Affiliate[]; campaigns: Campaign[]; content: ContentItem[]; kb: KnowledgeBaseItem[]; };

@@ -1,9 +1,11 @@
 import { randomUUID } from "crypto";
-import { acceptQuote, addFileRecord, addNote, createChecklistItem, createChecklistTemplate, createCommission, createReferral, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertInvoice, upsertKnowledgeBaseItem, upsertLead, upsertProject, upsertQuote, upsertRetainer, upsertSupportTicket, upsertTask, upsertUser } from "@/lib/actions";
-import { affiliateStatuses, clientStatuses, commissionStatuses, contentStatuses, invoiceStatuses, knowledgeCategories, labelize, leadStages, paymentStatuses, priorities, projectStatuses, quoteStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "@/lib/constants";
+import { acceptQuote, addFileRecord, addNote, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, upsertTask, upsertUser } from "@/lib/actions";
+import { affiliateStatuses, clientStatuses, commissionStatuses, contentStatuses, knowledgeCategories, labelize, leadStages, paymentStatuses, priorities, projectStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "@/lib/constants";
 import type { Affiliate, Client, Lead, Payment, Project, Quote, Service, SupportTicket } from "@/lib/types";
 import { Card, Field, inputClass } from "./ui";
 import { SubmitButton } from "./submit-button";
+export { InvoiceForm } from "./invoice-form";
+export { QuoteForm } from "./quote-form";
 
 export type UserOption = { id: string; name: string };
 export type ProjectOption = { id: string; name: string; client_id?: string };
@@ -12,7 +14,7 @@ export type ClientOption = { id: string; company_name: string };
 export type LeadOption = { id: string; company_name: string };
 export type QuoteOption = { id: string; title: string; client_id: string | null };
 export type InvoiceOption = { id: string; invoice_number: string; amount_cents: number };
-export type ServiceOption = Pick<Service, "id" | "name" | "base_once_off_cents" | "base_monthly_cents">;
+export type ServiceOption = Pick<Service, "id" | "name" | "description" | "base_once_off_cents" | "base_monthly_cents">;
 
 function dateInput(value?: string | null) {
   return value ? value.slice(0, 10) : "";
@@ -97,23 +99,6 @@ export function UserForm({ roles }: { roles: RoleOption[] }) {
   );
 }
 
-export function QuoteForm({ clients, leads, services }: { clients: ClientOption[]; leads: LeadOption[]; services: ServiceOption[] }) {
-  return <form action={upsertQuote} className="grid gap-4 md:grid-cols-3"><SubmissionInput scope="upsert-quote" />
-    <Field label="Title"><input className={inputClass} name="title" required /></Field>
-    <Field label="Status"><select className={inputClass} name="status" defaultValue="DRAFT"><Options values={quoteStatuses} /></select></Field>
-    <Field label="Valid until"><input className={inputClass} type="date" name="validUntil" /></Field>
-    <Field label="Client"><select className={inputClass} name="clientId"><option value="">No client yet</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.company_name}</option>)}</select></Field>
-    <Field label="Lead"><select className={inputClass} name="leadId"><option value="">No lead</option>{leads.map((lead) => <option key={lead.id} value={lead.id}>{lead.company_name}</option>)}</select></Field>
-    <Field label="Service"><select className={inputClass} name="serviceId"><option value="">Custom item</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></Field>
-    <Field label="Line item description"><input className={inputClass} name="itemDescription" defaultValue="Rapid Rise AI implementation package" required /></Field>
-    <Field label="Quantity"><input className={inputClass} type="number" name="itemQuantity" min="1" defaultValue="1" /></Field>
-    <Field label="Once-off cents"><input className={inputClass} type="number" name="itemOnceOffCents" min="0" defaultValue="0" /></Field>
-    <Field label="Monthly cents"><input className={inputClass} type="number" name="itemMonthlyCents" min="0" defaultValue="0" /></Field>
-    <Field label="Internal notes"><textarea className={inputClass} name="internalNotes" /></Field>
-    <div className="flex items-end"><SubmitButton>Create quote</SubmitButton></div>
-  </form>;
-}
-
 export function AcceptQuoteButton({ quote }: { quote: Quote }) {
   if (quote.status === "ACCEPTED") return null;
   return <form action={acceptQuote}><SubmissionInput scope="accept-quote" /><input type="hidden" name="id" value={quote.id} /><SubmitButton pendingLabel="Creating project…">Accept & create project</SubmitButton></form>;
@@ -134,10 +119,6 @@ export function ProjectForm({ clients, quotes, project }: { clients: ClientOptio
     {!project?.id ? <label className="flex items-center gap-3 text-sm text-slate-300"><input name="seedChecklist" type="checkbox" defaultChecked /> Add starter checklist</label> : null}
     <div className="md:col-span-3"><SubmitButton>{project?.id ? "Save project" : "Create project"}</SubmitButton></div>
   </form>;
-}
-
-export function InvoiceForm({ clients }: { clients: ClientOption[] }) {
-  return <form action={upsertInvoice} className="grid gap-4 md:grid-cols-4"><SubmissionInput scope="upsert-invoice" /><Field label="Client"><select className={inputClass} name="clientId" required>{clients.map((client) => <option key={client.id} value={client.id}>{client.company_name}</option>)}</select></Field><Field label="Invoice #"><input className={inputClass} name="invoiceNumber" placeholder="Auto if empty" /></Field><Field label="Status"><select className={inputClass} name="status" defaultValue="SENT"><Options values={invoiceStatuses} /></select></Field><Field label="Amount cents"><input className={inputClass} name="amountCents" type="number" min="1" required /></Field><Field label="Due date"><input className={inputClass} name="dueDate" type="date" /></Field><div className="flex items-end"><SubmitButton pendingLabel="Creating invoice…">Create invoice</SubmitButton></div></form>;
 }
 
 export function PaymentForm({ invoices }: { invoices: InvoiceOption[] }) {
@@ -164,3 +145,59 @@ export function KnowledgeBaseForm() { return <form action={upsertKnowledgeBaseIt
 export function NoteForm({ entityType, entityId, clientId, leadId, projectId, redirectTo }: { entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; redirectTo: string }) { return <form action={addNote} className="grid gap-3"><SubmissionInput scope="add-note" /><input type="hidden" name="entityType" value={entityType} /><input type="hidden" name="entityId" value={entityId} /><input type="hidden" name="clientId" value={clientId ?? ""} /><input type="hidden" name="leadId" value={leadId ?? ""} /><input type="hidden" name="projectId" value={projectId ?? ""} /><input type="hidden" name="redirectTo" value={redirectTo} /><Field label="Add note"><textarea className={inputClass} name="body" required /></Field><SubmitButton>Add note</SubmitButton></form>; }
 export function FileRecordForm({ entityType, entityId, clientId, projectId, redirectTo }: { entityType: string; entityId: string; clientId?: string; projectId?: string; redirectTo: string }) { return <form action={addFileRecord} className="grid gap-3"><SubmissionInput scope="add-file-record" /><input type="hidden" name="entityType" value={entityType} /><input type="hidden" name="entityId" value={entityId} /><input type="hidden" name="clientId" value={clientId ?? ""} /><input type="hidden" name="projectId" value={projectId ?? ""} /><input type="hidden" name="redirectTo" value={redirectTo} /><Field label="File name"><input className={inputClass} name="filename" required /></Field><Field label="Private storage URL / document link"><input className={inputClass} name="url" type="url" required /></Field><Field label="MIME type"><input className={inputClass} name="mimeType" placeholder="application/pdf" /></Field><SubmitButton>Add file link</SubmitButton></form>; }
 export function ChecklistTemplateForm({ services, templates }: { services: ServiceOption[]; templates: { id: string; name: string }[] }) { return <div className="grid gap-4 xl:grid-cols-2"><form action={createChecklistTemplate} className="grid gap-3"><SubmissionInput scope="create-checklist-template" /><h3 className="font-semibold text-white">Create checklist template</h3><Field label="Name"><input className={inputClass} name="name" required /></Field><Field label="Service"><select className={inputClass} name="serviceId"><option value="">General</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></Field><Field label="Description"><textarea className={inputClass} name="description" /></Field><Field label="First item"><input className={inputClass} name="firstItemTitle" /></Field><SubmitButton>Create template</SubmitButton></form><form action={createChecklistItem} className="grid gap-3"><SubmissionInput scope="create-checklist-item" /><h3 className="font-semibold text-white">Add checklist item</h3><Field label="Template"><select className={inputClass} name="templateId">{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></Field><Field label="Item title"><input className={inputClass} name="title" required /></Field><Field label="Description"><textarea className={inputClass} name="description" /></Field><Field label="Sort order"><input className={inputClass} name="sortOrder" type="number" min="0" defaultValue="0" /></Field><SubmitButton>Add item</SubmitButton></form></div>; }
+
+export function ServiceForm() {
+  return <form action={upsertService} className="grid gap-4 md:grid-cols-3">
+    <SubmissionInput scope="upsert-service" />
+    <Field label="Service name"><input className={inputClass} name="name" placeholder="Website development" required /></Field>
+    <Field label="Category"><input className={inputClass} name="category" placeholder="Web / AI & Automation" required /></Field>
+    <Field label="Once-off cents"><input className={inputClass} name="baseOnceOffCents" type="number" min="0" defaultValue="0" /></Field>
+    <Field label="Monthly cents"><input className={inputClass} name="baseMonthlyCents" type="number" min="0" defaultValue="0" /></Field>
+    <Field label="Description"><textarea className={inputClass} name="description" placeholder="What this service includes" required /></Field>
+    <label className="flex items-center gap-3 text-sm text-slate-300"><input name="isActive" type="checkbox" defaultChecked /> Active service</label>
+    <input type="hidden" name="redirectTo" value="/services" />
+    <div className="md:col-span-3"><SubmitButton>Save service pricing</SubmitButton></div>
+  </form>;
+}
+
+export function LeadCallForm({ leadId, users, redirectTo }: { leadId: string; users: UserOption[]; redirectTo: string }) {
+  return <form action={logLeadCall} className="grid gap-4">
+    <SubmissionInput scope="lead-call" />
+    <input type="hidden" name="leadId" value={leadId} />
+    <input type="hidden" name="redirectTo" value={redirectTo} />
+    <Field label="What happened on the call?"><textarea className={inputClass} name="callSummary" placeholder="Summarize what they said, needs, budget, timing, and context." required /></Field>
+    <Field label="Objections / blockers"><textarea className={inputClass} name="objections" placeholder="Price, timing, decision maker, trust, scope, etc." /></Field>
+    <div className="grid gap-4 md:grid-cols-3">
+      <Field label="Outcome"><input className={inputClass} name="outcome" placeholder="Booked discovery / Follow up / Not interested" required /></Field>
+      <Field label="Booked/follow-up date"><input className={inputClass} name="bookedCallAt" type="datetime-local" /></Field>
+      <Field label="Assign next task"><select className={inputClass} name="assignedToId"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
+    </div>
+    <Field label="Next action"><input className={inputClass} name="nextAction" placeholder="Send proposal, WhatsApp tomorrow, prepare demo..." /></Field>
+    <SubmitButton pendingLabel="Logging call…">Log call / next step</SubmitButton>
+  </form>;
+}
+
+export function CompanySettingsForm({ settings }: { settings?: import("@/lib/types").CompanySettings | null }) {
+  return <form action={upsertCompanySettings} className="grid gap-4 md:grid-cols-2">
+    <Field label="Company name"><input className={inputClass} name="companyName" defaultValue={settings?.company_name ?? "Rapid Rise AI (Pty) Ltd"} required /></Field>
+    <Field label="Billing email"><input className={inputClass} name="billingEmail" type="email" defaultValue={settings?.billing_email ?? ""} /></Field>
+    <Field label="Bank name"><input className={inputClass} name="bankName" defaultValue={settings?.bank_name ?? ""} /></Field>
+    <Field label="Account name"><input className={inputClass} name="bankAccountName" defaultValue={settings?.bank_account_name ?? ""} /></Field>
+    <Field label="Account number"><input className={inputClass} name="bankAccountNumber" defaultValue={settings?.bank_account_number ?? ""} /></Field>
+    <Field label="Branch code"><input className={inputClass} name="bankBranchCode" defaultValue={settings?.bank_branch_code ?? ""} /></Field>
+    <Field label="Payment terms"><textarea className={inputClass} name="paymentTerms" defaultValue={settings?.payment_terms ?? ""} /></Field>
+    <Field label="Quote footer"><textarea className={inputClass} name="quoteFooter" defaultValue={settings?.quote_footer ?? ""} /></Field>
+    <Field label="Invoice footer"><textarea className={inputClass} name="invoiceFooter" defaultValue={settings?.invoice_footer ?? ""} /></Field>
+    <div className="md:col-span-2"><SubmitButton>Save billing/document settings</SubmitButton></div>
+  </form>;
+}
+
+export function DocumentTemplateForm() {
+  return <form action={createDocumentTemplate} className="grid gap-4">
+    <Field label="Template name"><input className={inputClass} name="name" required /></Field>
+    <Field label="Type"><select className={inputClass} name="type"><option value="QUOTE">Quote</option><option value="INVOICE">Invoice</option><option value="PROPOSAL">Proposal</option><option value="HANDOVER">Handover</option></select></Field>
+    <Field label="Template content"><textarea className={`${inputClass} min-h-32`} name="content" placeholder="Use placeholders like {{client_name}}, {{quote_title}}, {{amount}}" required /></Field>
+    <label className="flex items-center gap-3 text-sm text-slate-300"><input name="isDefault" type="checkbox" /> Make default</label>
+    <SubmitButton>Add document template</SubmitButton>
+  </form>;
+}
