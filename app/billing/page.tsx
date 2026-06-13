@@ -5,5 +5,126 @@ import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listPayments } from "@/lib/data";
 import { dateShort, money } from "@/lib/format";
 import type { Invoice, Payment, Quote, QuoteItem } from "@/lib/types";
+import { requirePagePermission } from "@/lib/auth";
+import { permissions } from "@/lib/constants";
 export const dynamic = "force-dynamic";
-export default async function Billing() { const [invoices, clients, payments, quotes, quoteItems] = await Promise.all([genericList<Invoice>("invoices"), listClients(), listPayments(), genericList<Quote>("quotes"), genericList<QuoteItem>("quote_items", "sort_order")]); const paid = invoices.filter((invoice) => invoice.status === "PAID").reduce((sum, invoice) => sum + invoice.amount_cents, 0); const outstanding = invoices.filter((invoice) => ["SENT", "OVERDUE", "PART_PAID"].includes(invoice.status)).reduce((sum, invoice) => sum + invoice.amount_cents, 0); return <AppShell><PageHeader eyebrow="Finance" title="Billing" description="Review revenue and invoices first. Use pop-ups for invoice creation and payment capture so the page stays manageable." actions={<><ModalPanel title="Create invoice" triggerLabel="Add invoice"><InvoiceForm clients={clients} quotes={quotes} quoteItems={quoteItems} /></ModalPanel><ModalPanel title="Record payment" triggerLabel="Record payment" variant="ghost"><PaymentForm invoices={invoices} /></ModalPanel></>} /><div className="grid gap-6"><div className="grid gap-4 md:grid-cols-5">{[["Invoices", invoices.length], ["Paid", money(paid)], ["Outstanding", money(outstanding)], ["Overdue", invoices.filter((invoice) => invoice.status === "OVERDUE").length], ["Payments", payments.length]].map(([label, value]) => <Card key={label} className="p-4"><p className="text-xs uppercase tracking-wider text-slate-400">{label}</p><p className="mt-2 text-2xl font-bold text-white">{value}</p></Card>)}</div><div className="grid gap-6 xl:grid-cols-[1fr_0.65fr]"><Card><h2 className="mb-4 text-lg font-semibold">Invoices</h2><div className="grid gap-3">{invoices.map((invoice) => <div key={invoice.id} className="flex items-center justify-between rounded-xl bg-white/[0.04] p-3"><div><p className="font-semibold text-white">{invoice.invoice_number}</p><p className="text-sm text-slate-400">Due {dateShort(invoice.due_date)}</p></div><div className="flex items-center gap-3"><a className="rounded-lg border border-white/10 px-3 py-1 text-xs text-rapid-cyan" href={`/billing/${invoice.id}/pdf`}>PDF</a><p>{money(invoice.amount_cents)}</p><StatusBadge value={invoice.status} /></div></div>)}</div></Card><Card><h2 className="mb-4 text-lg font-semibold">Recent payments</h2><div className="grid gap-2">{(payments as Payment[]).slice(0, 6).map((payment) => <div key={payment.id} className="rounded-xl bg-white/[0.04] p-3"><div className="flex items-center justify-between gap-3"><p className="font-semibold text-white">{money(payment.amount_cents)}</p><StatusBadge value={payment.status} /></div><p className="text-xs text-slate-400">{payment.method ?? "No method"} • {dateShort(payment.paid_at ?? payment.created_at)}</p></div>)}</div></Card></div></div></AppShell>; }
+export default async function Billing() {
+  await requirePagePermission(permissions.billingRead);
+  const [invoices, clients, payments, quotes, quoteItems] = await Promise.all([
+    genericList<Invoice>("invoices"),
+    listClients(),
+    listPayments(),
+    genericList<Quote>("quotes"),
+    genericList<QuoteItem>("quote_items", "sort_order"),
+  ]);
+  const paid = invoices
+    .filter((invoice) => invoice.status === "PAID")
+    .reduce((sum, invoice) => sum + invoice.amount_cents, 0);
+  const outstanding = invoices
+    .filter((invoice) =>
+      ["SENT", "OVERDUE", "PART_PAID"].includes(invoice.status),
+    )
+    .reduce((sum, invoice) => sum + invoice.amount_cents, 0);
+  return (
+    <AppShell>
+      <PageHeader
+        eyebrow="Finance"
+        title="Billing"
+        description="Review revenue and invoices first. Use pop-ups for invoice creation and payment capture so the page stays manageable."
+        actions={
+          <>
+            <ModalPanel title="Create invoice" triggerLabel="Add invoice">
+              <InvoiceForm
+                clients={clients}
+                quotes={quotes}
+                quoteItems={quoteItems}
+              />
+            </ModalPanel>
+            <ModalPanel
+              title="Record payment"
+              triggerLabel="Record payment"
+              variant="ghost"
+            >
+              <PaymentForm invoices={invoices} />
+            </ModalPanel>
+          </>
+        }
+      />
+      <div className="grid gap-6">
+        <div className="grid gap-4 md:grid-cols-5">
+          {[
+            ["Invoices", invoices.length],
+            ["Paid", money(paid)],
+            ["Outstanding", money(outstanding)],
+            [
+              "Overdue",
+              invoices.filter((invoice) => invoice.status === "OVERDUE").length,
+            ],
+            ["Payments", payments.length],
+          ].map(([label, value]) => (
+            <Card key={label} className="p-4">
+              <p className="text-xs uppercase tracking-wider text-slate-400">
+                {label}
+              </p>
+              <p className="mt-2 text-2xl font-bold text-white">{value}</p>
+            </Card>
+          ))}
+        </div>
+        <div className="grid gap-6 xl:grid-cols-[1fr_0.65fr]">
+          <Card>
+            <h2 className="mb-4 text-lg font-semibold">Invoices</h2>
+            <div className="grid gap-3">
+              {invoices.map((invoice) => (
+                <div
+                  key={invoice.id}
+                  className="flex items-center justify-between rounded-xl bg-white/[0.04] p-3"
+                >
+                  <div>
+                    <p className="font-semibold text-white">
+                      {invoice.invoice_number}
+                    </p>
+                    <p className="text-sm text-slate-400">
+                      Due {dateShort(invoice.due_date)}
+                    </p>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <a
+                      className="rounded-lg border border-white/10 px-3 py-1 text-xs text-rapid-cyan"
+                      href={`/billing/${invoice.id}/pdf`}
+                    >
+                      PDF
+                    </a>
+                    <p>{money(invoice.amount_cents)}</p>
+                    <StatusBadge value={invoice.status} />
+                  </div>
+                </div>
+              ))}
+            </div>
+          </Card>
+          <Card>
+            <h2 className="mb-4 text-lg font-semibold">Recent payments</h2>
+            <div className="grid gap-2">
+              {(payments as Payment[]).slice(0, 6).map((payment) => (
+                <div
+                  key={payment.id}
+                  className="rounded-xl bg-white/[0.04] p-3"
+                >
+                  <div className="flex items-center justify-between gap-3">
+                    <p className="font-semibold text-white">
+                      {money(payment.amount_cents)}
+                    </p>
+                    <StatusBadge value={payment.status} />
+                  </div>
+                  <p className="text-xs text-slate-400">
+                    {payment.method ?? "No method"} •{" "}
+                    {dateShort(payment.paid_at ?? payment.created_at)}
+                  </p>
+                </div>
+              ))}
+            </div>
+          </Card>
+        </div>
+      </div>
+    </AppShell>
+  );
+}
