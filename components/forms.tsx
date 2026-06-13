@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { acceptQuote, addFileRecord, addNote, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, upsertTask, upsertUser } from "@/lib/actions";
+import { acceptQuote, addFileRecord, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, upsertTask, upsertUser } from "@/lib/actions";
 import { affiliateStatuses, clientStatuses, commissionStatuses, contentStatuses, knowledgeCategories, labelize, leadStages, paymentStatuses, priorities, projectStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "@/lib/constants";
 import type { Affiliate, ChecklistItem, ChecklistTemplate, Client, Lead, Payment, Project, Quote, Service, SupportTicket } from "@/lib/types";
 import { Card, Field, inputClass } from "./ui";
@@ -163,6 +163,51 @@ export function ServiceForm({ service }: { service?: Service }) {
     <label className="flex items-center gap-3 text-sm text-slate-300"><input name="isActive" type="checkbox" defaultChecked={service?.is_active ?? true} /> Active service</label>
     <input type="hidden" name="redirectTo" value="/services" />
     <div className="md:col-span-3"><SubmitButton>{service ? "Save service changes" : "Save service pricing"}</SubmitButton></div>
+  </form>;
+}
+
+export function InteractionEventForm({ entityType, leadId, clientId, users, redirectTo }: { entityType: "Lead" | "Client"; leadId?: string; clientId?: string; users: UserOption[]; redirectTo: string }) {
+  return <form action={logInteractionEvent} className="grid gap-4">
+    <SubmissionInput scope="interaction-event" />
+    <input type="hidden" name="entityType" value={entityType} />
+    <input type="hidden" name="leadId" value={leadId ?? ""} />
+    <input type="hidden" name="clientId" value={clientId ?? ""} />
+    <input type="hidden" name="redirectTo" value={redirectTo} />
+    <div className="grid gap-4 md:grid-cols-3">
+      <Field label="Event type"><select className={inputClass} name="eventType"><option value="CALL">Call</option><option value="EMAIL">Email</option><option value="MESSAGE">Message</option><option value="OTHER">Other</option></select></Field>
+      <Field label="Direction"><select className={inputClass} name="direction"><option value="OUTBOUND">Outbound</option><option value="RECEIVED">Received</option><option value="INTERNAL">Internal note</option></select></Field>
+      <Field label="Outcome"><input className={inputClass} name="outcome" placeholder="Interested / No answer / Sent info" /></Field>
+    </div>
+    <Field label="What happened?"><textarea className={inputClass} name="summary" placeholder="Log the call, email, message or other interaction." required /></Field>
+    <Field label="Objections / important replies"><textarea className={inputClass} name="objections" placeholder="Price, timing, decision maker, message received, blockers, etc." /></Field>
+    <div className="grid gap-4 md:grid-cols-2">
+      <Field label="Media/file title"><input className={inputClass} name="mediaTitle" placeholder="Screenshot, voice note, email thread..." /></Field>
+      <Field label="Media/file URL"><input className={inputClass} name="mediaUrl" type="url" placeholder="Paste storage/share link" /></Field>
+    </div>
+    <div className="grid gap-4 md:grid-cols-3">
+      <Field label="Next task title"><input className={inputClass} name="taskTitle" placeholder="Follow up, send quote, prepare demo..." /></Field>
+      <Field label="Task due date/time"><input className={inputClass} name="taskDueAt" type="datetime-local" /></Field>
+      <Field label="Assign next task"><select className={inputClass} name="assignedToId"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
+    </div>
+    <Field label="Next action"><input className={inputClass} name="nextAction" placeholder="Clear next action visible on the record" /></Field>
+    <SubmitButton pendingLabel="Logging event…">Log event</SubmitButton>
+  </form>;
+}
+
+export function BookEventForm({ entityType, leadId, clientId, defaultTitle, users, redirectTo }: { entityType: "Lead" | "Client"; leadId?: string; clientId?: string; defaultTitle: string; users: UserOption[]; redirectTo: string }) {
+  return <form action={bookEvent} className="grid gap-4 md:grid-cols-2">
+    <SubmissionInput scope="book-event" />
+    <input type="hidden" name="entityType" value={entityType} />
+    <input type="hidden" name="leadId" value={leadId ?? ""} />
+    <input type="hidden" name="clientId" value={clientId ?? ""} />
+    <input type="hidden" name="redirectTo" value={redirectTo} />
+    <Field label="Event type"><select className={inputClass} name="eventType"><option value="CALL">Call</option><option value="MEETING">Meeting</option><option value="FOLLOW_UP">Follow-up</option><option value="OTHER">Other</option></select></Field>
+    <Field label="Event title"><input className={inputClass} name="title" defaultValue={defaultTitle} required /></Field>
+    <Field label="Date and time"><input className={inputClass} name="eventAt" type="datetime-local" required /></Field>
+    <Field label="Owner"><select className={inputClass} name="assignedToId"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
+    <Field label="Next action"><input className={inputClass} name="nextAction" placeholder="What should happen after this event?" /></Field>
+    <Field label="Notes"><textarea className={inputClass} name="notes" placeholder="Agenda, context, joining link, or preparation notes." /></Field>
+    <div className="md:col-span-2"><SubmitButton pendingLabel="Booking event…">Book event</SubmitButton></div>
   </form>;
 }
 
