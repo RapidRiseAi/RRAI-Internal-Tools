@@ -3,10 +3,10 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createSession, destroySession, requirePermission } from "./auth";
+import { createSession, destroySession, requirePermission, requireUser } from "./auth";
 import { permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
-import { affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, userSchema } from "./validation";
+import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, userSchema } from "./validation";
 
 function str(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
@@ -131,6 +131,21 @@ export async function loginAction(_previousState: { error?: string; success?: bo
 export async function logoutAction() {
   await destroySession();
   redirect("/login");
+}
+
+export async function updateOwnLoginDetails(formData: FormData) {
+  const user = await requireUser();
+  const parsed = accountLoginSchema.parse({ name: str(formData, "name"), email: str(formData, "email").toLowerCase(), currentPassword: str(formData, "currentPassword"), newPassword: str(formData, "newPassword") });
+  const { data: existing, error } = await getSupabaseAdmin().from("users").select("password_hash").eq("id", user.id).single();
+  if (error || !existing?.password_hash) throw new Error("Unable to verify login details.");
+  const ok = await bcrypt.compare(parsed.currentPassword, existing.password_hash as string);
+  if (!ok) throw new Error("Current password is incorrect.");
+  const payload: Record<string, string> = { name: parsed.name, email: parsed.email };
+  if (parsed.newPassword) payload.password_hash = await bcrypt.hash(parsed.newPassword, 12);
+  const { error: updateError } = await getSupabaseAdmin().from("users").update(payload).eq("id", user.id);
+  if (updateError) throw updateError;
+  revalidatePath("/settings");
+  redirect("/settings");
 }
 
 export async function upsertLead(formData: FormData) {

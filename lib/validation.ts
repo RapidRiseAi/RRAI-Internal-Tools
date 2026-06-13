@@ -55,6 +55,13 @@ export const userSchema = z.object({
   status: z.enum(["ACTIVE", "INACTIVE"]),
 });
 
+export const accountLoginSchema = z.object({
+  name: z.string().trim().min(2),
+  email: z.string().trim().email(),
+  currentPassword: z.string().min(1),
+  newPassword: z.string().min(10).optional().or(z.literal("")),
+});
+
 export const quoteSchema = z.object({
   title: z.string().trim().min(3),
   status: z.enum(quoteStatuses),

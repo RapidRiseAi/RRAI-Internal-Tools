@@ -7,7 +7,7 @@ import type { Project } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
 
-const hours = Array.from({ length: 12 }, (_, index) => index + 7);
+const hours = Array.from({ length: 24 }, (_, index) => index);
 
 function startOfWeek(date: Date) {
   const copy = new Date(date);
@@ -68,8 +68,13 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         <Card className="overflow-hidden p-0">
           <div className="grid grid-cols-[4.5rem_repeat(7,minmax(8rem,1fr))] border-b border-white/10 bg-white/[0.04] text-xs font-semibold uppercase tracking-wider text-slate-400">
             <div className="p-3">Time</div>
-            {days.map((day) => <Link key={isoDate(day)} href={`/calendar?date=${isoDate(day)}`} className="border-l border-white/10 p-3 text-center hover:bg-white/8"><span className="block text-slate-200">{day.toLocaleDateString("en", { weekday: "short" })}</span><span>{day.getDate()}</span></Link>)}
+            {days.map((day) => {
+              const dayTasks = scheduledTasks.filter((task) => sameDay(task.due_date, day));
+              const owners = new Set(dayTasks.map((task) => task.assigned_to).filter(Boolean));
+              return <Link key={isoDate(day)} href={`/calendar?date=${isoDate(day)}`} className="border-l border-white/10 p-3 text-center hover:bg-white/8"><span className="block text-slate-200">{day.toLocaleDateString("en", { weekday: "short" })}</span><span className="text-lg text-white">{day.getDate()}</span><span className="mt-1 block text-[10px] text-slate-500">{dayTasks.length} tasks • {owners.size} owners</span></Link>;
+            })}
           </div>
+          <div className="max-h-[68vh] overflow-auto">
           {hours.map((hour) => (
             <div key={hour} className="grid min-h-24 grid-cols-[4.5rem_repeat(7,minmax(8rem,1fr))] border-b border-white/10 last:border-b-0">
               <div className="bg-white/[0.02] p-3 text-xs text-slate-500">{String(hour).padStart(2, "0")}:00</div>
@@ -79,6 +84,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               })}
             </div>
           ))}
+          </div>
         </Card>
 
         <div className="grid gap-6 content-start">

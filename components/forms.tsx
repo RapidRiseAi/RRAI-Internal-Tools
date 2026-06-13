@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
-import { acceptQuote, addFileRecord, assignLinkedTask, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, upsertTask, upsertUser } from "@/lib/actions";
+import { acceptQuote, addFileRecord, assignLinkedTask, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, updateOwnLoginDetails, upsertTask, upsertUser } from "@/lib/actions";
 import { affiliateStatuses, clientStatuses, commissionStatuses, contentStatuses, knowledgeCategories, labelize, leadStages, paymentStatuses, priorities, projectStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "@/lib/constants";
-import type { Affiliate, ChecklistItem, ChecklistTemplate, Client, Lead, Payment, Project, Quote, Service, SupportTicket, Task } from "@/lib/types";
+import type { Affiliate, ChecklistItem, ChecklistTemplate, Client, Lead, Payment, Project, Quote, Service, SupportTicket, Task, User } from "@/lib/types";
 import { ModalPanel } from "./modal-panel";
 import { Card, Field, inputClass } from "./ui";
 import { rands } from "@/lib/format";
@@ -84,6 +84,16 @@ export function TaskForm({ users, projects, clients, redirectTo }: { users: User
       <div className="flex items-end"><SubmitButton>Create task</SubmitButton></div>
     </form>
   );
+}
+
+export function AccountLoginForm({ user }: { user: User }) {
+  return <form action={updateOwnLoginDetails} className="grid gap-4 md:grid-cols-2">
+    <Field label="Name"><input className={inputClass} name="name" defaultValue={user.name} required /></Field>
+    <Field label="Email"><input className={inputClass} name="email" type="email" defaultValue={user.email} required /></Field>
+    <Field label="Current password"><input className={inputClass} name="currentPassword" type="password" required /></Field>
+    <Field label="New password"><input className={inputClass} name="newPassword" type="password" minLength={10} placeholder="Leave blank to keep current password" /></Field>
+    <div className="md:col-span-2"><SubmitButton pendingLabel="Updating login…">Update login details</SubmitButton></div>
+  </form>;
 }
 
 export function UserForm({ roles }: { roles: RoleOption[] }) {
