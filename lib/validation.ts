@@ -158,7 +158,7 @@ export const allowedFileMimeTypes = [
 ] as const;
 export const maxUploadFileSizeBytes = 10 * 1024 * 1024;
 
-export const fileEntitySchema = z.object({ entityType: z.enum(allowedFileEntityTypes), entityId: z.string().uuid(), clientId: optionalUuid, projectId: optionalUuid });
+export const fileEntitySchema = z.object({ entityType: z.enum(allowedFileEntityTypes), entityId: z.string().uuid(), clientId: optionalUuid, leadId: optionalUuid, projectId: optionalUuid, knowledgeBaseItemId: optionalUuid });
 export const fileRecordSchema = fileEntitySchema.extend({ filename: z.string().trim().min(2), url: z.string().trim().url(), mimeType: optionalText });
 export const uploadFileSchema = fileEntitySchema.extend({
   filename: z.string().trim().min(2),

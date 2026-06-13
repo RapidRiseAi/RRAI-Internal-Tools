@@ -452,10 +452,10 @@ export async function addFileRecord(formData: FormData) {
   const uploadedFile = formData.get("file");
   const hasUpload = uploadedFile instanceof File && uploadedFile.size > 0;
   const supabase = getSupabaseAdmin();
-  let parsed: { filename: string; url: string; mimeType?: string; entityType: string; entityId: string; clientId?: string; projectId?: string };
+  let parsed: { filename: string; url: string; mimeType?: string; entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; knowledgeBaseItemId?: string };
 
   if (hasUpload) {
-    const upload = uploadFileSchema.parse({ filename: str(formData, "filename") || uploadedFile.name, mimeType: uploadedFile.type, size: uploadedFile.size, entityType, entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId") });
+    const upload = uploadFileSchema.parse({ filename: str(formData, "filename") || uploadedFile.name, mimeType: uploadedFile.type, size: uploadedFile.size, entityType, entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), projectId: str(formData, "projectId"), knowledgeBaseItemId: str(formData, "knowledgeBaseItemId") });
     const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
     const { error: uploadError } = await supabase.storage.from(internalFilesBucket).upload(storagePath, uploadedFile, { contentType: upload.mimeType, upsert: false });
     if (uploadError) throw uploadError;
@@ -463,12 +463,18 @@ export async function addFileRecord(formData: FormData) {
     if (signedError) throw signedError;
     parsed = { ...upload, url: signed.signedUrl };
   } else {
-    parsed = fileRecordSchema.parse({ filename: str(formData, "filename") || safeStorageName(new URL(str(formData, "url")).pathname.split("/").pop() || "external-file"), url: str(formData, "url"), mimeType: str(formData, "mimeType"), entityType, entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId") });
+    parsed = fileRecordSchema.parse({ filename: str(formData, "filename") || safeStorageName(new URL(str(formData, "url")).pathname.split("/").pop() || "external-file"), url: str(formData, "url"), mimeType: str(formData, "mimeType"), entityType, entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), projectId: str(formData, "projectId"), knowledgeBaseItemId: str(formData, "knowledgeBaseItemId") });
   }
 
-  const { error } = await supabase.from("files").insert({ filename: parsed.filename, url: parsed.url, mime_type: parsed.mimeType ?? null, entity_type: parsed.entityType, entity_id: parsed.entityId, client_id: parsed.clientId ?? null, project_id: parsed.projectId ?? null });
+  const typedIds = {
+    lead_id: parsed.leadId ?? (parsed.entityType === "Lead" ? parsed.entityId : null),
+    client_id: parsed.clientId ?? (parsed.entityType === "Client" ? parsed.entityId : null),
+    project_id: parsed.projectId ?? (parsed.entityType === "Project" ? parsed.entityId : null),
+    knowledge_base_item_id: parsed.knowledgeBaseItemId ?? (parsed.entityType === "KnowledgeBase" ? parsed.entityId : null),
+  };
+  const { error } = await supabase.from("files").insert({ filename: parsed.filename, url: parsed.url, mime_type: parsed.mimeType ?? null, entity_type: parsed.entityType, entity_id: parsed.entityId, ...typedIds });
   if (error) throw error;
-  await logActivity({ action: hasUpload ? "FILE_UPLOADED" : "FILE_LINK_ADDED", entityType: parsed.entityType, entityId: parsed.entityId, clientId: parsed.clientId, leadId: parsed.entityType === "Lead" ? parsed.entityId : null, projectId: parsed.projectId, actorId: user.id, message: `${parsed.filename} ${hasUpload ? "uploaded" : "linked"}` });
+  await logActivity({ action: hasUpload ? "FILE_UPLOADED" : "FILE_LINK_ADDED", entityType: parsed.entityType, entityId: parsed.entityId, clientId: typedIds.client_id, leadId: typedIds.lead_id, projectId: typedIds.project_id, actorId: user.id, message: `${parsed.filename} ${hasUpload ? "uploaded" : "linked"}` });
   revalidatePath(path(formData, "/dashboard"));
 }
 
