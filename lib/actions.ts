@@ -20,6 +20,34 @@ function path(formData: FormData, fallback: string) {
   return str(formData, "redirectTo") || fallback;
 }
 
+
+function positiveInt(value: FormDataEntryValue | null, fallback: number) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : fallback;
+}
+
+function parseQuoteLineItems(formData: FormData) {
+  const descriptions = formData.getAll("itemDescription").map((value) => String(value).trim());
+  return descriptions.map((description, index) => ({
+    service_id: String(formData.getAll("serviceId")[index] ?? "") || null,
+    description,
+    quantity: Math.max(1, positiveInt(formData.getAll("itemQuantity")[index] ?? null, 1)),
+    once_off_cents: positiveInt(formData.getAll("itemOnceOffCents")[index] ?? null, 0),
+    monthly_cents: positiveInt(formData.getAll("itemMonthlyCents")[index] ?? null, 0),
+    sort_order: index,
+  })).filter((item) => item.description);
+}
+
+function parseInvoiceLineItems(formData: FormData) {
+  const descriptions = formData.getAll("invoiceItemDescription").map((value) => String(value).trim());
+  return descriptions.map((description, index) => ({
+    description,
+    quantity: Math.max(1, positiveInt(formData.getAll("invoiceItemQuantity")[index] ?? null, 1)),
+    unit_amount_cents: positiveInt(formData.getAll("invoiceItemUnitCents")[index] ?? null, 0),
+    sort_order: index,
+  })).filter((item) => item.description);
+}
+
 function numberCode(prefix: string) {
   return `${prefix}-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 }
@@ -184,15 +212,17 @@ export async function upsertQuote(formData: FormData) {
   const user = await requirePermission(permissions.quotesWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "quote:create"))) redirect("/quotes");
-  const parsed = quoteSchema.parse({ title: str(formData, "title"), status: str(formData, "status"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), validUntil: str(formData, "validUntil"), internalNotes: str(formData, "internalNotes"), itemDescription: str(formData, "itemDescription"), itemQuantity: formData.get("itemQuantity"), itemOnceOffCents: formData.get("itemOnceOffCents"), itemMonthlyCents: formData.get("itemMonthlyCents"), serviceId: str(formData, "serviceId") });
-  const onceOff = parsed.itemQuantity * parsed.itemOnceOffCents;
-  const monthly = parsed.itemQuantity * parsed.itemMonthlyCents;
+  const lineItems = parseQuoteLineItems(formData);
+  if (!lineItems.length) throw new Error("Add at least one quote line item.");
+  const parsed = quoteSchema.parse({ title: str(formData, "title"), status: str(formData, "status"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), validUntil: str(formData, "validUntil"), internalNotes: str(formData, "internalNotes"), itemDescription: lineItems[0].description, itemQuantity: lineItems[0].quantity, itemOnceOffCents: lineItems[0].once_off_cents, itemMonthlyCents: lineItems[0].monthly_cents, serviceId: lineItems[0].service_id ?? "" });
+  const onceOff = lineItems.reduce((sum, item) => sum + item.quantity * item.once_off_cents, 0);
+  const monthly = lineItems.reduce((sum, item) => sum + item.quantity * item.monthly_cents, 0);
   const quotePayload = { title: parsed.title, status: parsed.status, client_id: parsed.clientId ?? null, lead_id: parsed.leadId ?? null, valid_until: parsed.validUntil?.toISOString() ?? null, internal_notes: parsed.internalNotes ?? null, once_off_total_cents: onceOff, monthly_total_cents: monthly, ...(parsed.status === "SENT" ? { sent_at: new Date().toISOString() } : {}), ...(parsed.status === "ACCEPTED" ? { accepted_at: new Date().toISOString() } : {}) };
   const supabase = getSupabaseAdmin();
   const result = id ? await supabase.from("quotes").update(quotePayload).eq("id", id).select("id,title,client_id,lead_id").single() : await supabase.from("quotes").insert({ ...quotePayload, quote_number: numberCode("Q") }).select("id,title,client_id,lead_id").single();
   if (result.error) throw result.error;
   await supabase.from("quote_items").delete().eq("quote_id", result.data.id);
-  await supabase.from("quote_items").insert({ quote_id: result.data.id, service_id: parsed.serviceId ?? null, description: parsed.itemDescription, quantity: parsed.itemQuantity, once_off_cents: parsed.itemOnceOffCents, monthly_cents: parsed.itemMonthlyCents });
+  await supabase.from("quote_items").insert(lineItems.map((item) => ({ ...item, quote_id: result.data.id })));
   await logActivity({ action: id ? "QUOTE_UPDATED" : "QUOTE_CREATED", entityType: "Quote", entityId: result.data.id, quoteId: result.data.id, clientId: result.data.client_id, leadId: result.data.lead_id, actorId: user.id, message: `${result.data.title} ${id ? "updated" : "created"}` });
   revalidatePath("/quotes");
   redirect("/quotes");
@@ -264,10 +294,15 @@ export async function updateProjectChecklist(formData: FormData) {
 export async function upsertInvoice(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "invoice:create"))) redirect("/billing");
-  const parsed = invoiceSchema.parse({ invoiceNumber: str(formData, "invoiceNumber"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), amountCents: formData.get("amountCents"), dueDate: str(formData, "dueDate") });
+  const lineItems = parseInvoiceLineItems(formData);
+  if (!lineItems.length) throw new Error("Add at least one invoice line item.");
+  const amountCents = lineItems.reduce((sum, item) => sum + item.quantity * item.unit_amount_cents, 0);
+  const parsed = invoiceSchema.parse({ invoiceNumber: str(formData, "invoiceNumber"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), amountCents, dueDate: str(formData, "dueDate") });
   const { data, error } = await insertInvoiceRecord({ invoice_number: parsed.invoiceNumber ?? numberCode("INV"), client_id: parsed.clientId, quote_id: parsed.quoteId ?? null, status: parsed.status, amount_cents: parsed.amountCents, due_date: parsed.dueDate?.toISOString() ?? null, issued_at: new Date().toISOString() });
   if (error) throw error;
-  await logActivity({ action: "INVOICE_CREATED", entityType: "Invoice", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.invoice_number} created` });
+  const { error: itemError } = await getSupabaseAdmin().from("invoice_items").insert(lineItems.map((item) => ({ ...item, invoice_id: data.id })));
+  if (itemError && itemError.code !== "42P01") throw itemError;
+  await logActivity({ action: "INVOICE_CREATED", entityType: "Invoice", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.invoice_number} created with ${lineItems.length} line item${lineItems.length === 1 ? "" : "s"}` });
   revalidatePath("/billing");
   redirect("/billing");
 }
