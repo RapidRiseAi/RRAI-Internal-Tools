@@ -4,12 +4,15 @@ import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { upsertQuote } from "@/lib/actions";
 import { labelize, quoteStatuses } from "@/lib/constants";
+import { money } from "@/lib/format";
 import { Field, inputClass } from "./ui";
 import { SubmitButton } from "./submit-button";
 import type { ClientOption, LeadOption, ServiceOption } from "./forms";
 
 type QuoteLineItem = { serviceId: string; description: string; quantity: string; onceOffCents: string; monthlyCents: string };
 
+const randToCents = (value: string) => Math.round(Number(value || 0) * 100);
+const centsToRand = (value: number) => String(Math.round(value / 100));
 const blankLineItem = (): QuoteLineItem => ({ serviceId: "", description: "", quantity: "1", onceOffCents: "0", monthlyCents: "0" });
 
 export function QuoteForm({ clients, leads, services }: { clients: ClientOption[]; leads: LeadOption[]; services: ServiceOption[] }) {
@@ -23,12 +26,12 @@ export function QuoteForm({ clients, leads, services }: { clients: ClientOption[
 
   function applyService(index: number, serviceId: string) {
     const service = services.find((item) => item.id === serviceId);
-    updateItem(index, service ? { serviceId, description: service.description, onceOffCents: String(service.base_once_off_cents), monthlyCents: String(service.base_monthly_cents) } : { serviceId });
+    updateItem(index, service ? { serviceId, description: service.description, onceOffCents: centsToRand(service.base_once_off_cents), monthlyCents: centsToRand(service.base_monthly_cents) } : { serviceId });
     if (service && !title) setTitle(service.name);
   }
 
-  const onceOffTotal = items.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.onceOffCents || 0), 0);
-  const monthlyTotal = items.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.monthlyCents || 0), 0);
+  const onceOffTotal = items.reduce((sum, item) => sum + Number(item.quantity || 1) * randToCents(item.onceOffCents), 0);
+  const monthlyTotal = items.reduce((sum, item) => sum + Number(item.quantity || 1) * randToCents(item.monthlyCents), 0);
 
   return <form action={upsertQuote} className="grid gap-5">
     <input type="hidden" name="submissionKey" value={submissionKey} />
@@ -51,12 +54,12 @@ export function QuoteForm({ clients, leads, services }: { clients: ClientOption[
           <Field label="Service"><select className={inputClass} name="serviceId" value={item.serviceId} onChange={(event) => applyService(index, event.target.value)}><option value="">Custom item / other</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></Field>
           <Field label="Description"><input className={inputClass} name="itemDescription" value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} required /></Field>
           <Field label="Qty"><input className={inputClass} type="number" name="itemQuantity" min="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} /></Field>
-          <Field label="Once-off cents"><input className={inputClass} type="number" name="itemOnceOffCents" min="0" value={item.onceOffCents} onChange={(event) => updateItem(index, { serviceId: "", onceOffCents: event.target.value })} /></Field>
-          <Field label="Monthly cents"><input className={inputClass} type="number" name="itemMonthlyCents" min="0" value={item.monthlyCents} onChange={(event) => updateItem(index, { serviceId: "", monthlyCents: event.target.value })} /></Field>
+          <Field label="Once-off (R)"><input className={inputClass} type="number" min="0" value={item.onceOffCents} onChange={(event) => updateItem(index, { serviceId: "", onceOffCents: event.target.value })} /><input type="hidden" name="itemOnceOffCents" value={randToCents(item.onceOffCents)} /></Field>
+          <Field label="Monthly (R)"><input className={inputClass} type="number" min="0" value={item.monthlyCents} onChange={(event) => updateItem(index, { serviceId: "", monthlyCents: event.target.value })} /><input type="hidden" name="itemMonthlyCents" value={randToCents(item.monthlyCents)} /></Field>
           <button type="button" disabled={items.length === 1} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="self-end rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Remove line item"><Trash2 className="size-4" /></button>
         </div>)}
       </div>
-      <div className="mt-4 flex flex-wrap justify-end gap-3 text-sm"><span className="rounded-full bg-white/8 px-3 py-1 text-slate-200">Once-off total: {onceOffTotal} cents</span><span className="rounded-full bg-white/8 px-3 py-1 text-slate-200">Monthly total: {monthlyTotal} cents</span></div>
+      <div className="mt-4 flex flex-wrap justify-end gap-3 text-sm"><span className="rounded-full bg-white/8 px-3 py-1 text-slate-200">Once-off total: {money(onceOffTotal)}</span><span className="rounded-full bg-white/8 px-3 py-1 text-slate-200">Monthly total: {money(monthlyTotal)}</span></div>
     </div>
     <div><SubmitButton>Create quote</SubmitButton></div>
   </form>;

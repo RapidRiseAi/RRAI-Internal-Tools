@@ -4,6 +4,7 @@ import { useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { upsertInvoice } from "@/lib/actions";
 import { invoiceStatuses, labelize } from "@/lib/constants";
+import { money } from "@/lib/format";
 import { Field, inputClass } from "./ui";
 import { SubmitButton } from "./submit-button";
 import type { ClientOption } from "./forms";
@@ -12,6 +13,8 @@ import type { QuoteItem } from "@/lib/types";
 export type InvoiceQuoteOption = { id: string; title: string; quote_number: string; client_id: string | null; once_off_total_cents: number; monthly_total_cents: number };
 type InvoiceLineItem = { description: string; quantity: string; unitAmountCents: string };
 
+const randToCents = (value: string) => Math.round(Number(value || 0) * 100);
+const centsToRand = (value: number) => String(Math.round(value / 100));
 const blankLineItem = (): InvoiceLineItem => ({ description: "", quantity: "1", unitAmountCents: "0" });
 
 export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOption[]; quotes: InvoiceQuoteOption[]; quoteItems: QuoteItem[] }) {
@@ -33,13 +36,13 @@ export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOp
     setClientId(quote.client_id ?? "");
     setInvoiceNumber(`INV-${quote.quote_number.replace(/^Q-?/, "")}`);
     const quoteRows = quoteItems.filter((item) => item.quote_id === quote.id).flatMap((item) => [
-      item.once_off_cents > 0 ? { description: `${item.description} — once-off`, quantity: String(item.quantity), unitAmountCents: String(item.once_off_cents) } : null,
-      item.monthly_cents > 0 ? { description: `${item.description} — monthly`, quantity: String(item.quantity), unitAmountCents: String(item.monthly_cents) } : null,
+      item.once_off_cents > 0 ? { description: `${item.description} — once-off`, quantity: String(item.quantity), unitAmountCents: centsToRand(item.once_off_cents) } : null,
+      item.monthly_cents > 0 ? { description: `${item.description} — monthly`, quantity: String(item.quantity), unitAmountCents: centsToRand(item.monthly_cents) } : null,
     ]).filter(Boolean) as InvoiceLineItem[];
-    setItems(quoteRows.length ? quoteRows : [{ description: quote.title, quantity: "1", unitAmountCents: String(quote.once_off_total_cents + quote.monthly_total_cents) }]);
+    setItems(quoteRows.length ? quoteRows : [{ description: quote.title, quantity: "1", unitAmountCents: centsToRand(quote.once_off_total_cents + quote.monthly_total_cents) }]);
   }
 
-  const totalCents = items.reduce((sum, item) => sum + Number(item.quantity || 1) * Number(item.unitAmountCents || 0), 0);
+  const totalCents = items.reduce((sum, item) => sum + Number(item.quantity || 1) * randToCents(item.unitAmountCents), 0);
 
   return <form action={upsertInvoice} className="grid gap-5">
     <input type="hidden" name="submissionKey" value={submissionKey} />
@@ -62,11 +65,11 @@ export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOp
         {items.map((item, index) => <div key={index} className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/45 p-3 md:grid-cols-[1.5fr_0.35fr_0.65fr_auto]">
           <Field label="Description"><input className={inputClass} name="invoiceItemDescription" value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} required /></Field>
           <Field label="Qty"><input className={inputClass} name="invoiceItemQuantity" type="number" min="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} required /></Field>
-          <Field label="Unit amount cents"><input className={inputClass} name="invoiceItemUnitCents" type="number" min="0" value={item.unitAmountCents} onChange={(event) => updateItem(index, { unitAmountCents: event.target.value })} required /></Field>
+          <Field label="Unit amount (R)"><input className={inputClass} type="number" min="0" value={item.unitAmountCents} onChange={(event) => updateItem(index, { unitAmountCents: event.target.value })} required /><input type="hidden" name="invoiceItemUnitCents" value={randToCents(item.unitAmountCents)} /></Field>
           <button type="button" disabled={items.length === 1} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="self-end rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Remove line item"><Trash2 className="size-4" /></button>
         </div>)}
       </div>
-      <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-400">Total is calculated from the editable line items.</p><span className="rounded-full bg-white/8 px-3 py-1 text-sm text-slate-200">Total: {totalCents} cents</span></div>
+      <div className="mt-4 flex flex-wrap items-center justify-between gap-3"><p className="text-sm text-slate-400">Total is calculated from the editable line items.</p><span className="rounded-full bg-white/8 px-3 py-1 text-sm text-slate-200">Total: {money(totalCents)}</span></div>
     </div>
     <div><SubmitButton pendingLabel="Creating invoice…">Create invoice</SubmitButton></div>
     {selectedQuote ? <p className="rounded-xl border border-rapid-cyan/20 bg-rapid-cyan/10 px-3 py-2 text-sm text-rapid-cyan">Loaded from {selectedQuote.quote_number}. You can still add, remove and edit invoice line items before creating.</p> : null}

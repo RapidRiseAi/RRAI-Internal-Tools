@@ -1,5 +1,9 @@
 export function money(cents: number) {
-  return new Intl.NumberFormat("en-US", { style: "currency", currency: "USD", maximumFractionDigits: 0 }).format(cents / 100);
+  return new Intl.NumberFormat("en-ZA", { style: "currency", currency: "ZAR", maximumFractionDigits: 0 }).format(cents / 100);
+}
+
+export function rands(cents: number) {
+  return String(Math.round(cents / 100));
 }
 
 export function dateShort(date?: Date | string | null) {

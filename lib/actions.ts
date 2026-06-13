@@ -21,6 +21,10 @@ function path(formData: FormData, fallback: string) {
 }
 
 
+function randsToCents(value: FormDataEntryValue | null) {
+  return Math.round(Number(value ?? 0) * 100);
+}
+
 function positiveInt(value: FormDataEntryValue | null, fallback: number) {
   const parsed = Number(value ?? fallback);
   return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : fallback;
@@ -175,7 +179,7 @@ export async function upsertClient(formData: FormData) {
   const user = await requirePermission(permissions.clientsWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "client:create"))) redirect("/clients");
-  const parsed = clientSchema.parse({ companyName: str(formData, "companyName"), accountStatus: str(formData, "accountStatus"), industry: str(formData, "industry"), website: str(formData, "website"), primaryEmail: str(formData, "primaryEmail"), primaryPhone: str(formData, "primaryPhone"), nextAction: str(formData, "nextAction"), mrrCents: formData.get("mrrCents") });
+  const parsed = clientSchema.parse({ companyName: str(formData, "companyName"), accountStatus: str(formData, "accountStatus"), industry: str(formData, "industry"), website: str(formData, "website"), primaryEmail: str(formData, "primaryEmail"), primaryPhone: str(formData, "primaryPhone"), nextAction: str(formData, "nextAction"), mrrCents: randsToCents(formData.get("mrrRands")) });
   const payload = { company_name: parsed.companyName, account_status: parsed.accountStatus, industry: parsed.industry ?? null, website: parsed.website ?? null, primary_email: parsed.primaryEmail ?? null, primary_phone: parsed.primaryPhone ?? null, next_action: parsed.nextAction ?? null, mrr_cents: parsed.mrrCents };
   const result = id ? await getSupabaseAdmin().from("clients").update(payload).eq("id", id).select("id,company_name").single() : await getSupabaseAdmin().from("clients").insert(payload).select("id,company_name").single();
   if (result.error) throw result.error;
@@ -310,7 +314,7 @@ export async function upsertInvoice(formData: FormData) {
 export async function recordPayment(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "payment:create"))) redirect("/billing");
-  const parsed = paymentSchema.parse({ invoiceId: str(formData, "invoiceId"), amountCents: formData.get("amountCents"), status: str(formData, "status"), method: str(formData, "method"), reference: str(formData, "reference") });
+  const parsed = paymentSchema.parse({ invoiceId: str(formData, "invoiceId"), amountCents: randsToCents(formData.get("amountRands")), status: str(formData, "status"), method: str(formData, "method"), reference: str(formData, "reference") });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("payments").insert({ invoice_id: parsed.invoiceId, amount_cents: parsed.amountCents, status: parsed.status, method: parsed.method ?? null, reference: parsed.reference ?? null, paid_at: parsed.status === "PAID" ? new Date().toISOString() : null }).select("id,invoice_id").single();
   if (error) throw error;
@@ -323,7 +327,7 @@ export async function recordPayment(formData: FormData) {
 export async function upsertRetainer(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "retainer:create"))) redirect("/retainers");
-  const parsed = retainerSchema.parse({ clientId: str(formData, "clientId"), type: str(formData, "type"), status: str(formData, "status"), monthlyAmountCents: formData.get("monthlyAmountCents"), nextBillingDate: str(formData, "nextBillingDate") });
+  const parsed = retainerSchema.parse({ clientId: str(formData, "clientId"), type: str(formData, "type"), status: str(formData, "status"), monthlyAmountCents: randsToCents(formData.get("monthlyAmountRands")), nextBillingDate: str(formData, "nextBillingDate") });
   const { data, error } = await getSupabaseAdmin().from("retainers").insert({ client_id: parsed.clientId, type: parsed.type, status: parsed.status, monthly_amount_cents: parsed.monthlyAmountCents, next_billing_date: parsed.nextBillingDate?.toISOString() ?? null }).select("id,type,client_id").single();
   if (error) throw error;
   await logActivity({ action: "RETAINER_CREATED", entityType: "Retainer", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.type} retainer created` });
@@ -366,7 +370,7 @@ export async function createReferral(formData: FormData) {
 export async function createCommission(formData: FormData) {
   const user = await requirePermission(permissions.marketingWrite);
   if (!(await reserveSubmission(user.id, formData, "commission:create"))) redirect("/affiliates");
-  const parsed = commissionSchema.parse({ affiliateId: str(formData, "affiliateId"), quoteId: str(formData, "quoteId"), projectId: str(formData, "projectId"), paymentId: str(formData, "paymentId"), status: str(formData, "status"), amountCents: formData.get("amountCents"), commissionType: str(formData, "commissionType") });
+  const parsed = commissionSchema.parse({ affiliateId: str(formData, "affiliateId"), quoteId: str(formData, "quoteId"), projectId: str(formData, "projectId"), paymentId: str(formData, "paymentId"), status: str(formData, "status"), amountCents: randsToCents(formData.get("amountRands")), commissionType: str(formData, "commissionType") });
   await getSupabaseAdmin().from("commissions").insert({ affiliate_id: parsed.affiliateId, quote_id: parsed.quoteId ?? null, project_id: parsed.projectId ?? null, payment_id: parsed.paymentId ?? null, status: parsed.status, amount_cents: parsed.amountCents, commission_type: parsed.commissionType, paid_at: parsed.status === "PAID" ? new Date().toISOString() : null });
   revalidatePath("/affiliates");
   redirect("/affiliates");
@@ -446,7 +450,7 @@ export async function createChecklistItem(formData: FormData) {
 export async function upsertService(formData: FormData) {
   await requirePermission(permissions.settingsManage);
   const id = str(formData, "id") || undefined;
-  const parsed = serviceSchema.parse({ id, name: str(formData, "name"), category: str(formData, "category"), description: str(formData, "description"), baseOnceOffCents: formData.get("baseOnceOffCents"), baseMonthlyCents: formData.get("baseMonthlyCents"), isActive: bool(formData, "isActive") });
+  const parsed = serviceSchema.parse({ id, name: str(formData, "name"), category: str(formData, "category"), description: str(formData, "description"), baseOnceOffCents: randsToCents(formData.get("baseOnceOffRands")), baseMonthlyCents: randsToCents(formData.get("baseMonthlyRands")), isActive: bool(formData, "isActive") });
   const payload = { name: parsed.name, category: parsed.category, description: parsed.description, base_once_off_cents: parsed.baseOnceOffCents, base_monthly_cents: parsed.baseMonthlyCents, is_active: parsed.isActive };
   const { error } = id ? await getSupabaseAdmin().from("services").update(payload).eq("id", id) : await getSupabaseAdmin().from("services").upsert(payload, { onConflict: "name" });
   if (error) throw error;
