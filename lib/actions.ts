@@ -113,6 +113,14 @@ async function insertInvoiceRecord(payload: Record<string, string | number | nul
   return supabase.from("invoices").insert(fallbackPayload).select("id,invoice_number,client_id").single();
 }
 
+type ConvertLeadResult = { client_id: string };
+type AcceptQuoteResult = { client_id: string; project_id: string; invoice_id: string | null; retainer_id: string | null };
+
+function workflowError(error: unknown, workflowName: string) {
+  const message = error instanceof Error ? error.message : String(error);
+  return new Error(`${workflowName} failed and all workflow changes were rolled back: ${message}`);
+}
+
 export async function loginAction(_previousState: { error?: string; success?: boolean } | null, formData: FormData) {
   const email = str(formData, "email").trim().toLowerCase();
   const password = str(formData, "password");
@@ -176,18 +184,11 @@ export async function convertLeadToClient(formData: FormData) {
   const user = await requirePermission(permissions.clientsWrite);
   if (!(await reserveSubmission(user.id, formData, "lead:convert"))) redirect("/clients");
   const leadId = str(formData, "leadId");
-  const supabase = getSupabaseAdmin();
-  const { data: lead, error: leadError } = await supabase.from("leads").select("*").eq("id", leadId).single();
-  if (leadError || !lead) throw leadError ?? new Error("Lead not found");
-  if (lead.converted_client_id) redirect(`/clients/${lead.converted_client_id}`);
-  const { data: client, error } = await supabase.from("clients").insert({ company_name: lead.company_name, primary_email: lead.email, primary_phone: lead.phone, next_action: "Complete client onboarding and create first project." }).select("id,company_name").single();
-  if (error) throw error;
-  await supabase.from("contacts").insert({ client_id: client.id, name: lead.contact_name, email: lead.email, phone: lead.phone, is_primary: true });
-  await supabase.from("leads").update({ stage: "WON", converted_client_id: client.id }).eq("id", leadId);
-  await logActivity({ action: "LEAD_CONVERTED_TO_CLIENT", entityType: "Client", entityId: client.id, clientId: client.id, leadId, actorId: user.id, message: `${client.company_name} converted to client` });
+  const { data, error } = await getSupabaseAdmin().rpc("convert_lead_to_client_atomic", { p_lead_id: leadId, p_actor_id: user.id }).single<ConvertLeadResult>();
+  if (error || !data?.client_id) throw workflowError(error ?? new Error("No client id returned."), "Lead conversion");
   revalidatePath("/leads");
   revalidatePath("/clients");
-  redirect(`/clients/${client.id}`);
+  redirect(`/clients/${data.client_id}`);
 }
 
 export async function upsertClient(formData: FormData) {
@@ -251,41 +252,14 @@ export async function acceptQuote(formData: FormData) {
   const user = await requirePermission(permissions.quotesWrite);
   if (!(await reserveSubmission(user.id, formData, "quote:accept"))) redirect("/quotes");
   const id = str(formData, "id");
-  const supabase = getSupabaseAdmin();
-  const { data: quote, error } = await supabase.from("quotes").select("*").eq("id", id).single();
-  if (error || !quote) throw error ?? new Error("Quote not found");
-  let clientId = quote.client_id as string | null;
-  if (!clientId && quote.lead_id) {
-    const { data: lead } = await supabase.from("leads").select("*").eq("id", quote.lead_id).single();
-    if (lead) {
-      const { data: client, error: clientError } = await supabase.from("clients").insert({ company_name: lead.company_name, primary_email: lead.email, primary_phone: lead.phone, next_action: "Accepted quote: confirm onboarding and kickoff." }).select("id").single();
-      if (clientError) throw clientError;
-      clientId = client.id;
-      await supabase.from("leads").update({ stage: "WON", converted_client_id: client.id }).eq("id", quote.lead_id);
-      await supabase.from("quotes").update({ client_id: client.id }).eq("id", id);
-    }
-  }
-  if (!clientId) throw new Error("A quote must be linked to a client or lead before acceptance.");
-  await supabase.from("quotes").update({ status: "ACCEPTED", accepted_at: quote.accepted_at ?? new Date().toISOString(), client_id: clientId }).eq("id", id);
-  const { data: existingProject, error: existingProjectError } = await supabase.from("projects").select("id,name").eq("quote_id", id).maybeSingle();
-  if (existingProjectError) throw existingProjectError;
-  let project = existingProject;
-  if (!project) {
-    const { data: createdProject, error: projectError } = await supabase.from("projects").insert({ client_id: clientId, quote_id: id, name: quote.title, status: "NOT_STARTED", stage: "Kickoff", priority: "MEDIUM", progress: 0 }).select("id,name").single();
-    if (projectError) throw projectError;
-    project = createdProject;
-  }
-  if (!project) throw new Error("Project could not be created from the accepted quote.");
-  if (!existingProject) await seedProjectChecklist(project.id);
-  if (!existingProject && quote.once_off_total_cents > 0) {
-    const { error: invoiceError } = await insertInvoiceRecord({ client_id: clientId, quote_id: id, invoice_number: numberCode("INV"), status: "SENT", amount_cents: quote.once_off_total_cents, issued_at: new Date().toISOString(), due_date: new Date(Date.now() + 7 * 86400000).toISOString() });
-    if (invoiceError) throw invoiceError;
-  }
-  if (!existingProject && quote.monthly_total_cents > 0) await supabase.from("retainers").insert({ client_id: clientId, type: `${quote.title} retainer`, status: "ACTIVE", monthly_amount_cents: quote.monthly_total_cents, next_billing_date: new Date(Date.now() + 30 * 86400000).toISOString() });
-  await logActivity({ action: "QUOTE_ACCEPTED", entityType: "Quote", entityId: id, quoteId: id, projectId: project.id, clientId, leadId: quote.lead_id, actorId: user.id, message: `${quote.title} accepted; project, checklist and finance records created` });
+  const { data, error } = await getSupabaseAdmin().rpc("accept_quote_atomic", { p_quote_id: id, p_actor_id: user.id, p_invoice_number: numberCode("INV") }).single<AcceptQuoteResult>();
+  if (error || !data?.project_id) throw workflowError(error ?? new Error("No project id returned."), "Quote acceptance");
   revalidatePath("/quotes");
   revalidatePath("/projects");
-  redirect(`/projects/${project.id}`);
+  revalidatePath("/billing");
+  revalidatePath("/retainers");
+  revalidatePath("/clients");
+  redirect(`/projects/${data.project_id}`);
 }
 
 export async function upsertProject(formData: FormData) {
