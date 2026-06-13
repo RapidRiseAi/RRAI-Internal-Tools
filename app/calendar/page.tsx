@@ -2,7 +2,7 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listTasks, listUsers } from "@/lib/data";
-import { dateShort } from "@/lib/format";
+import { dateTimeShort } from "@/lib/format";
 import type { Project } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
@@ -25,7 +25,11 @@ function isoDate(date: Date) {
 }
 
 function sameDay(dateValue: string | null, date: Date) {
-  return dateValue?.slice(0, 10) === isoDate(date);
+  if (!dateValue) return false;
+  const scheduled = new Date(dateValue);
+  return scheduled.getFullYear() === date.getFullYear() &&
+    scheduled.getMonth() === date.getMonth() &&
+    scheduled.getDate() === date.getDate();
 }
 
 function hourOf(dateValue: string | null) {
@@ -221,7 +225,7 @@ export default async function CalendarPage({
                           {assignee?.name ?? "Unassigned"}
                         </span>
                         <span className="rounded-full bg-white/8 px-2.5 py-1 text-slate-200">
-                          {dateShort(task.due_date)}
+                          {dateTimeShort(task.due_date)}
                         </span>
                         {client ? (
                           <Link
