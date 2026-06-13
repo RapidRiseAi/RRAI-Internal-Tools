@@ -3,10 +3,10 @@
 import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
-import { createSession, destroySession, requirePermission } from "./auth";
+import { createSession, destroySession, requirePermission, requireUser } from "./auth";
 import { permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
-import { affiliateSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, userSchema } from "./validation";
+import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, userSchema } from "./validation";
 
 function str(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
@@ -18,6 +18,38 @@ function bool(formData: FormData, key: string) {
 
 function path(formData: FormData, fallback: string) {
   return str(formData, "redirectTo") || fallback;
+}
+
+
+function randsToCents(value: FormDataEntryValue | null) {
+  return Math.round(Number(value ?? 0) * 100);
+}
+
+function positiveInt(value: FormDataEntryValue | null, fallback: number) {
+  const parsed = Number(value ?? fallback);
+  return Number.isFinite(parsed) && parsed >= 0 ? Math.trunc(parsed) : fallback;
+}
+
+function parseQuoteLineItems(formData: FormData) {
+  const descriptions = formData.getAll("itemDescription").map((value) => String(value).trim());
+  return descriptions.map((description, index) => ({
+    service_id: String(formData.getAll("serviceId")[index] ?? "") || null,
+    description,
+    quantity: Math.max(1, positiveInt(formData.getAll("itemQuantity")[index] ?? null, 1)),
+    once_off_cents: positiveInt(formData.getAll("itemOnceOffCents")[index] ?? null, 0),
+    monthly_cents: positiveInt(formData.getAll("itemMonthlyCents")[index] ?? null, 0),
+    sort_order: index,
+  })).filter((item) => item.description);
+}
+
+function parseInvoiceLineItems(formData: FormData) {
+  const descriptions = formData.getAll("invoiceItemDescription").map((value) => String(value).trim());
+  return descriptions.map((description, index) => ({
+    description,
+    quantity: Math.max(1, positiveInt(formData.getAll("invoiceItemQuantity")[index] ?? null, 1)),
+    unit_amount_cents: positiveInt(formData.getAll("invoiceItemUnitCents")[index] ?? null, 0),
+    sort_order: index,
+  })).filter((item) => item.description);
 }
 
 function numberCode(prefix: string) {
@@ -101,6 +133,21 @@ export async function logoutAction() {
   redirect("/login");
 }
 
+export async function updateOwnLoginDetails(formData: FormData) {
+  const user = await requireUser();
+  const parsed = accountLoginSchema.parse({ name: str(formData, "name"), email: str(formData, "email").toLowerCase(), currentPassword: str(formData, "currentPassword"), newPassword: str(formData, "newPassword") });
+  const { data: existing, error } = await getSupabaseAdmin().from("users").select("password_hash").eq("id", user.id).single();
+  if (error || !existing?.password_hash) throw new Error("Unable to verify login details.");
+  const ok = await bcrypt.compare(parsed.currentPassword, existing.password_hash as string);
+  if (!ok) throw new Error("Current password is incorrect.");
+  const payload: Record<string, string> = { name: parsed.name, email: parsed.email };
+  if (parsed.newPassword) payload.password_hash = await bcrypt.hash(parsed.newPassword, 12);
+  const { error: updateError } = await getSupabaseAdmin().from("users").update(payload).eq("id", user.id);
+  if (updateError) throw updateError;
+  revalidatePath("/settings");
+  redirect("/settings");
+}
+
 export async function upsertLead(formData: FormData) {
   const user = await requirePermission(permissions.leadsWrite);
   const id = str(formData, "id") || undefined;
@@ -147,7 +194,7 @@ export async function upsertClient(formData: FormData) {
   const user = await requirePermission(permissions.clientsWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "client:create"))) redirect("/clients");
-  const parsed = clientSchema.parse({ companyName: str(formData, "companyName"), accountStatus: str(formData, "accountStatus"), industry: str(formData, "industry"), website: str(formData, "website"), primaryEmail: str(formData, "primaryEmail"), primaryPhone: str(formData, "primaryPhone"), nextAction: str(formData, "nextAction"), mrrCents: formData.get("mrrCents") });
+  const parsed = clientSchema.parse({ companyName: str(formData, "companyName"), accountStatus: str(formData, "accountStatus"), industry: str(formData, "industry"), website: str(formData, "website"), primaryEmail: str(formData, "primaryEmail"), primaryPhone: str(formData, "primaryPhone"), nextAction: str(formData, "nextAction"), mrrCents: randsToCents(formData.get("mrrRands")) });
   const payload = { company_name: parsed.companyName, account_status: parsed.accountStatus, industry: parsed.industry ?? null, website: parsed.website ?? null, primary_email: parsed.primaryEmail ?? null, primary_phone: parsed.primaryPhone ?? null, next_action: parsed.nextAction ?? null, mrr_cents: parsed.mrrCents };
   const result = id ? await getSupabaseAdmin().from("clients").update(payload).eq("id", id).select("id,company_name").single() : await getSupabaseAdmin().from("clients").insert(payload).select("id,company_name").single();
   if (result.error) throw result.error;
@@ -184,15 +231,17 @@ export async function upsertQuote(formData: FormData) {
   const user = await requirePermission(permissions.quotesWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "quote:create"))) redirect("/quotes");
-  const parsed = quoteSchema.parse({ title: str(formData, "title"), status: str(formData, "status"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), validUntil: str(formData, "validUntil"), internalNotes: str(formData, "internalNotes"), itemDescription: str(formData, "itemDescription"), itemQuantity: formData.get("itemQuantity"), itemOnceOffCents: formData.get("itemOnceOffCents"), itemMonthlyCents: formData.get("itemMonthlyCents"), serviceId: str(formData, "serviceId") });
-  const onceOff = parsed.itemQuantity * parsed.itemOnceOffCents;
-  const monthly = parsed.itemQuantity * parsed.itemMonthlyCents;
+  const lineItems = parseQuoteLineItems(formData);
+  if (!lineItems.length) throw new Error("Add at least one quote line item.");
+  const parsed = quoteSchema.parse({ title: str(formData, "title"), status: str(formData, "status"), clientId: str(formData, "clientId"), leadId: str(formData, "leadId"), validUntil: str(formData, "validUntil"), internalNotes: str(formData, "internalNotes"), itemDescription: lineItems[0].description, itemQuantity: lineItems[0].quantity, itemOnceOffCents: lineItems[0].once_off_cents, itemMonthlyCents: lineItems[0].monthly_cents, serviceId: lineItems[0].service_id ?? "" });
+  const onceOff = lineItems.reduce((sum, item) => sum + item.quantity * item.once_off_cents, 0);
+  const monthly = lineItems.reduce((sum, item) => sum + item.quantity * item.monthly_cents, 0);
   const quotePayload = { title: parsed.title, status: parsed.status, client_id: parsed.clientId ?? null, lead_id: parsed.leadId ?? null, valid_until: parsed.validUntil?.toISOString() ?? null, internal_notes: parsed.internalNotes ?? null, once_off_total_cents: onceOff, monthly_total_cents: monthly, ...(parsed.status === "SENT" ? { sent_at: new Date().toISOString() } : {}), ...(parsed.status === "ACCEPTED" ? { accepted_at: new Date().toISOString() } : {}) };
   const supabase = getSupabaseAdmin();
   const result = id ? await supabase.from("quotes").update(quotePayload).eq("id", id).select("id,title,client_id,lead_id").single() : await supabase.from("quotes").insert({ ...quotePayload, quote_number: numberCode("Q") }).select("id,title,client_id,lead_id").single();
   if (result.error) throw result.error;
   await supabase.from("quote_items").delete().eq("quote_id", result.data.id);
-  await supabase.from("quote_items").insert({ quote_id: result.data.id, service_id: parsed.serviceId ?? null, description: parsed.itemDescription, quantity: parsed.itemQuantity, once_off_cents: parsed.itemOnceOffCents, monthly_cents: parsed.itemMonthlyCents });
+  await supabase.from("quote_items").insert(lineItems.map((item) => ({ ...item, quote_id: result.data.id })));
   await logActivity({ action: id ? "QUOTE_UPDATED" : "QUOTE_CREATED", entityType: "Quote", entityId: result.data.id, quoteId: result.data.id, clientId: result.data.client_id, leadId: result.data.lead_id, actorId: user.id, message: `${result.data.title} ${id ? "updated" : "created"}` });
   revalidatePath("/quotes");
   redirect("/quotes");
@@ -243,11 +292,14 @@ export async function upsertProject(formData: FormData) {
   const user = await requirePermission(permissions.projectsWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "project:create"))) redirect("/projects");
-  const parsed = projectSchema.parse({ name: str(formData, "name"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), stage: str(formData, "stage"), priority: str(formData, "priority"), deadline: str(formData, "deadline"), progress: formData.get("progress"), blocker: str(formData, "blocker"), seedChecklist: bool(formData, "seedChecklist") });
-  const payload = { name: parsed.name, client_id: parsed.clientId, quote_id: parsed.quoteId ?? null, status: parsed.status, stage: parsed.stage ?? null, priority: parsed.priority, deadline: parsed.deadline?.toISOString() ?? null, progress: parsed.progress, blocker: parsed.blocker ?? null };
+  const parsed = projectSchema.parse({ name: str(formData, "name"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), stage: str(formData, "stage"), priority: str(formData, "priority"), deadline: str(formData, "deadline"), progress: formData.get("progress"), blocker: str(formData, "blocker"), seedChecklist: bool(formData, "seedChecklist"), assignedToId: str(formData, "assignedToId") });
+  const payload = { name: parsed.name, client_id: parsed.clientId, quote_id: parsed.quoteId ?? null, status: parsed.status, stage: parsed.stage ?? null, priority: parsed.priority, deadline: parsed.deadline?.toISOString() ?? null, progress: parsed.progress, blocker: parsed.blocker ?? null, assigned_to: parsed.assignedToId ?? null };
+  const previousProject = id ? await getSupabaseAdmin().from("projects").select("assigned_to").eq("id", id).maybeSingle() : null;
   const result = id ? await getSupabaseAdmin().from("projects").update(payload).eq("id", id).select("id,name,client_id").single() : await getSupabaseAdmin().from("projects").insert(payload).select("id,name,client_id").single();
   if (result.error) throw result.error;
   if (!id && parsed.seedChecklist) await seedProjectChecklist(result.data.id);
+  const assignmentChanged = parsed.assignedToId && (!id || previousProject?.data?.assigned_to !== parsed.assignedToId);
+  if (assignmentChanged) await getSupabaseAdmin().from("tasks").insert({ title: `Project assignment: ${result.data.name}`, description: `You are assigned to own project ${result.data.name}.`, type: "ADMIN_TASK", status: "TO_DO", priority: parsed.priority, due_date: parsed.deadline?.toISOString() ?? null, client_id: result.data.client_id, project_id: result.data.id, assigned_to: parsed.assignedToId, created_by: user.id });
   await logActivity({ action: id ? "PROJECT_UPDATED" : "PROJECT_CREATED", entityType: "Project", entityId: result.data.id, projectId: result.data.id, clientId: result.data.client_id, actorId: user.id, message: `${result.data.name} ${id ? "updated" : "created"}` });
   revalidatePath("/projects");
   redirect(`/projects/${result.data.id}`);
@@ -264,10 +316,15 @@ export async function updateProjectChecklist(formData: FormData) {
 export async function upsertInvoice(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "invoice:create"))) redirect("/billing");
-  const parsed = invoiceSchema.parse({ invoiceNumber: str(formData, "invoiceNumber"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), amountCents: formData.get("amountCents"), dueDate: str(formData, "dueDate") });
+  const lineItems = parseInvoiceLineItems(formData);
+  if (!lineItems.length) throw new Error("Add at least one invoice line item.");
+  const amountCents = lineItems.reduce((sum, item) => sum + item.quantity * item.unit_amount_cents, 0);
+  const parsed = invoiceSchema.parse({ invoiceNumber: str(formData, "invoiceNumber"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), amountCents, dueDate: str(formData, "dueDate") });
   const { data, error } = await insertInvoiceRecord({ invoice_number: parsed.invoiceNumber ?? numberCode("INV"), client_id: parsed.clientId, quote_id: parsed.quoteId ?? null, status: parsed.status, amount_cents: parsed.amountCents, due_date: parsed.dueDate?.toISOString() ?? null, issued_at: new Date().toISOString() });
   if (error) throw error;
-  await logActivity({ action: "INVOICE_CREATED", entityType: "Invoice", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.invoice_number} created` });
+  const { error: itemError } = await getSupabaseAdmin().from("invoice_items").insert(lineItems.map((item) => ({ ...item, invoice_id: data.id })));
+  if (itemError && itemError.code !== "42P01") throw itemError;
+  await logActivity({ action: "INVOICE_CREATED", entityType: "Invoice", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.invoice_number} created with ${lineItems.length} line item${lineItems.length === 1 ? "" : "s"}` });
   revalidatePath("/billing");
   redirect("/billing");
 }
@@ -275,7 +332,7 @@ export async function upsertInvoice(formData: FormData) {
 export async function recordPayment(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "payment:create"))) redirect("/billing");
-  const parsed = paymentSchema.parse({ invoiceId: str(formData, "invoiceId"), amountCents: formData.get("amountCents"), status: str(formData, "status"), method: str(formData, "method"), reference: str(formData, "reference") });
+  const parsed = paymentSchema.parse({ invoiceId: str(formData, "invoiceId"), amountCents: randsToCents(formData.get("amountRands")), status: str(formData, "status"), method: str(formData, "method"), reference: str(formData, "reference") });
   const supabase = getSupabaseAdmin();
   const { data, error } = await supabase.from("payments").insert({ invoice_id: parsed.invoiceId, amount_cents: parsed.amountCents, status: parsed.status, method: parsed.method ?? null, reference: parsed.reference ?? null, paid_at: parsed.status === "PAID" ? new Date().toISOString() : null }).select("id,invoice_id").single();
   if (error) throw error;
@@ -288,7 +345,7 @@ export async function recordPayment(formData: FormData) {
 export async function upsertRetainer(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "retainer:create"))) redirect("/retainers");
-  const parsed = retainerSchema.parse({ clientId: str(formData, "clientId"), type: str(formData, "type"), status: str(formData, "status"), monthlyAmountCents: formData.get("monthlyAmountCents"), nextBillingDate: str(formData, "nextBillingDate") });
+  const parsed = retainerSchema.parse({ clientId: str(formData, "clientId"), type: str(formData, "type"), status: str(formData, "status"), monthlyAmountCents: randsToCents(formData.get("monthlyAmountRands")), nextBillingDate: str(formData, "nextBillingDate") });
   const { data, error } = await getSupabaseAdmin().from("retainers").insert({ client_id: parsed.clientId, type: parsed.type, status: parsed.status, monthly_amount_cents: parsed.monthlyAmountCents, next_billing_date: parsed.nextBillingDate?.toISOString() ?? null }).select("id,type,client_id").single();
   if (error) throw error;
   await logActivity({ action: "RETAINER_CREATED", entityType: "Retainer", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.type} retainer created` });
@@ -331,7 +388,7 @@ export async function createReferral(formData: FormData) {
 export async function createCommission(formData: FormData) {
   const user = await requirePermission(permissions.marketingWrite);
   if (!(await reserveSubmission(user.id, formData, "commission:create"))) redirect("/affiliates");
-  const parsed = commissionSchema.parse({ affiliateId: str(formData, "affiliateId"), quoteId: str(formData, "quoteId"), projectId: str(formData, "projectId"), paymentId: str(formData, "paymentId"), status: str(formData, "status"), amountCents: formData.get("amountCents"), commissionType: str(formData, "commissionType") });
+  const parsed = commissionSchema.parse({ affiliateId: str(formData, "affiliateId"), quoteId: str(formData, "quoteId"), projectId: str(formData, "projectId"), paymentId: str(formData, "paymentId"), status: str(formData, "status"), amountCents: randsToCents(formData.get("amountRands")), commissionType: str(formData, "commissionType") });
   await getSupabaseAdmin().from("commissions").insert({ affiliate_id: parsed.affiliateId, quote_id: parsed.quoteId ?? null, project_id: parsed.projectId ?? null, payment_id: parsed.paymentId ?? null, status: parsed.status, amount_cents: parsed.amountCents, commission_type: parsed.commissionType, paid_at: parsed.status === "PAID" ? new Date().toISOString() : null });
   revalidatePath("/affiliates");
   redirect("/affiliates");
@@ -385,32 +442,93 @@ export async function addFileRecord(formData: FormData) {
 
 export async function createChecklistTemplate(formData: FormData) {
   const user = await requirePermission(permissions.settingsManage);
-  if (!(await reserveSubmission(user.id, formData, "checklist-template:create"))) redirect("/settings");
-  const parsed = checklistTemplateSchema.parse({ name: str(formData, "name"), serviceId: str(formData, "serviceId"), description: str(formData, "description"), firstItemTitle: str(formData, "firstItemTitle") });
-  const { data, error } = await getSupabaseAdmin().from("checklist_templates").insert({ name: parsed.name, service_id: parsed.serviceId ?? null, description: parsed.description ?? null, is_active: true }).select("id").single();
-  if (error) throw error;
-  if (parsed.firstItemTitle) await getSupabaseAdmin().from("checklist_items").insert({ template_id: data.id, title: parsed.firstItemTitle, sort_order: 0 });
+  const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "checklist-template:create"))) redirect("/settings");
+  const parsed = checklistTemplateSchema.parse({ id, name: str(formData, "name"), serviceId: str(formData, "serviceId"), description: str(formData, "description"), firstItemTitle: str(formData, "firstItemTitle"), isActive: bool(formData, "isActive") });
+  const payload = { name: parsed.name, service_id: parsed.serviceId ?? null, description: parsed.description ?? null, is_active: parsed.isActive };
+  const result = id ? await getSupabaseAdmin().from("checklist_templates").update(payload).eq("id", id).select("id").single() : await getSupabaseAdmin().from("checklist_templates").insert(payload).select("id").single();
+  if (result.error) throw result.error;
+  if (!id && parsed.firstItemTitle) await getSupabaseAdmin().from("checklist_items").insert({ template_id: result.data.id, title: parsed.firstItemTitle, sort_order: 0 });
   revalidatePath("/settings");
   redirect("/settings");
 }
 
 export async function createChecklistItem(formData: FormData) {
   const user = await requirePermission(permissions.settingsManage);
-  if (!(await reserveSubmission(user.id, formData, "checklist-item:create"))) redirect("/settings");
-  const parsed = checklistItemSchema.parse({ templateId: str(formData, "templateId"), title: str(formData, "title"), description: str(formData, "description") });
-  await getSupabaseAdmin().from("checklist_items").insert({ template_id: parsed.templateId, title: parsed.title, description: parsed.description ?? null, sort_order: Number(formData.get("sortOrder") ?? 0) });
+  const id = str(formData, "id") || undefined;
+  if (!id && !(await reserveSubmission(user.id, formData, "checklist-item:create"))) redirect("/settings");
+  const parsed = checklistItemSchema.parse({ id, templateId: str(formData, "templateId"), title: str(formData, "title"), description: str(formData, "description"), sortOrder: formData.get("sortOrder") });
+  const payload = { template_id: parsed.templateId, title: parsed.title, description: parsed.description ?? null, sort_order: parsed.sortOrder };
+  const { error } = id ? await getSupabaseAdmin().from("checklist_items").update(payload).eq("id", id) : await getSupabaseAdmin().from("checklist_items").insert(payload);
+  if (error) throw error;
   revalidatePath("/settings");
   redirect("/settings");
 }
 
 export async function upsertService(formData: FormData) {
   await requirePermission(permissions.settingsManage);
-  const parsed = serviceSchema.parse({ name: str(formData, "name"), category: str(formData, "category"), description: str(formData, "description"), baseOnceOffCents: formData.get("baseOnceOffCents"), baseMonthlyCents: formData.get("baseMonthlyCents"), isActive: bool(formData, "isActive") });
-  const { error } = await getSupabaseAdmin().from("services").upsert({ name: parsed.name, category: parsed.category, description: parsed.description, base_once_off_cents: parsed.baseOnceOffCents, base_monthly_cents: parsed.baseMonthlyCents, is_active: parsed.isActive }, { onConflict: "name" });
+  const id = str(formData, "id") || undefined;
+  const parsed = serviceSchema.parse({ id, name: str(formData, "name"), category: str(formData, "category"), description: str(formData, "description"), baseOnceOffCents: randsToCents(formData.get("baseOnceOffRands")), baseMonthlyCents: randsToCents(formData.get("baseMonthlyRands")), isActive: bool(formData, "isActive") });
+  const payload = { name: parsed.name, category: parsed.category, description: parsed.description, base_once_off_cents: parsed.baseOnceOffCents, base_monthly_cents: parsed.baseMonthlyCents, is_active: parsed.isActive };
+  const { error } = id ? await getSupabaseAdmin().from("services").update(payload).eq("id", id) : await getSupabaseAdmin().from("services").upsert(payload, { onConflict: "name" });
   if (error) throw error;
   revalidatePath("/services");
   revalidatePath("/settings");
   redirect(path(formData, "/services"));
+}
+
+export async function assignLinkedTask(formData: FormData) {
+  const entityType = str(formData, "entityType");
+  const permission = entityType === "Lead" ? permissions.leadsWrite : permissions.clientsWrite;
+  const user = await requirePermission(permission);
+  if (!(await reserveSubmission(user.id, formData, "linked-task:create"))) redirect(path(formData, "/dashboard"));
+  const parsed = linkedTaskSchema.parse({ entityType, leadId: str(formData, "leadId"), clientId: str(formData, "clientId"), title: str(formData, "title"), description: str(formData, "description"), dueDate: str(formData, "dueDate"), assignedToId: str(formData, "assignedToId") });
+  const entityId = parsed.entityType === "Lead" ? parsed.leadId : parsed.clientId;
+  if (!entityId) throw new Error("Task must be linked to a lead or client.");
+  const { data, error } = await getSupabaseAdmin().from("tasks").insert({ title: parsed.title, description: parsed.description ?? null, type: "SALES_FOLLOW_UP", status: "TO_DO", priority: "HIGH", due_date: parsed.dueDate?.toISOString() ?? null, assigned_to: parsed.assignedToId ?? null, client_id: parsed.clientId ?? null, created_by: user.id }).select("id,title").single();
+  if (error) throw error;
+  if (parsed.entityType === "Lead" && parsed.leadId) await getSupabaseAdmin().from("leads").update({ next_action: parsed.title, follow_up_date: parsed.dueDate?.toISOString() ?? null, assigned_to: parsed.assignedToId ?? null }).eq("id", parsed.leadId);
+  if (parsed.entityType === "Client" && parsed.clientId) await getSupabaseAdmin().from("clients").update({ next_action: parsed.title }).eq("id", parsed.clientId);
+  await logActivity({ action: "TASK_ASSIGNED", entityType: parsed.entityType, entityId, leadId: parsed.leadId, clientId: parsed.clientId, taskId: data.id, actorId: user.id, message: `${parsed.title} assigned` });
+  revalidatePath(path(formData, "/dashboard"));
+  revalidatePath("/tasks");
+  redirect(path(formData, "/dashboard"));
+}
+
+export async function logInteractionEvent(formData: FormData) {
+  const entityType = str(formData, "entityType");
+  const permission = entityType === "Lead" ? permissions.leadsWrite : permissions.clientsWrite;
+  const user = await requirePermission(permission);
+  if (!(await reserveSubmission(user.id, formData, "interaction-event:create"))) redirect(path(formData, "/dashboard"));
+  const parsed = interactionEventSchema.parse({ entityType, leadId: str(formData, "leadId"), clientId: str(formData, "clientId"), eventType: str(formData, "eventType"), direction: str(formData, "direction"), summary: str(formData, "summary"), objections: str(formData, "objections"), outcome: str(formData, "outcome"), taskId: str(formData, "taskId") });
+  const entityId = parsed.entityType === "Lead" ? parsed.leadId : parsed.clientId;
+  if (!entityId) throw new Error("Event must be linked to a lead or client.");
+  const body = [`${parsed.eventType} • ${parsed.direction}`, `Summary: ${parsed.summary}`, parsed.objections ? `Objections: ${parsed.objections}` : null, parsed.outcome ? `Outcome: ${parsed.outcome}` : null].filter(Boolean).join("\n");
+  await getSupabaseAdmin().from("notes").insert({ body, entity_type: parsed.entityType, entity_id: entityId, client_id: parsed.clientId ?? null, lead_id: parsed.leadId ?? null });
+  if (parsed.taskId && parsed.eventType === "TASK") await getSupabaseAdmin().from("tasks").update({ status: "DONE", completed_at: new Date().toISOString() }).eq("id", parsed.taskId);
+  await logActivity({ action: "INTERACTION_LOGGED", entityType: parsed.entityType, entityId, leadId: parsed.leadId, clientId: parsed.clientId, actorId: user.id, message: `${parsed.eventType} logged: ${parsed.outcome ?? parsed.summary}` });
+  revalidatePath(path(formData, "/dashboard"));
+  redirect(path(formData, "/dashboard"));
+}
+
+export async function bookEvent(formData: FormData) {
+  const entityType = str(formData, "entityType");
+  const permission = entityType === "Lead" ? permissions.leadsWrite : permissions.clientsWrite;
+  const user = await requirePermission(permission);
+  if (!(await reserveSubmission(user.id, formData, "book-event:create"))) redirect(path(formData, "/dashboard"));
+  const parsed = bookEventSchema.parse({ entityType, leadId: str(formData, "leadId"), clientId: str(formData, "clientId"), eventType: str(formData, "eventType"), title: str(formData, "title"), eventAt: str(formData, "eventAt"), notes: str(formData, "notes"), assignedToId: str(formData, "assignedToId") });
+  const entityId = parsed.entityType === "Lead" ? parsed.leadId : parsed.clientId;
+  if (!entityId || !parsed.eventAt) throw new Error("Booked events need a linked record and date/time.");
+  const body = [`Booked ${parsed.eventType}: ${parsed.title}`, `When: ${parsed.eventAt.toISOString()}`, parsed.notes ? `Notes: ${parsed.notes}` : null].filter(Boolean).join("\n");
+  const { data: task, error } = await getSupabaseAdmin().from("tasks").insert({ title: parsed.title, description: body, type: parsed.eventType === "CALL" ? "DISCOVERY_CALL" : "SALES_FOLLOW_UP", status: "TO_DO", priority: "HIGH", due_date: parsed.eventAt.toISOString(), assigned_to: parsed.assignedToId ?? null, client_id: parsed.clientId ?? null, created_by: user.id }).select("id,title").single();
+  if (error) throw error;
+  await getSupabaseAdmin().from("notes").insert({ body, entity_type: parsed.entityType, entity_id: entityId, client_id: parsed.clientId ?? null });
+  if (parsed.entityType === "Lead" && parsed.leadId) await getSupabaseAdmin().from("leads").update({ follow_up_date: parsed.eventAt.toISOString(), next_action: parsed.title, assigned_to: parsed.assignedToId ?? null }).eq("id", parsed.leadId);
+  if (parsed.entityType === "Client" && parsed.clientId) await getSupabaseAdmin().from("clients").update({ next_action: parsed.title }).eq("id", parsed.clientId);
+  await logActivity({ action: "EVENT_BOOKED", entityType: parsed.entityType, entityId, leadId: parsed.leadId, clientId: parsed.clientId, taskId: task.id, actorId: user.id, message: `${parsed.title} booked` });
+  revalidatePath(path(formData, "/dashboard"));
+  revalidatePath("/calendar");
+  redirect(path(formData, "/dashboard"));
 }
 
 export async function logLeadCall(formData: FormData) {
