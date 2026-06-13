@@ -6,7 +6,7 @@ import { redirect } from "next/navigation";
 import { createSession, destroySession, requirePermission, requireUser } from "./auth";
 import { permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
-import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, userSchema } from "./validation";
+import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, uploadFileSchema, userSchema } from "./validation";
 
 function str(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
@@ -431,12 +431,44 @@ export async function addNote(formData: FormData) {
   revalidatePath(path(formData, "/dashboard"));
 }
 
+const internalFilesBucket = "internal-files";
+
+function filePermission(entityType: string) {
+  if (entityType === "Lead") return permissions.leadsWrite;
+  if (entityType === "KnowledgeBase") return permissions.settingsManage;
+  return permissions.clientsWrite;
+}
+
+function safeStorageName(filename: string) {
+  const cleaned = filename.normalize("NFKD").replace(/[^a-zA-Z0-9._-]+/g, "-").replace(/^-+|-+$/g, "").slice(0, 140);
+  return cleaned || "upload";
+}
+
 export async function addFileRecord(formData: FormData) {
   const entityType = str(formData, "entityType");
-  const user = await requirePermission(entityType === "Lead" ? permissions.leadsWrite : permissions.clientsWrite);
+  const user = await requirePermission(filePermission(entityType));
   if (!(await reserveSubmission(user.id, formData, "file-record:create"))) return;
-  const parsed = fileRecordSchema.parse({ filename: str(formData, "filename"), url: str(formData, "url"), mimeType: str(formData, "mimeType"), entityType, entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId") });
-  await getSupabaseAdmin().from("files").insert({ filename: parsed.filename, url: parsed.url, mime_type: parsed.mimeType ?? null, entity_type: parsed.entityType, entity_id: parsed.entityId, client_id: parsed.clientId ?? null, project_id: parsed.projectId ?? null });
+
+  const uploadedFile = formData.get("file");
+  const hasUpload = uploadedFile instanceof File && uploadedFile.size > 0;
+  const supabase = getSupabaseAdmin();
+  let parsed: { filename: string; url: string; mimeType?: string; entityType: string; entityId: string; clientId?: string; projectId?: string };
+
+  if (hasUpload) {
+    const upload = uploadFileSchema.parse({ filename: str(formData, "filename") || uploadedFile.name, mimeType: uploadedFile.type, size: uploadedFile.size, entityType, entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId") });
+    const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
+    const { error: uploadError } = await supabase.storage.from(internalFilesBucket).upload(storagePath, uploadedFile, { contentType: upload.mimeType, upsert: false });
+    if (uploadError) throw uploadError;
+    const { data: signed, error: signedError } = await supabase.storage.from(internalFilesBucket).createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+    if (signedError) throw signedError;
+    parsed = { ...upload, url: signed.signedUrl };
+  } else {
+    parsed = fileRecordSchema.parse({ filename: str(formData, "filename") || safeStorageName(new URL(str(formData, "url")).pathname.split("/").pop() || "external-file"), url: str(formData, "url"), mimeType: str(formData, "mimeType"), entityType, entityId: str(formData, "entityId"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId") });
+  }
+
+  const { error } = await supabase.from("files").insert({ filename: parsed.filename, url: parsed.url, mime_type: parsed.mimeType ?? null, entity_type: parsed.entityType, entity_id: parsed.entityId, client_id: parsed.clientId ?? null, project_id: parsed.projectId ?? null });
+  if (error) throw error;
+  await logActivity({ action: hasUpload ? "FILE_UPLOADED" : "FILE_LINK_ADDED", entityType: parsed.entityType, entityId: parsed.entityId, clientId: parsed.clientId, leadId: parsed.entityType === "Lead" ? parsed.entityId : null, projectId: parsed.projectId, actorId: user.id, message: `${parsed.filename} ${hasUpload ? "uploaded" : "linked"}` });
   revalidatePath(path(formData, "/dashboard"));
 }
 
