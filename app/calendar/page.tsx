@@ -75,7 +75,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
               <div className="bg-white/[0.02] p-3 text-xs text-slate-500">{String(hour).padStart(2, "0")}:00</div>
               {days.map((day) => {
                 const hourTasks = scheduledTasks.filter((task) => sameDay(task.due_date, day) && hourOf(task.due_date) === hour);
-                return <div key={`${isoDate(day)}-${hour}`} className="border-l border-white/10 p-2">{hourTasks.map((task) => <Link key={task.id} href={`/tasks#${task.id}`} className="mb-2 block rounded-xl border border-rapid-cyan/20 bg-rapid-blue/15 p-2 text-xs hover:bg-rapid-blue/25"><span className="font-semibold text-white">{task.title}</span><span className="mt-1 block text-slate-300">{task.assignee?.name ?? "Unassigned"}</span></Link>)}</div>;
+                return <Link key={`${isoDate(day)}-${hour}`} href={`/calendar?date=${isoDate(day)}`} className="block border-l border-white/10 p-2 hover:bg-white/[0.03]">{hourTasks.map((task) => <span key={task.id} className="mb-2 block rounded-xl border border-rapid-cyan/20 bg-rapid-blue/15 p-2 text-xs hover:bg-rapid-blue/25"><span className="font-semibold text-white">{task.title}</span><span className="mt-1 block text-slate-300">{task.assignee?.name ?? "Unassigned"}</span></span>)}</Link>;
               })}
             </div>
           ))}

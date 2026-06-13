@@ -48,7 +48,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
         <nav className="mt-5 grid gap-1">
           {nav.filter(([, , , permission]) => userPermissions.includes(permission)).map(([label, href, Icon]) => (
             <Link key={href} href={href} className="group flex items-center gap-3 rounded-xl px-3 py-2.5 text-sm font-medium text-slate-300 transition hover:bg-white/8 hover:text-white">
-              <Icon className="size-4 text-slate-500 group-hover:text-rapid-cyan" />
+              <Icon className={label === "Calendar" ? "size-4 text-white" : "size-4 text-slate-500 group-hover:text-rapid-cyan"} />
               {label}
             </Link>
           ))}

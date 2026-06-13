@@ -159,6 +159,7 @@ export type Project = {
   deadline: string | null;
   client_id: string;
   quote_id: string | null;
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 };

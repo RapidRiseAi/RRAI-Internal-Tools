@@ -80,6 +80,7 @@ export const projectSchema = z.object({
   progress: z.coerce.number().int().min(0).max(100).default(0),
   blocker: optionalText,
   seedChecklist: z.boolean().default(false),
+  assignedToId: optionalUuid,
 });
 
 export const invoiceSchema = z.object({
@@ -141,8 +142,9 @@ export const checklistItemSchema = z.object({ id: optionalUuid, templateId: z.st
 export const projectChecklistSchema = z.object({ id: z.string().min(1), status: z.enum(taskStatuses) });
 
 export const serviceSchema = z.object({ id: optionalUuid, name: z.string().trim().min(2), category: z.string().trim().min(2), description: z.string().trim().min(5), baseOnceOffCents: cents, baseMonthlyCents: cents, isActive: z.boolean().default(true) });
-export const interactionEventSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, eventType: z.enum(["CALL", "EMAIL", "MESSAGE", "OTHER"]), direction: z.enum(["OUTBOUND", "RECEIVED", "INTERNAL"]), summary: z.string().trim().min(2), objections: optionalText, outcome: optionalText, nextAction: optionalText, taskTitle: optionalText, taskDueAt: optionalDate, assignedToId: optionalUuid, mediaTitle: optionalText, mediaUrl: optionalText });
-export const bookEventSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, eventType: z.enum(["CALL", "MEETING", "FOLLOW_UP", "OTHER"]), title: z.string().trim().min(2), eventAt: optionalDate, notes: optionalText, assignedToId: optionalUuid, nextAction: optionalText });
+export const interactionEventSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, eventType: z.enum(["CALL", "EMAIL", "MESSAGE", "TASK", "OTHER"]), direction: z.enum(["OUTBOUND", "RECEIVED", "INTERNAL"]), summary: z.string().trim().min(2), objections: optionalText, outcome: optionalText, taskId: optionalUuid });
+export const bookEventSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, eventType: z.enum(["CALL", "MEETING", "FOLLOW_UP", "OTHER"]), title: z.string().trim().min(2), eventAt: optionalDate, notes: optionalText, assignedToId: optionalUuid });
+export const linkedTaskSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, title: z.string().trim().min(2), description: optionalText, dueDate: optionalDate, assignedToId: optionalUuid });
 export const leadCallSchema = z.object({ leadId: z.string().min(1), callSummary: z.string().trim().min(2), objections: optionalText, outcome: z.string().trim().min(2), nextAction: optionalText, bookedCallAt: optionalDate, assignedToId: optionalUuid });
 export const taskStatusSchema = z.object({ id: z.string().min(1), status: z.enum(taskStatuses), assignedToId: optionalUuid });
 export const companySettingsSchema = z.object({ companyName: z.string().trim().min(2), billingEmail: optionalEmail, bankName: optionalText, bankAccountName: optionalText, bankAccountNumber: optionalText, bankBranchCode: optionalText, paymentTerms: optionalText, quoteFooter: optionalText, invoiceFooter: optionalText });

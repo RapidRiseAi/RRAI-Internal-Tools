@@ -1,7 +1,8 @@
 import { randomUUID } from "crypto";
-import { acceptQuote, addFileRecord, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, upsertTask, upsertUser } from "@/lib/actions";
+import { acceptQuote, addFileRecord, assignLinkedTask, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, upsertTask, upsertUser } from "@/lib/actions";
 import { affiliateStatuses, clientStatuses, commissionStatuses, contentStatuses, knowledgeCategories, labelize, leadStages, paymentStatuses, priorities, projectStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "@/lib/constants";
-import type { Affiliate, ChecklistItem, ChecklistTemplate, Client, Lead, Payment, Project, Quote, Service, SupportTicket } from "@/lib/types";
+import type { Affiliate, ChecklistItem, ChecklistTemplate, Client, Lead, Payment, Project, Quote, Service, SupportTicket, Task } from "@/lib/types";
+import { ModalPanel } from "./modal-panel";
 import { Card, Field, inputClass } from "./ui";
 import { rands } from "@/lib/format";
 import { SubmitButton } from "./submit-button";
@@ -105,12 +106,13 @@ export function AcceptQuoteButton({ quote }: { quote: Quote }) {
   return <form action={acceptQuote}><SubmissionInput scope="accept-quote" /><input type="hidden" name="id" value={quote.id} /><SubmitButton pendingLabel="Creating project…">Accept & create project</SubmitButton></form>;
 }
 
-export function ProjectForm({ clients, quotes, project }: { clients: ClientOption[]; quotes: QuoteOption[]; project?: Project }) {
+export function ProjectForm({ clients, quotes, project, users = [] }: { clients: ClientOption[]; quotes: QuoteOption[]; project?: Project; users?: UserOption[] }) {
   return <form action={upsertProject} className="grid gap-4 md:grid-cols-3"><SubmissionInput scope="upsert-project" />
     {project?.id ? <input type="hidden" name="id" value={project.id} /> : null}
     <Field label="Project name"><input className={inputClass} name="name" defaultValue={project?.name ?? ""} required /></Field>
     <Field label="Client"><select className={inputClass} name="clientId" defaultValue={project?.client_id ?? ""} required>{clients.map((client) => <option key={client.id} value={client.id}>{client.company_name}</option>)}</select></Field>
     <Field label="Accepted quote"><select className={inputClass} name="quoteId" defaultValue={project?.quote_id ?? ""}><option value="">No quote</option>{quotes.map((quote) => <option key={quote.id} value={quote.id}>{quote.title}</option>)}</select></Field>
+    <Field label="Project owner"><select className={inputClass} name="assignedToId" defaultValue={project?.assigned_to ?? ""}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
     <Field label="Status"><select className={inputClass} name="status" defaultValue={project?.status ?? "NOT_STARTED"}><Options values={projectStatuses} /></select></Field>
     <Field label="Priority"><select className={inputClass} name="priority" defaultValue={project?.priority ?? "MEDIUM"}><Options values={priorities} /></select></Field>
     <Field label="Deadline"><input className={inputClass} name="deadline" type="date" defaultValue={dateInput(project?.deadline)} /></Field>
@@ -166,32 +168,39 @@ export function ServiceForm({ service }: { service?: Service }) {
   </form>;
 }
 
-export function InteractionEventForm({ entityType, leadId, clientId, users, redirectTo }: { entityType: "Lead" | "Client"; leadId?: string; clientId?: string; users: UserOption[]; redirectTo: string }) {
-  return <form action={logInteractionEvent} className="grid gap-4">
+export function AssignLinkedTaskForm({ entityType, leadId, clientId, users, redirectTo }: { entityType: "Lead" | "Client"; leadId?: string; clientId?: string; users: UserOption[]; redirectTo: string }) {
+  return <form action={assignLinkedTask} className="grid gap-4 md:grid-cols-2">
+    <SubmissionInput scope="linked-task" />
+    <input type="hidden" name="entityType" value={entityType} />
+    <input type="hidden" name="leadId" value={leadId ?? ""} />
+    <input type="hidden" name="clientId" value={clientId ?? ""} />
+    <input type="hidden" name="redirectTo" value={redirectTo} />
+    <Field label="Task title"><input className={inputClass} name="title" required /></Field>
+    <Field label="Due date/time"><input className={inputClass} name="dueDate" type="datetime-local" /></Field>
+    <Field label="Assign to"><select className={inputClass} name="assignedToId"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
+    <Field label="Task info"><textarea className={inputClass} name="description" placeholder="Instructions, context, files needed, links, etc." /></Field>
+    <div className="md:col-span-2"><SubmitButton pendingLabel="Assigning task…">Assign task</SubmitButton></div>
+  </form>;
+}
+
+export function InteractionEventForm({ entityType, leadId, clientId, users, tasks = [], redirectTo }: { entityType: "Lead" | "Client"; leadId?: string; clientId?: string; users: UserOption[]; tasks?: Task[]; redirectTo: string }) {
+  const entityId = entityType === "Lead" ? leadId : clientId;
+  return <div className="grid gap-4"><div className="flex flex-wrap gap-2"><ModalPanel title="Book event" triggerLabel="Book event" variant="ghost"><BookEventForm entityType={entityType} leadId={leadId} clientId={clientId} defaultTitle={entityType === "Lead" ? "Call with lead" : "Meeting with client"} users={users} redirectTo={redirectTo} /></ModalPanel><ModalPanel title="Upload file / media" triggerLabel="Upload file" variant="ghost"><FileRecordForm entityType={entityType} entityId={entityId ?? ""} clientId={clientId} redirectTo={redirectTo} /></ModalPanel><ModalPanel title="Assign task" triggerLabel="Assign task" variant="ghost"><AssignLinkedTaskForm entityType={entityType} leadId={leadId} clientId={clientId} users={users} redirectTo={redirectTo} /></ModalPanel></div><form action={logInteractionEvent} className="grid gap-4">
     <SubmissionInput scope="interaction-event" />
     <input type="hidden" name="entityType" value={entityType} />
     <input type="hidden" name="leadId" value={leadId ?? ""} />
     <input type="hidden" name="clientId" value={clientId ?? ""} />
     <input type="hidden" name="redirectTo" value={redirectTo} />
     <div className="grid gap-4 md:grid-cols-3">
-      <Field label="Event type"><select className={inputClass} name="eventType"><option value="CALL">Call</option><option value="EMAIL">Email</option><option value="MESSAGE">Message</option><option value="OTHER">Other</option></select></Field>
+      <Field label="Event type"><select className={inputClass} name="eventType"><option value="CALL">Call</option><option value="EMAIL">Email</option><option value="MESSAGE">Message</option><option value="TASK">Task completed</option><option value="OTHER">Other</option></select></Field>
       <Field label="Direction"><select className={inputClass} name="direction"><option value="OUTBOUND">Outbound</option><option value="RECEIVED">Received</option><option value="INTERNAL">Internal note</option></select></Field>
       <Field label="Outcome"><input className={inputClass} name="outcome" placeholder="Interested / No answer / Sent info" /></Field>
     </div>
+    <Field label="Related task"><select className={inputClass} name="taskId"><option value="">No task</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></Field>
     <Field label="What happened?"><textarea className={inputClass} name="summary" placeholder="Log the call, email, message or other interaction." required /></Field>
     <Field label="Objections / important replies"><textarea className={inputClass} name="objections" placeholder="Price, timing, decision maker, message received, blockers, etc." /></Field>
-    <div className="grid gap-4 md:grid-cols-2">
-      <Field label="Media/file title"><input className={inputClass} name="mediaTitle" placeholder="Screenshot, voice note, email thread..." /></Field>
-      <Field label="Media/file URL"><input className={inputClass} name="mediaUrl" type="url" placeholder="Paste storage/share link" /></Field>
-    </div>
-    <div className="grid gap-4 md:grid-cols-3">
-      <Field label="Next task title"><input className={inputClass} name="taskTitle" placeholder="Follow up, send quote, prepare demo..." /></Field>
-      <Field label="Task due date/time"><input className={inputClass} name="taskDueAt" type="datetime-local" /></Field>
-      <Field label="Assign next task"><select className={inputClass} name="assignedToId"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
-    </div>
-    <Field label="Next action"><input className={inputClass} name="nextAction" placeholder="Clear next action visible on the record" /></Field>
-    <SubmitButton pendingLabel="Logging event…">Log event</SubmitButton>
-  </form>;
+        <SubmitButton pendingLabel="Logging event…">Log event</SubmitButton>
+  </form></div>;
 }
 
 export function BookEventForm({ entityType, leadId, clientId, defaultTitle, users, redirectTo }: { entityType: "Lead" | "Client"; leadId?: string; clientId?: string; defaultTitle: string; users: UserOption[]; redirectTo: string }) {
@@ -205,7 +214,6 @@ export function BookEventForm({ entityType, leadId, clientId, defaultTitle, user
     <Field label="Event title"><input className={inputClass} name="title" defaultValue={defaultTitle} required /></Field>
     <Field label="Date and time"><input className={inputClass} name="eventAt" type="datetime-local" required /></Field>
     <Field label="Owner"><select className={inputClass} name="assignedToId"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
-    <Field label="Next action"><input className={inputClass} name="nextAction" placeholder="What should happen after this event?" /></Field>
     <Field label="Notes"><textarea className={inputClass} name="notes" placeholder="Agenda, context, joining link, or preparation notes." /></Field>
     <div className="md:col-span-2"><SubmitButton pendingLabel="Booking event…">Book event</SubmitButton></div>
   </form>;
