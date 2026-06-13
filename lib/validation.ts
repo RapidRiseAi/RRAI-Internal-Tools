@@ -143,7 +143,28 @@ export const campaignSchema = z.object({ name: z.string().trim().min(2), platfor
 export const contentItemSchema = z.object({ title: z.string().trim().min(2), status: z.enum(contentStatuses), platform: optionalText, postUrl: optionalText, performanceNotes: optionalText, leadsGenerated: cents });
 export const knowledgeBaseSchema = z.object({ title: z.string().trim().min(2), category: z.enum(knowledgeCategories), body: z.string().trim().min(10), visibility: z.enum(["INTERNAL", "TEAM", "PRIVATE"]) });
 export const noteSchema = z.object({ body: z.string().trim().min(2), entityType: z.string().trim().min(2), entityId: z.string().min(1), clientId: optionalUuid, leadId: optionalUuid, projectId: optionalUuid });
-export const fileRecordSchema = z.object({ filename: z.string().trim().min(2), url: z.string().trim().url(), mimeType: optionalText, entityType: z.string().trim().min(2), entityId: z.string().min(1), clientId: optionalUuid, projectId: optionalUuid });
+export const allowedFileEntityTypes = ["Lead", "Client", "Project", "KnowledgeBase"] as const;
+export const allowedFileMimeTypes = [
+  "application/pdf",
+  "image/jpeg",
+  "image/png",
+  "image/webp",
+  "text/plain",
+  "text/csv",
+  "application/msword",
+  "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+  "application/vnd.ms-excel",
+  "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet",
+] as const;
+export const maxUploadFileSizeBytes = 10 * 1024 * 1024;
+
+export const fileEntitySchema = z.object({ entityType: z.enum(allowedFileEntityTypes), entityId: z.string().uuid(), clientId: optionalUuid, projectId: optionalUuid });
+export const fileRecordSchema = fileEntitySchema.extend({ filename: z.string().trim().min(2), url: z.string().trim().url(), mimeType: optionalText });
+export const uploadFileSchema = fileEntitySchema.extend({
+  filename: z.string().trim().min(2),
+  mimeType: z.enum(allowedFileMimeTypes),
+  size: z.number().int().min(1).max(maxUploadFileSizeBytes),
+});
 export const checklistTemplateSchema = z.object({ id: optionalUuid, name: z.string().trim().min(2), serviceId: optionalUuid, description: optionalText, firstItemTitle: optionalText, isActive: z.boolean().default(true) });
 export const checklistItemSchema = z.object({ id: optionalUuid, templateId: z.string().min(1), title: z.string().trim().min(2), description: optionalText, sortOrder: z.coerce.number().int().min(0).default(0) });
 export const projectChecklistSchema = z.object({ id: z.string().min(1), status: z.enum(taskStatuses) });
