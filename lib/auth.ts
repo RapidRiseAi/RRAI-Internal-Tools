@@ -7,7 +7,11 @@ import { getSupabaseAdmin, hasSupabaseConfig } from "./supabase";
 import type { User } from "./types";
 
 const cookieName = "rrai_session";
-const secret = new TextEncoder().encode(process.env.SESSION_SECRET || process.env.SUPABASE_SERVICE_ROLE_KEY || "development-secret-change-me-development-secret");
+const secret = new TextEncoder().encode(
+  process.env.SESSION_SECRET ||
+    process.env.SUPABASE_SERVICE_ROLE_KEY ||
+    "development-secret-change-me-development-secret",
+);
 
 export async function createSession(userId: string) {
   const token = await new SignJWT({ userId })
@@ -65,4 +69,8 @@ export async function requirePermission(permission: string) {
   const user = await requireUser();
   if (!permissionsFor(user).includes(permission)) redirect("/dashboard");
   return user;
+}
+
+export async function requirePagePermission(permission: string) {
+  return requirePermission(permission);
 }
