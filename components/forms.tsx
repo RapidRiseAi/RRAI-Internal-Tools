@@ -22,6 +22,13 @@ function dateInput(value?: string | null) {
   return value ? value.slice(0, 10) : "";
 }
 
+function dateTimeInput(value?: string | null) {
+  if (!value) return "";
+  const date = new Date(value);
+  const timezoneOffsetMs = date.getTimezoneOffset() * 60 * 1000;
+  return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+}
+
 function Options({ values }: { values: readonly string[] }) {
   return values.map((value) => <option key={value} value={value}>{labelize(value)}</option>);
 }
@@ -42,7 +49,7 @@ export function LeadForm({ lead, users }: { lead?: Lead; users: UserOption[] }) 
       <Field label="Service interest"><input className={inputClass} name="serviceInterest" defaultValue={lead?.service_interest ?? "Website development"} required /></Field>
       <Field label="Stage"><select className={inputClass} name="stage" defaultValue={lead?.stage ?? "NEW_LEAD"}><Options values={leadStages} /></select></Field>
       <Field label="Lead score"><input className={inputClass} name="score" type="number" min="0" max="100" defaultValue={lead?.score ?? 50} /></Field>
-      <Field label="Follow-up date"><input className={inputClass} name="followUpDate" type="date" defaultValue={dateInput(lead?.follow_up_date)} /></Field>
+      <Field label="Follow-up date/time"><input className={inputClass} name="followUpDate" type="datetime-local" defaultValue={dateTimeInput(lead?.follow_up_date)} /></Field>
       <Field label="Assigned to"><select className={inputClass} name="assignedToId" defaultValue={lead?.assigned_to ?? ""}><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
       <Field label="Next action"><input className={inputClass} name="nextAction" defaultValue={lead?.next_action ?? ""} /></Field>
       <Field label="Pain points"><textarea className={inputClass} name="painPoints" defaultValue={lead?.pain_points ?? ""} /></Field>
