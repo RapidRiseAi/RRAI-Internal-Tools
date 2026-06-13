@@ -515,6 +515,105 @@ export async function upsertService(formData: FormData) {
   redirect(path(formData, "/services"));
 }
 
+
+export async function upsertActivityWorkflow(formData: FormData) {
+  const entityType = str(formData, "entityType");
+  const permission = entityType === "Lead" ? permissions.leadsWrite : permissions.clientsWrite;
+  const user = await requirePermission(permission);
+  if (!(await reserveSubmission(user.id, formData, "activity-workflow:upsert"))) redirect(path(formData, "/dashboard"));
+
+  const entityId = str(formData, "entityId") || (entityType === "Lead" ? str(formData, "leadId") : str(formData, "clientId"));
+  if (!entityId || !["Lead", "Client"].includes(entityType)) throw new Error("Activity workflow must be linked to a lead or client.");
+
+  const leadId = entityType === "Lead" ? entityId : str(formData, "leadId") || null;
+  const clientId = entityType === "Client" ? entityId : str(formData, "clientId") || null;
+  const workflowMode = str(formData, "workflowMode") || "NOTE";
+  const eventType = str(formData, "eventType") || (workflowMode === "NOTE" ? "NOTE" : "OTHER");
+  const direction = str(formData, "direction") || "INTERNAL";
+  const summary = str(formData, "summary").trim();
+  const objections = str(formData, "objections").trim();
+  const outcome = str(formData, "outcome").trim();
+  const title = str(formData, "title").trim() || outcome || `${eventType} activity`;
+  const dueDateValue = str(formData, "dueDate");
+  const dueDate = dueDateValue ? new Date(dueDateValue) : undefined;
+  const assignedToId = str(formData, "assignedToId") || null;
+  const taskId = str(formData, "taskId") || null;
+
+  const shouldCreateTask = bool(formData, "createTask") || workflowMode === "FOLLOW_UP" || workflowMode === "TASK";
+  const shouldAttachFile = bool(formData, "attachFile") || workflowMode === "FILE";
+  const shouldCreateNote = bool(formData, "createNote") || workflowMode === "NOTE" || workflowMode === "INTERACTION" || shouldCreateTask;
+  const shouldUpdateEntity = bool(formData, "updateEntity") || workflowMode === "FOLLOW_UP" || workflowMode === "TASK";
+
+  const body = [
+    `${workflowMode} • ${eventType} • ${direction}`,
+    `Summary: ${summary}`,
+    objections ? `Objections/replies: ${objections}` : null,
+    outcome ? `Outcome: ${outcome}` : null,
+    dueDate ? `Follow-up: ${dueDate.toISOString()}` : null,
+  ].filter(Boolean).join("\n");
+
+  const supabase = getSupabaseAdmin();
+  let createdTaskId: string | null = null;
+
+  if (shouldCreateNote) {
+    const { error } = await supabase.from("notes").insert({ body, entity_type: entityType, entity_id: entityId, client_id: clientId, lead_id: leadId });
+    if (error) throw error;
+  }
+
+  if (shouldCreateTask) {
+    const { data, error } = await supabase.from("tasks").insert({ title, description: body, type: eventType === "CALL" || eventType === "MEETING" ? "DISCOVERY_CALL" : "SALES_FOLLOW_UP", status: "TO_DO", priority: workflowMode === "TASK" ? "MEDIUM" : "HIGH", due_date: dueDate?.toISOString() ?? null, assigned_to: assignedToId, client_id: clientId, created_by: user.id }).select("id").single();
+    if (error) throw error;
+    createdTaskId = data.id;
+  }
+
+  if (taskId && bool(formData, "completeRelatedTask")) {
+    const { error } = await supabase.from("tasks").update({ status: "DONE", completed_at: new Date().toISOString() }).eq("id", taskId);
+    if (error) throw error;
+  }
+
+  if (shouldUpdateEntity) {
+    if (entityType === "Lead") {
+      const { error } = await supabase.from("leads").update({ next_action: title, follow_up_date: dueDate?.toISOString() ?? null, assigned_to: assignedToId }).eq("id", entityId);
+      if (error) throw error;
+    } else {
+      const { error } = await supabase.from("clients").update({ next_action: title }).eq("id", entityId);
+      if (error) throw error;
+    }
+  }
+
+  if (shouldAttachFile) {
+    const uploadedFile = formData.get("file");
+    const hasUpload = uploadedFile instanceof File && uploadedFile.size > 0;
+    const url = str(formData, "url");
+    if (hasUpload || url) {
+      let filename = str(formData, "filename");
+      let fileUrl = url;
+      let mimeType = str(formData, "mimeType") || null;
+      if (hasUpload) {
+        filename = filename || uploadedFile.name;
+        mimeType = uploadedFile.type;
+        const storagePath = `${entityType.toLowerCase()}/${entityId}/${crypto.randomUUID()}-${safeStorageName(filename)}`;
+        const { error: uploadError } = await supabase.storage.from(internalFilesBucket).upload(storagePath, uploadedFile, { contentType: mimeType, upsert: false });
+        if (uploadError) throw uploadError;
+        const { data: signed, error: signedError } = await supabase.storage.from(internalFilesBucket).createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+        if (signedError) throw signedError;
+        fileUrl = signed.signedUrl;
+      } else {
+        filename = filename || safeStorageName(new URL(url).pathname.split("/").pop() || "external-file");
+      }
+      const { error } = await supabase.from("files").insert({ filename, url: fileUrl, mime_type: mimeType, entity_type: entityType, entity_id: entityId, client_id: clientId, lead_id: leadId });
+      if (error) throw error;
+    }
+  }
+
+  await logActivity({ action: "ACTIVITY_WORKFLOW_UPSERTED", entityType, entityId, leadId, clientId, taskId: createdTaskId ?? taskId, actorId: user.id, message: `${title}: ${outcome || summary}` });
+
+  revalidatePath(path(formData, "/dashboard"));
+  revalidatePath("/tasks");
+  if (shouldCreateTask) revalidatePath("/calendar");
+  redirect(path(formData, "/dashboard"));
+}
+
 export async function assignLinkedTask(formData: FormData) {
   const entityType = str(formData, "entityType");
   const permission = entityType === "Lead" ? permissions.leadsWrite : permissions.clientsWrite;

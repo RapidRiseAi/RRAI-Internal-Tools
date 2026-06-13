@@ -1,5 +1,5 @@
 import { randomUUID } from "crypto";
-import { acceptQuote, addFileRecord, assignLinkedTask, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, updateOwnLoginDetails, upsertTask, upsertUser } from "@/lib/actions";
+import { acceptQuote, addFileRecord, assignLinkedTask, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertActivityWorkflow, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, updateOwnLoginDetails, upsertTask, upsertUser } from "@/lib/actions";
 import { affiliateStatuses, clientStatuses, commissionStatuses, contentStatuses, knowledgeCategories, labelize, leadStages, paymentStatuses, priorities, projectStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "@/lib/constants";
 import type { Affiliate, ChecklistItem, ChecklistTemplate, Client, Lead, Payment, Project, Quote, Service, SupportTicket, Task, User } from "@/lib/types";
 import { ModalPanel } from "./modal-panel";
@@ -154,6 +154,44 @@ export function CampaignForm() { return <form action={upsertCampaign} className=
 export function ContentItemForm() { return <form action={upsertContentItem} className="grid gap-4 md:grid-cols-4"><SubmissionInput scope="upsert-content-item" /><Field label="Title"><input className={inputClass} name="title" required /></Field><Field label="Status"><select className={inputClass} name="status"><Options values={contentStatuses} /></select></Field><Field label="Platform"><input className={inputClass} name="platform" /></Field><Field label="Post URL"><input className={inputClass} name="postUrl" /></Field><Field label="Leads"><input className={inputClass} name="leadsGenerated" type="number" min="0" defaultValue="0" /></Field><Field label="Performance notes"><textarea className={inputClass} name="performanceNotes" /></Field><div className="md:col-span-4"><SubmitButton>Create content item</SubmitButton></div></form>; }
 
 export function KnowledgeBaseForm() { return <form action={upsertKnowledgeBaseItem} className="grid gap-4"><SubmissionInput scope="upsert-knowledge-base-item" /><div className="grid gap-4 md:grid-cols-3"><Field label="Title"><input className={inputClass} name="title" required /></Field><Field label="Category"><select className={inputClass} name="category"><Options values={knowledgeCategories} /></select></Field><Field label="Visibility"><select className={inputClass} name="visibility"><option value="INTERNAL">Internal</option><option value="TEAM">Team</option><option value="PRIVATE">Private</option></select></Field></div><Field label="Article / SOP body"><textarea className={`${inputClass} min-h-40`} name="body" required /></Field><SubmitButton>Add article</SubmitButton></form>; }
+
+export function ActivityWorkflowForm({ entityType, leadId, clientId, users, tasks = [], redirectTo, defaultTitle }: { entityType: "Lead" | "Client"; leadId?: string; clientId?: string; users: UserOption[]; tasks?: Task[]; redirectTo: string; defaultTitle?: string }) {
+  const entityId = entityType === "Lead" ? leadId : clientId;
+  return <form action={upsertActivityWorkflow} className="grid gap-4 md:grid-cols-2">
+    <SubmissionInput scope="activity-workflow" />
+    <input type="hidden" name="entityType" value={entityType} />
+    <input type="hidden" name="entityId" value={entityId ?? ""} />
+    <input type="hidden" name="leadId" value={leadId ?? ""} />
+    <input type="hidden" name="clientId" value={clientId ?? ""} />
+    <input type="hidden" name="redirectTo" value={redirectTo} />
+    <Field label="Workflow type"><select className={inputClass} name="workflowMode" defaultValue="NOTE"><option value="NOTE">Log note only</option><option value="INTERACTION">Log call/email/message</option><option value="FOLLOW_UP">Schedule follow-up</option><option value="TASK">Assign task</option><option value="FILE">Attach file</option></select></Field>
+    <Field label="Title / next action"><input className={inputClass} name="title" defaultValue={defaultTitle ?? ""} placeholder="Follow up, send recap, collect files…" /></Field>
+    <Field label="Activity type"><select className={inputClass} name="eventType"><option value="NOTE">Note</option><option value="CALL">Call</option><option value="EMAIL">Email</option><option value="MESSAGE">Message</option><option value="MEETING">Meeting</option><option value="FOLLOW_UP">Follow-up</option><option value="TASK">Task</option><option value="OTHER">Other</option></select></Field>
+    <Field label="Direction"><select className={inputClass} name="direction"><option value="OUTBOUND">Outbound</option><option value="RECEIVED">Received</option><option value="INTERNAL">Internal</option></select></Field>
+    <Field label="Outcome"><input className={inputClass} name="outcome" placeholder="Interested / sent proposal / no answer" /></Field>
+    <Field label="Related task"><select className={inputClass} name="taskId"><option value="">No task</option>{tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}</select></Field>
+    <Field label="Follow-up / due date"><input className={inputClass} name="dueDate" type="datetime-local" /></Field>
+    <Field label="Assign to"><select className={inputClass} name="assignedToId"><option value="">Unassigned</option>{users.map((user) => <option key={user.id} value={user.id}>{user.name}</option>)}</select></Field>
+    <div className="md:col-span-2 grid gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+      <p className="text-sm font-semibold text-white">Options</p>
+      <div className="grid gap-2 text-sm text-slate-300 md:grid-cols-2">
+        <label className="flex items-center gap-2"><input name="createNote" type="checkbox" defaultChecked /> Create note</label>
+        <span className="text-slate-400">Activity log is always recorded</span>
+        <label className="flex items-center gap-2"><input name="createTask" type="checkbox" /> Create task / follow-up</label>
+        <label className="flex items-center gap-2"><input name="updateEntity" type="checkbox" defaultChecked /> Update next action</label>
+        <label className="flex items-center gap-2"><input name="completeRelatedTask" type="checkbox" /> Complete related task</label>
+        <label className="flex items-center gap-2"><input name="attachFile" type="checkbox" /> Attach file or link</label>
+      </div>
+    </div>
+    <Field label="Activity details"><textarea className={inputClass} name="summary" placeholder="What happened, what needs to happen next, or file context." required /></Field>
+    <Field label="Objections / important replies"><textarea className={inputClass} name="objections" placeholder="Price, timing, blockers, decision maker, etc." /></Field>
+    <div className="md:col-span-2 grid gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3">
+      <p className="text-sm font-semibold text-white">Attachment</p>
+      <div className="grid gap-3 md:grid-cols-2"><Field label="File name"><input className={inputClass} name="filename" placeholder="Defaults to selected file name" /></Field><Field label="Upload file"><input className={inputClass} name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" /></Field><Field label="External URL"><input className={inputClass} name="url" type="url" placeholder="https://..." /></Field><Field label="External MIME type"><input className={inputClass} name="mimeType" placeholder="application/pdf" /></Field></div>
+    </div>
+    <div className="md:col-span-2"><SubmitButton pendingLabel="Saving activity…">Save activity workflow</SubmitButton></div>
+  </form>;
+}
 
 export function NoteForm({ entityType, entityId, clientId, leadId, projectId, redirectTo }: { entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; redirectTo: string }) { return <form action={addNote} className="grid gap-3"><SubmissionInput scope="add-note" /><input type="hidden" name="entityType" value={entityType} /><input type="hidden" name="entityId" value={entityId} /><input type="hidden" name="clientId" value={clientId ?? ""} /><input type="hidden" name="leadId" value={leadId ?? ""} /><input type="hidden" name="projectId" value={projectId ?? ""} /><input type="hidden" name="redirectTo" value={redirectTo} /><Field label="Add note"><textarea className={inputClass} name="body" required /></Field><SubmitButton>Add note</SubmitButton></form>; }
 export function FileRecordForm({ entityType, entityId, clientId, leadId, projectId, knowledgeBaseItemId, redirectTo }: { entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; knowledgeBaseItemId?: string; redirectTo: string }) {
