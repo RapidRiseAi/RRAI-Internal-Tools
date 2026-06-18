@@ -1,4 +1,6 @@
-import { randomUUID } from "crypto";
+"use client";
+
+import { useActionState, useMemo } from "react";
 import { acceptQuote, addFileRecord, assignLinkedTask, addNote, bookEvent, createChecklistItem, createChecklistTemplate, createCommission, createDocumentTemplate, createReferral, logInteractionEvent, logLeadCall, recordPayment, upsertActivityWorkflow, upsertAffiliate, upsertCampaign, upsertClient, upsertContentItem, upsertKnowledgeBaseItem, upsertLead, upsertCompanySettings, upsertProject, upsertRetainer, upsertService, upsertSupportTicket, updateOwnLoginDetails, upsertTask, upsertUser } from "@/lib/actions";
 import { affiliateStatuses, clientStatuses, commissionStatuses, contentStatuses, knowledgeCategories, labelize, leadStages, paymentStatuses, priorities, projectStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "@/lib/constants";
 import type { Affiliate, ChecklistItem, ChecklistTemplate, Client, Lead, Payment, Project, Quote, Service, SupportTicket, Task, User } from "@/lib/types";
@@ -34,16 +36,26 @@ function Options({ values }: { values: readonly string[] }) {
 }
 
 function SubmissionInput({ scope }: { scope: string }) {
-  return <input type="hidden" name="submissionKey" value={`${scope}:${randomUUID()}`} />;
+  const submissionKey = useMemo(() => `${scope}:${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`, [scope]);
+  return <input type="hidden" name="submissionKey" value={submissionKey} />;
+}
+
+function FormError({ message }: { message?: string }) {
+  return message ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{message}</p> : null;
+}
+
+function FieldError({ messages }: { messages?: string[] }) {
+  return messages?.length ? <p className="text-xs font-medium text-red-300">{messages[0]}</p> : null;
 }
 
 export function LeadForm({ lead, users }: { lead?: Lead; users: UserOption[] }) {
+  const [state, formAction] = useActionState(upsertLead, { ok: false });
   return (
-    <form action={upsertLead} className="grid gap-4 md:grid-cols-2"><SubmissionInput scope="upsert-lead" />
+    <form action={formAction} className="grid gap-4 md:grid-cols-2"><div className="md:col-span-2"><FormError message={state.formError} /></div><SubmissionInput scope="upsert-lead" />
       {lead?.id ? <input type="hidden" name="id" value={lead.id} /> : null}
-      <Field label="Company"><input className={inputClass} name="companyName" defaultValue={lead?.company_name ?? ""} required /></Field>
-      <Field label="Contact"><input className={inputClass} name="contactName" defaultValue={lead?.contact_name ?? ""} required /></Field>
-      <Field label="Email"><input className={inputClass} name="email" type="email" defaultValue={lead?.email ?? ""} /></Field>
+      <Field label="Company"><input className={inputClass} name="companyName" defaultValue={lead?.company_name ?? ""} required /><FieldError messages={state.fieldErrors?.companyName} /></Field>
+      <Field label="Contact"><input className={inputClass} name="contactName" defaultValue={lead?.contact_name ?? ""} required /><FieldError messages={state.fieldErrors?.contactName} /></Field>
+      <Field label="Email"><input className={inputClass} name="email" type="email" defaultValue={lead?.email ?? ""} /><FieldError messages={state.fieldErrors?.email} /></Field>
       <Field label="Phone"><input className={inputClass} name="phone" defaultValue={lead?.phone ?? ""} /></Field>
       <Field label="Source"><input className={inputClass} name="source" defaultValue={lead?.source ?? "Referral"} required /></Field>
       <Field label="Service interest"><input className={inputClass} name="serviceInterest" defaultValue={lead?.service_interest ?? "Website development"} required /></Field>
@@ -59,14 +71,15 @@ export function LeadForm({ lead, users }: { lead?: Lead; users: UserOption[] }) 
 }
 
 export function ClientForm({ client }: { client?: Client }) {
+  const [state, formAction] = useActionState(upsertClient, { ok: false });
   return (
-    <form action={upsertClient} className="grid gap-4 md:grid-cols-2"><SubmissionInput scope="upsert-client" />
+    <form action={formAction} className="grid gap-4 md:grid-cols-2"><div className="md:col-span-2"><FormError message={state.formError} /></div><SubmissionInput scope="upsert-client" />
       {client?.id ? <input type="hidden" name="id" value={client.id} /> : null}
-      <Field label="Company"><input className={inputClass} name="companyName" defaultValue={client?.company_name ?? ""} required /></Field>
+      <Field label="Company"><input className={inputClass} name="companyName" defaultValue={client?.company_name ?? ""} required /><FieldError messages={state.fieldErrors?.companyName} /></Field>
       <Field label="Status"><select className={inputClass} name="accountStatus" defaultValue={client?.account_status ?? "ACTIVE"}><Options values={clientStatuses} /></select></Field>
       <Field label="Industry"><input className={inputClass} name="industry" defaultValue={client?.industry ?? ""} /></Field>
       <Field label="Website"><input className={inputClass} name="website" defaultValue={client?.website ?? ""} /></Field>
-      <Field label="Primary email"><input className={inputClass} name="primaryEmail" type="email" defaultValue={client?.primary_email ?? ""} /></Field>
+      <Field label="Primary email"><input className={inputClass} name="primaryEmail" type="email" defaultValue={client?.primary_email ?? ""} /><FieldError messages={state.fieldErrors?.primaryEmail} /></Field>
       <Field label="Primary phone"><input className={inputClass} name="primaryPhone" defaultValue={client?.primary_phone ?? ""} /></Field>
       <Field label="MRR (R)"><input className={inputClass} name="mrrRands" type="number" min="0" defaultValue={rands(client?.mrr_cents ?? 0)} /></Field>
       <Field label="Next action"><input className={inputClass} name="nextAction" defaultValue={client?.next_action ?? ""} /></Field>
@@ -104,11 +117,12 @@ export function AccountLoginForm({ user }: { user: User }) {
 }
 
 export function UserForm({ roles }: { roles: RoleOption[] }) {
+  const [state, formAction] = useActionState(upsertUser, { ok: false });
   return (
-    <form action={upsertUser} className="grid gap-4 md:grid-cols-3"><SubmissionInput scope="upsert-user" />
-      <Field label="Name"><input className={inputClass} name="name" required /></Field>
-      <Field label="Email"><input className={inputClass} name="email" type="email" required /></Field>
-      <Field label="Temporary password"><input className={inputClass} name="password" type="password" minLength={10} required /></Field>
+    <form action={formAction} className="grid gap-4 md:grid-cols-3"><div className="md:col-span-3"><FormError message={state.formError} /></div><SubmissionInput scope="upsert-user" />
+      <Field label="Name"><input className={inputClass} name="name" required /><FieldError messages={state.fieldErrors?.name} /></Field>
+      <Field label="Email"><input className={inputClass} name="email" type="email" required /><FieldError messages={state.fieldErrors?.email} /></Field>
+      <Field label="Temporary password"><input className={inputClass} name="password" type="password" minLength={10} required /><FieldError messages={state.fieldErrors?.password} /></Field>
       <Field label="Role"><select className={inputClass} name="roleId">{roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}</select></Field>
       <Field label="Title"><input className={inputClass} name="title" /></Field>
       <Field label="Phone"><input className={inputClass} name="phone" /></Field>
@@ -214,11 +228,12 @@ export function ActivityWorkflowForm({ entityType, leadId, clientId, users, task
 
 export function NoteForm({ entityType, entityId, clientId, leadId, projectId, redirectTo }: { entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; redirectTo: string }) { return <form action={addNote} className="grid gap-3"><SubmissionInput scope="add-note" /><input type="hidden" name="entityType" value={entityType} /><input type="hidden" name="entityId" value={entityId} /><input type="hidden" name="clientId" value={clientId ?? ""} /><input type="hidden" name="leadId" value={leadId ?? ""} /><input type="hidden" name="projectId" value={projectId ?? ""} /><input type="hidden" name="redirectTo" value={redirectTo} /><Field label="Add note"><textarea className={inputClass} name="body" required /></Field><SubmitButton>Add note</SubmitButton></form>; }
 export function FileRecordForm({ entityType, entityId, clientId, leadId, projectId, knowledgeBaseItemId, redirectTo }: { entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; knowledgeBaseItemId?: string; redirectTo: string }) {
+  const [state, formAction] = useActionState(addFileRecord, { ok: false });
   const typedLeadId = leadId ?? (entityType === "Lead" ? entityId : "");
   const typedClientId = clientId ?? (entityType === "Client" ? entityId : "");
   const typedProjectId = projectId ?? (entityType === "Project" ? entityId : "");
   const typedKnowledgeBaseItemId = knowledgeBaseItemId ?? (entityType === "KnowledgeBase" ? entityId : "");
-  return <form action={addFileRecord} className="grid gap-3"><SubmissionInput scope="add-file-record" /><input type="hidden" name="entityType" value={entityType} /><input type="hidden" name="entityId" value={entityId} /><input type="hidden" name="clientId" value={typedClientId} /><input type="hidden" name="leadId" value={typedLeadId} /><input type="hidden" name="projectId" value={typedProjectId} /><input type="hidden" name="knowledgeBaseItemId" value={typedKnowledgeBaseItemId} /><input type="hidden" name="redirectTo" value={redirectTo} /><Field label="File name"><input className={inputClass} name="filename" placeholder="Defaults to selected file name" /></Field><Field label="Upload file"><input className={inputClass} name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" /></Field><div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><p className="mb-3 text-sm font-semibold text-white">Add external link</p><Field label="External URL"><input className={inputClass} name="url" type="url" placeholder="https://..." /></Field><Field label="External MIME type"><input className={inputClass} name="mimeType" placeholder="application/pdf" /></Field></div><p className="text-xs text-slate-500">Uploads accept PDFs, images, text, CSV, Word and Excel files up to 10 MB. Use the external link fields only for files already hosted elsewhere.</p><SubmitButton pendingLabel="Saving file…">Upload file</SubmitButton></form>; }
+  return <form action={formAction} className="grid gap-3"><FormError message={state.formError} /><SubmissionInput scope="add-file-record" /><input type="hidden" name="entityType" value={entityType} /><input type="hidden" name="entityId" value={entityId} /><input type="hidden" name="clientId" value={typedClientId} /><input type="hidden" name="leadId" value={typedLeadId} /><input type="hidden" name="projectId" value={typedProjectId} /><input type="hidden" name="knowledgeBaseItemId" value={typedKnowledgeBaseItemId} /><input type="hidden" name="redirectTo" value={redirectTo} /><Field label="File name"><input className={inputClass} name="filename" placeholder="Defaults to selected file name" /></Field><Field label="Upload file"><input className={inputClass} name="file" type="file" accept="application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet" /></Field><div className="rounded-xl border border-white/10 bg-white/[0.03] p-3"><p className="mb-3 text-sm font-semibold text-white">Add external link</p><Field label="External URL"><input className={inputClass} name="url" type="url" placeholder="https://..." /></Field><Field label="External MIME type"><input className={inputClass} name="mimeType" placeholder="application/pdf" /></Field></div><p className="text-xs text-slate-500">Uploads accept PDFs, images, text, CSV, Word and Excel files up to 10 MB. Use the external link fields only for files already hosted elsewhere.</p><SubmitButton pendingLabel="Saving file…">Upload file</SubmitButton></form>; }
 export function ChecklistTemplateForm({ services, templates }: { services: ServiceOption[]; templates: ChecklistTemplate[] }) { return <div className="grid gap-4 xl:grid-cols-2"><form action={createChecklistTemplate} className="grid gap-3"><SubmissionInput scope="create-checklist-template" /><h3 className="font-semibold text-white">Create checklist template</h3><Field label="Name"><input className={inputClass} name="name" required /></Field><Field label="Service"><select className={inputClass} name="serviceId"><option value="">General</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></Field><Field label="Description"><textarea className={inputClass} name="description" /></Field><Field label="First item"><input className={inputClass} name="firstItemTitle" /></Field><label className="flex items-center gap-3 text-sm text-slate-300"><input name="isActive" type="checkbox" defaultChecked /> Active template</label><SubmitButton>Create template</SubmitButton></form><form action={createChecklistItem} className="grid gap-3"><SubmissionInput scope="create-checklist-item" /><h3 className="font-semibold text-white">Add checklist item</h3><Field label="Template"><select className={inputClass} name="templateId">{templates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></Field><Field label="Item title"><input className={inputClass} name="title" required /></Field><Field label="Description"><textarea className={inputClass} name="description" /></Field><Field label="Sort order"><input className={inputClass} name="sortOrder" type="number" min="0" defaultValue="0" /></Field><SubmitButton>Add item</SubmitButton></form></div>; }
 
 export function ChecklistTemplateEditForm({ template, services }: { template: ChecklistTemplate; services: ServiceOption[] }) { return <form action={createChecklistTemplate} className="grid gap-3 rounded-xl border border-white/10 bg-white/[0.03] p-3 md:grid-cols-4"><input type="hidden" name="id" value={template.id} /><Field label="Template"><input className={inputClass} name="name" defaultValue={template.name} required /></Field><Field label="Service"><select className={inputClass} name="serviceId" defaultValue={template.service_id ?? ""}><option value="">General</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></Field><Field label="Description"><input className={inputClass} name="description" defaultValue={template.description ?? ""} /></Field><label className="flex items-center gap-3 self-end text-sm text-slate-300"><input name="isActive" type="checkbox" defaultChecked={template.is_active} /> Active</label><div className="md:col-span-4"><SubmitButton>Save template</SubmitButton></div></form>; }

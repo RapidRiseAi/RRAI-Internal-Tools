@@ -7,6 +7,7 @@ import { createSession, destroySession, requirePermission, requireUser } from ".
 import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
 import { permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
+import { actionFormData, type ActionResult, withActionResult } from "./action-utils";
 import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, uploadFileSchema, userSchema } from "./validation";
 
 function str(formData: FormData, key: string) {
@@ -209,7 +210,9 @@ export async function updateOwnLoginDetails(formData: FormData) {
   redirect("/settings");
 }
 
-export async function upsertLead(formData: FormData) {
+export async function upsertLead(previousState: ActionResult | null, submittedFormData?: FormData) {
+  const formData = actionFormData(previousState, submittedFormData);
+  return withActionResult(async () => {
   const user = await requirePermission(permissions.leadsWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "lead:create"))) redirect("/leads");
@@ -221,6 +224,7 @@ export async function upsertLead(formData: FormData) {
   revalidatePath("/leads");
   revalidatePath("/dashboard");
   redirect(`/leads/${result.data.id}`);
+  });
 }
 
 export async function archiveLead(formData: FormData) {
@@ -244,7 +248,9 @@ export async function convertLeadToClient(formData: FormData) {
   redirect(`/clients/${data.client_id}`);
 }
 
-export async function upsertClient(formData: FormData) {
+export async function upsertClient(previousState: ActionResult | null, submittedFormData?: FormData) {
+  const formData = actionFormData(previousState, submittedFormData);
+  return withActionResult(async () => {
   const user = await requirePermission(permissions.clientsWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "client:create"))) redirect("/clients");
@@ -255,6 +261,7 @@ export async function upsertClient(formData: FormData) {
   await logActivity({ action: id ? "CLIENT_UPDATED" : "CLIENT_CREATED", entityType: "Client", entityId: result.data.id, clientId: result.data.id, actorId: user.id, message: `${result.data.company_name} ${id ? "updated" : "created"}` });
   revalidatePath("/clients");
   redirect(`/clients/${result.data.id}`);
+  });
 }
 
 export async function upsertTask(formData: FormData) {
@@ -270,7 +277,9 @@ export async function upsertTask(formData: FormData) {
   redirect(path(formData, "/tasks"));
 }
 
-export async function upsertUser(formData: FormData) {
+export async function upsertUser(previousState: ActionResult | null, submittedFormData?: FormData) {
+  const formData = actionFormData(previousState, submittedFormData);
+  return withActionResult(async () => {
   const user = await requirePermission(permissions.settingsManage);
   if (!(await reserveSubmission(user.id, formData, "user:create"))) redirect("/settings");
   const parsed = userSchema.parse({ name: str(formData, "name"), email: str(formData, "email").toLowerCase(), password: str(formData, "password"), roleId: str(formData, "roleId"), title: str(formData, "title"), phone: str(formData, "phone"), status: str(formData, "status") });
@@ -279,9 +288,12 @@ export async function upsertUser(formData: FormData) {
   if (error) throw error;
   revalidatePath("/settings");
   redirect("/settings");
+  });
 }
 
-export async function upsertQuote(formData: FormData) {
+export async function upsertQuote(previousState: ActionResult | null, submittedFormData?: FormData) {
+  const formData = actionFormData(previousState, submittedFormData);
+  return withActionResult(async () => {
   const user = await requirePermission(permissions.quotesWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "quote:create"))) redirect("/quotes");
@@ -299,6 +311,7 @@ export async function upsertQuote(formData: FormData) {
   await logActivity({ action: id ? "QUOTE_UPDATED" : "QUOTE_CREATED", entityType: "Quote", entityId: result.data.id, quoteId: result.data.id, clientId: result.data.client_id, leadId: result.data.lead_id, actorId: user.id, message: `${result.data.title} ${id ? "updated" : "created"}` });
   revalidatePath("/quotes");
   redirect("/quotes");
+  });
 }
 
 export async function acceptQuote(formData: FormData) {
@@ -368,7 +381,9 @@ export async function updateProjectChecklist(formData: FormData) {
   revalidatePath(path(formData, "/projects"));
 }
 
-export async function upsertInvoice(formData: FormData) {
+export async function upsertInvoice(previousState: ActionResult | null, submittedFormData?: FormData) {
+  const formData = actionFormData(previousState, submittedFormData);
+  return withActionResult(async () => {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "invoice:create"))) redirect("/billing");
   const lineItems = parseInvoiceLineItems(formData);
@@ -382,6 +397,7 @@ export async function upsertInvoice(formData: FormData) {
   await logActivity({ action: "INVOICE_CREATED", entityType: "Invoice", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.invoice_number} created with ${lineItems.length} line item${lineItems.length === 1 ? "" : "s"}` });
   revalidatePath("/billing");
   redirect("/billing");
+  });
 }
 
 export async function recordPayment(formData: FormData) {
@@ -499,7 +515,9 @@ function safeStorageName(filename: string) {
   return cleaned || "upload";
 }
 
-export async function addFileRecord(formData: FormData) {
+export async function addFileRecord(previousState: ActionResult | null, submittedFormData?: FormData) {
+  const formData = actionFormData(previousState, submittedFormData);
+  return withActionResult(async () => {
   const entityType = str(formData, "entityType");
   const user = await requirePermission(filePermission(entityType));
   if (!(await reserveSubmission(user.id, formData, "file-record:create"))) return;
@@ -531,6 +549,7 @@ export async function addFileRecord(formData: FormData) {
   if (error) throw error;
   await logActivity({ action: hasUpload ? "FILE_UPLOADED" : "FILE_LINK_ADDED", entityType: parsed.entityType, entityId: parsed.entityId, clientId: typedIds.client_id, leadId: typedIds.lead_id, projectId: typedIds.project_id, actorId: user.id, message: `${parsed.filename} ${hasUpload ? "uploaded" : "linked"}` });
   revalidatePath(path(formData, "/dashboard"));
+  });
 }
 
 export async function createChecklistTemplate(formData: FormData) {
