@@ -91,10 +91,62 @@ async function logActivity(input: { action: string; entityType: string; entityId
   });
 }
 
-async function seedProjectChecklist(projectId: string) {
+async function resolveDefaultChecklistTemplateId() {
   const supabase = getSupabaseAdmin();
-  const { data: templates } = await supabase.from("checklist_items").select("id,title").order("sort_order").limit(12);
-  const rows = (templates?.length ? templates : [
+  const { data: generalTemplate } = await supabase
+    .from("checklist_templates")
+    .select("id")
+    .eq("is_active", true)
+    .is("service_id", null)
+    .order("name")
+    .limit(1)
+    .maybeSingle();
+  if (generalTemplate?.id) return generalTemplate.id as string;
+
+  const { data: activeTemplate } = await supabase
+    .from("checklist_templates")
+    .select("id")
+    .eq("is_active", true)
+    .order("name")
+    .limit(1)
+    .maybeSingle();
+  return activeTemplate?.id as string | undefined;
+}
+
+async function resolveChecklistTemplateIdForQuote(quoteId?: string | null) {
+  if (!quoteId) return undefined;
+
+  const supabase = getSupabaseAdmin();
+  const { data: quoteItems } = await supabase
+    .from("quote_items")
+    .select("service_id")
+    .eq("quote_id", quoteId)
+    .not("service_id", "is", null)
+    .order("sort_order")
+    .limit(1);
+  const serviceId = quoteItems?.[0]?.service_id as string | null | undefined;
+  if (!serviceId) return undefined;
+
+  const { data: template } = await supabase
+    .from("checklist_templates")
+    .select("id")
+    .eq("service_id", serviceId)
+    .eq("is_active", true)
+    .order("name")
+    .limit(1)
+    .maybeSingle();
+  return template?.id as string | undefined;
+}
+
+async function seedProjectChecklist(projectId: string, templateId?: string, options: { replaceExisting?: boolean } = {}) {
+  const supabase = getSupabaseAdmin();
+  if (options.replaceExisting) await supabase.from("project_checklists").delete().eq("project_id", projectId);
+  const selectedTemplateId = templateId || await resolveDefaultChecklistTemplateId();
+  let query = supabase.from("checklist_items").select("id,title").order("sort_order").limit(12);
+  if (selectedTemplateId) query = query.eq("template_id", selectedTemplateId);
+
+  const { data: templateItems } = await query;
+  const rows = (templateItems?.length ? templateItems : [
     { id: null, title: "Confirm project scope and success criteria" },
     { id: null, title: "Collect client content, access and brand assets" },
     { id: null, title: "Complete build and internal QA" },
@@ -254,6 +306,8 @@ export async function acceptQuote(formData: FormData) {
   const id = str(formData, "id");
   const { data, error } = await getSupabaseAdmin().rpc("accept_quote_atomic", { p_quote_id: id, p_actor_id: user.id, p_invoice_number: numberCode("INV") }).single<AcceptQuoteResult>();
   if (error || !data?.project_id) throw workflowError(error ?? new Error("No project id returned."), "Quote acceptance");
+  const quoteTemplateId = await resolveChecklistTemplateIdForQuote(id);
+  if (quoteTemplateId) await seedProjectChecklist(data.project_id, quoteTemplateId, { replaceExisting: true });
   revalidatePath("/quotes");
   revalidatePath("/projects");
   revalidatePath("/billing");
@@ -266,12 +320,12 @@ export async function upsertProject(formData: FormData) {
   const user = await requirePermission(permissions.projectsWrite);
   const id = str(formData, "id") || undefined;
   if (!id && !(await reserveSubmission(user.id, formData, "project:create"))) redirect("/projects");
-  const parsed = projectSchema.parse({ name: str(formData, "name"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), stage: str(formData, "stage"), priority: str(formData, "priority"), deadline: str(formData, "deadline"), progress: formData.get("progress"), blocker: str(formData, "blocker"), seedChecklist: bool(formData, "seedChecklist"), assignedToId: str(formData, "assignedToId") });
+  const parsed = projectSchema.parse({ name: str(formData, "name"), clientId: str(formData, "clientId"), quoteId: str(formData, "quoteId"), status: str(formData, "status"), stage: str(formData, "stage"), priority: str(formData, "priority"), deadline: str(formData, "deadline"), progress: formData.get("progress"), blocker: str(formData, "blocker"), seedChecklist: bool(formData, "seedChecklist"), checklistTemplateId: str(formData, "checklistTemplateId"), assignedToId: str(formData, "assignedToId") });
   const payload = { name: parsed.name, client_id: parsed.clientId, quote_id: parsed.quoteId ?? null, status: parsed.status, stage: parsed.stage ?? null, priority: parsed.priority, deadline: parsed.deadline?.toISOString() ?? null, progress: parsed.progress, blocker: parsed.blocker ?? null, assigned_to: parsed.assignedToId ?? null };
   const previousProject = id ? await getSupabaseAdmin().from("projects").select("assigned_to").eq("id", id).maybeSingle() : null;
   const result = id ? await getSupabaseAdmin().from("projects").update(payload).eq("id", id).select("id,name,client_id").single() : await getSupabaseAdmin().from("projects").insert(payload).select("id,name,client_id").single();
   if (result.error) throw result.error;
-  if (!id && parsed.seedChecklist) await seedProjectChecklist(result.data.id);
+  if (!id && parsed.seedChecklist) await seedProjectChecklist(result.data.id, parsed.checklistTemplateId ?? await resolveChecklistTemplateIdForQuote(parsed.quoteId));
   const assignmentChanged = parsed.assignedToId && (!id || previousProject?.data?.assigned_to !== parsed.assignedToId);
   if (assignmentChanged) await getSupabaseAdmin().from("tasks").insert({ title: `Project assignment: ${result.data.name}`, description: `You are assigned to own project ${result.data.name}.`, type: "ADMIN_TASK", status: "TO_DO", priority: parsed.priority, due_date: parsed.deadline?.toISOString() ?? null, client_id: result.data.client_id, project_id: result.data.id, assigned_to: parsed.assignedToId, created_by: user.id });
   await logActivity({ action: id ? "PROJECT_UPDATED" : "PROJECT_CREATED", entityType: "Project", entityId: result.data.id, projectId: result.data.id, clientId: result.data.client_id, actorId: user.id, message: `${result.data.name} ${id ? "updated" : "created"}` });
