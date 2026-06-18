@@ -108,6 +108,17 @@ export const paymentSchema = z.object({
   reference: optionalText,
 });
 
+export const expenseSchema = z.object({
+  vendor: z.string().trim().min(2),
+  category: z.string().trim().min(2),
+  amountCents: z.coerce.number().int().min(1),
+  status: z.enum(["PENDING", "APPROVED", "PAID", "REJECTED"]),
+  expenseDate: optionalDate,
+  notes: optionalText,
+  clientId: optionalUuid,
+  projectId: optionalUuid,
+});
+
 export const retainerSchema = z.object({
   clientId: z.string().min(1),
   type: z.string().trim().min(2),
