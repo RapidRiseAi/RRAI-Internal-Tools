@@ -123,7 +123,16 @@ export function AcceptQuoteButton({ quote }: { quote: Quote }) {
   return <form action={acceptQuote}><SubmissionInput scope="accept-quote" /><input type="hidden" name="id" value={quote.id} /><SubmitButton pendingLabel="Creating project…">Accept & create project</SubmitButton></form>;
 }
 
-export function ProjectForm({ clients, quotes, project, users = [] }: { clients: ClientOption[]; quotes: QuoteOption[]; project?: Project; users?: UserOption[] }) {
+export type ProjectFormProps = {
+  clients: ClientOption[];
+  quotes: QuoteOption[];
+  project?: Project;
+  users?: UserOption[];
+  checklistTemplates?: ChecklistTemplate[];
+};
+
+export function ProjectForm({ clients, quotes, project, users = [], checklistTemplates = [] }: ProjectFormProps) {
+  const activeChecklistTemplates = checklistTemplates.filter((template) => template.is_active);
   return <form action={upsertProject} className="grid gap-4 md:grid-cols-3"><SubmissionInput scope="upsert-project" />
     {project?.id ? <input type="hidden" name="id" value={project.id} /> : null}
     <Field label="Project name"><input className={inputClass} name="name" defaultValue={project?.name ?? ""} required /></Field>
@@ -136,7 +145,10 @@ export function ProjectForm({ clients, quotes, project, users = [] }: { clients:
     <Field label="Stage"><input className={inputClass} name="stage" defaultValue={project?.stage ?? "Kickoff"} /></Field>
     <Field label="Progress"><input className={inputClass} name="progress" type="number" min="0" max="100" defaultValue={project?.progress ?? 0} /></Field>
     <Field label="Blocker"><input className={inputClass} name="blocker" defaultValue={project?.blocker ?? ""} /></Field>
-    {!project?.id ? <label className="flex items-center gap-3 text-sm text-slate-300"><input name="seedChecklist" type="checkbox" defaultChecked /> Add starter checklist</label> : null}
+    {!project?.id ? <>
+      <Field label="Checklist template"><select className={inputClass} name="checklistTemplateId" defaultValue=""><option value="">Best active default</option>{activeChecklistTemplates.map((template) => <option key={template.id} value={template.id}>{template.name}</option>)}</select></Field>
+      <label className="flex items-center gap-3 text-sm text-slate-300"><input name="seedChecklist" type="checkbox" defaultChecked /> Add starter checklist</label>
+    </> : null}
     <div className="md:col-span-3"><SubmitButton>{project?.id ? "Save project" : "Create project"}</SubmitButton></div>
   </form>;
 }

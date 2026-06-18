@@ -1,4 +1,5 @@
 import { notFound } from "next/navigation";
+import type { ComponentProps } from "react";
 import { AppShell } from "@/components/app-shell";
 import {
   ActivityWorkflowForm,
@@ -12,6 +13,7 @@ import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
   genericList,
   getClient,
+  listChecklistTemplates,
   listClients,
   listFiles,
   listLeads,
@@ -23,6 +25,7 @@ import {
 } from "@/lib/data";
 import { dateShort, money } from "@/lib/format";
 import type {
+  ChecklistTemplate,
   Invoice,
   Project,
   Quote,
@@ -32,6 +35,8 @@ import type {
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 export const dynamic = "force-dynamic";
+type ProjectFormWithChecklistProps = ComponentProps<typeof ProjectForm> & { checklistTemplates?: ChecklistTemplate[] };
+const ProjectFormWithChecklist = ProjectForm as (props: ProjectFormWithChecklistProps) => ReturnType<typeof ProjectForm>;
 export default async function ClientDetail({
   params,
 }: {
@@ -54,6 +59,7 @@ export default async function ClientDetail({
     services,
     users,
     tasks,
+    checklistTemplates,
   ] = await Promise.all([
     getClient(id),
     genericList<Project>("projects"),
@@ -69,6 +75,7 @@ export default async function ClientDetail({
     listServices(),
     listUsers(),
     listTasks(),
+    listChecklistTemplates(),
   ]);
   if (!client) notFound();
   const redirectTo = `/clients/${client.id}`;
@@ -126,10 +133,11 @@ export default async function ClientDetail({
               triggerLabel="Add project"
               variant="ghost"
             >
-              <ProjectForm
+              <ProjectFormWithChecklist
                 clients={clients.filter((item) => item.id === client.id)}
                 quotes={clientQuotes}
                 users={users}
+                checklistTemplates={checklistTemplates}
               />
             </ModalPanel>
             <ModalPanel
