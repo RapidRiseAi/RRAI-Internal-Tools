@@ -8,7 +8,7 @@ import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
 import { permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
 import { actionFormData, type ActionResult, withActionResult } from "./action-utils";
-import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, uploadFileSchema, userSchema } from "./validation";
+import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, expenseSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, uploadFileSchema, userSchema } from "./validation";
 
 function str(formData: FormData, key: string) {
   return String(formData.get(key) ?? "");
@@ -413,6 +413,17 @@ export async function recordPayment(formData: FormData) {
   redirect("/billing");
 }
 
+export async function recordExpense(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "expense:create"))) redirect("/billing?tab=expenses");
+  const parsed = expenseSchema.parse({ vendor: str(formData, "vendor"), category: str(formData, "category"), amountCents: randsToCents(formData.get("amountRands")), status: str(formData, "status") || "PENDING", expenseDate: str(formData, "expenseDate"), notes: str(formData, "notes"), clientId: str(formData, "clientId"), projectId: str(formData, "projectId") });
+  const { data, error } = await getSupabaseAdmin().from("expenses").insert({ vendor: parsed.vendor, category: parsed.category, amount_cents: parsed.amountCents, status: parsed.status, expense_date: parsed.expenseDate?.toISOString().slice(0, 10) ?? new Date().toISOString().slice(0, 10), notes: parsed.notes ?? null, client_id: parsed.clientId ?? null, project_id: parsed.projectId ?? null, created_by: user.id }).select("id,vendor").single();
+  if (error) throw error;
+  await logActivity({ action: "EXPENSE_RECORDED", entityType: "Expense", entityId: data.id, clientId: parsed.clientId ?? null, projectId: parsed.projectId ?? null, actorId: user.id, message: `${data.vendor} expense recorded` });
+  revalidatePath("/billing");
+  redirect("/billing?tab=expenses");
+}
+
 export async function upsertRetainer(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "retainer:create"))) redirect("/retainers");
@@ -420,8 +431,9 @@ export async function upsertRetainer(formData: FormData) {
   const { data, error } = await getSupabaseAdmin().from("retainers").insert({ client_id: parsed.clientId, type: parsed.type, status: parsed.status, monthly_amount_cents: parsed.monthlyAmountCents, next_billing_date: parsed.nextBillingDate?.toISOString() ?? null }).select("id,type,client_id").single();
   if (error) throw error;
   await logActivity({ action: "RETAINER_CREATED", entityType: "Retainer", entityId: data.id, clientId: data.client_id, actorId: user.id, message: `${data.type} retainer created` });
+  revalidatePath("/billing");
   revalidatePath("/retainers");
-  redirect("/retainers");
+  redirect("/billing?tab=retainers");
 }
 
 export async function upsertSupportTicket(formData: FormData) {

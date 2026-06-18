@@ -37,7 +37,7 @@ export default async function DashboardPage() {
 
   return (
     <AppShell>
-      <PageHeader eyebrow="Command center" title="Today at Rapid Rise AI" description="Live Supabase-backed priorities across sales, delivery, finance, support and referrals." />
+      <PageHeader eyebrow="Command center" title="Today at Rapid Rise AI" description="Live Supabase-backed priorities across sales, delivery, finance, support and referrals." actions={<a href="/reports" className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Open reports</a>} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">{cards.map(([label, value]) => <Card key={label}><p className="text-sm text-slate-400">{label}</p><p className="mt-3 text-3xl font-bold text-white">{value}</p></Card>)}</div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
         <Card><h2 className="text-lg font-semibold">Recent activity</h2><div className="mt-4 grid gap-3">{activity.map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-3"><StatusBadge value={item.action} /><p className="mt-2 text-sm text-slate-200">{item.message}</p><p className="text-xs text-slate-500">{dateShort(item.created_at)}</p></div>)}</div></Card>
