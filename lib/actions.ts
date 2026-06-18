@@ -4,6 +4,7 @@ import bcrypt from "bcryptjs";
 import { revalidatePath } from "next/cache";
 import { redirect } from "next/navigation";
 import { createSession, destroySession, requirePermission, requireUser } from "./auth";
+import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
 import { permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
 import { accountLoginSchema, affiliateSchema, bookEventSchema, campaignSchema, checklistItemSchema, checklistTemplateSchema, clientSchema, commissionSchema, companySettingsSchema, contentItemSchema, documentTemplateSchema, fileRecordSchema, interactionEventSchema, linkedTaskSchema, invoiceSchema, knowledgeBaseSchema, leadCallSchema, leadSchema, noteSchema, paymentSchema, projectChecklistSchema, projectSchema, quoteSchema, referralSchema, retainerSchema, serviceSchema, supportTicketSchema, taskSchema, taskStatusSchema, uploadFileSchema, userSchema } from "./validation";
@@ -304,8 +305,34 @@ export async function acceptQuote(formData: FormData) {
   const user = await requirePermission(permissions.quotesWrite);
   if (!(await reserveSubmission(user.id, formData, "quote:accept"))) redirect("/quotes");
   const id = str(formData, "id");
-  const { data, error } = await getSupabaseAdmin().rpc("accept_quote_atomic", { p_quote_id: id, p_actor_id: user.id, p_invoice_number: numberCode("INV") }).single<AcceptQuoteResult>();
+  const supabase = getSupabaseAdmin();
+  const { data, error } = await supabase.rpc("accept_quote_atomic", { p_quote_id: id, p_actor_id: user.id, p_invoice_number: numberCode("INV") }).single<AcceptQuoteResult>();
   if (error || !data?.project_id) throw workflowError(error ?? new Error("No project id returned."), "Quote acceptance");
+
+  if (data.invoice_id) {
+    const { data: quote, error: quoteError } = await supabase
+      .from("quotes")
+      .select("once_off_total_cents")
+      .eq("id", id)
+      .single();
+    if (quoteError) throw workflowError(quoteError, "Quote acceptance");
+
+    const { data: quoteItems, error: quoteItemsError } = await supabase
+      .from("quote_items")
+      .select("description,quantity,once_off_cents,sort_order")
+      .eq("quote_id", id)
+      .order("sort_order");
+    if (quoteItemsError) throw workflowError(quoteItemsError, "Quote acceptance");
+
+    const invoiceItems = buildOnceOffInvoiceItemsFromQuoteItems(quoteItems ?? [], quote.once_off_total_cents as number)
+      .map((item) => ({ ...item, invoice_id: data.invoice_id }));
+
+    if (invoiceItems.length) {
+      const { error: invoiceItemsError } = await supabase.from("invoice_items").insert(invoiceItems);
+      if (invoiceItemsError) throw workflowError(invoiceItemsError, "Quote acceptance");
+    }
+  }
+
   const quoteTemplateId = await resolveChecklistTemplateIdForQuote(id);
   if (quoteTemplateId) await seedProjectChecklist(data.project_id, quoteTemplateId, { replaceExisting: true });
   revalidatePath("/quotes");
