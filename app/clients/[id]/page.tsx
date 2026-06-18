@@ -12,7 +12,6 @@ import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
   genericList,
   getClient,
-  listChecklistTemplates,
   listClients,
   listFiles,
   listLeads,
@@ -55,7 +54,6 @@ export default async function ClientDetail({
     services,
     users,
     tasks,
-    checklistTemplates,
   ] = await Promise.all([
     getClient(id),
     genericList<Project>("projects"),
@@ -71,7 +69,6 @@ export default async function ClientDetail({
     listServices(),
     listUsers(),
     listTasks(),
-    listChecklistTemplates(),
   ]);
   if (!client) notFound();
   const redirectTo = `/clients/${client.id}`;
@@ -133,7 +130,6 @@ export default async function ClientDetail({
                 clients={clients.filter((item) => item.id === client.id)}
                 quotes={clientQuotes}
                 users={users}
-                checklistTemplates={checklistTemplates}
               />
             </ModalPanel>
             <ModalPanel
