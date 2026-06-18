@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { upsertInvoice } from "@/lib/actions";
 import { invoiceStatuses, labelize } from "@/lib/constants";
@@ -15,9 +15,18 @@ type InvoiceLineItem = { description: string; quantity: string; unitAmountCents:
 
 const randToCents = (value: string) => Math.round(Number(value || 0) * 100);
 const centsToRand = (value: number) => String(Math.round(value / 100));
+
+function FormError({ message }: { message?: string }) {
+  return message ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{message}</p> : null;
+}
+
+function FieldError({ messages }: { messages?: string[] }) {
+  return messages?.length ? <p className="text-xs font-medium text-red-300">{messages[0]}</p> : null;
+}
 const blankLineItem = (): InvoiceLineItem => ({ description: "", quantity: "1", unitAmountCents: "0" });
 
 export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOption[]; quotes: InvoiceQuoteOption[]; quoteItems: QuoteItem[] }) {
+  const [state, formAction] = useActionState(upsertInvoice, { ok: false });
   const submissionKey = useMemo(() => `upsert-invoice:${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`, []);
   const [quoteId, setQuoteId] = useState("");
   const selectedQuote = useMemo(() => quotes.find((quote) => quote.id === quoteId), [quoteId, quotes]);
@@ -44,13 +53,13 @@ export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOp
 
   const totalCents = items.reduce((sum, item) => sum + Number(item.quantity || 1) * randToCents(item.unitAmountCents), 0);
 
-  return <form action={upsertInvoice} className="grid gap-5">
+  return <form action={formAction} className="grid gap-5"><FormError message={state.formError} />
     <input type="hidden" name="submissionKey" value={submissionKey} />
     <input type="hidden" name="quoteId" value={quoteId} />
     <input type="hidden" name="amountCents" value={totalCents} />
     <div className="grid gap-4 md:grid-cols-4">
       <Field label="Based on quote"><select className={inputClass} value={quoteId} onChange={(event) => applyQuote(event.target.value)}><option value="">No quote / custom invoice</option>{quotes.map((quote) => <option key={quote.id} value={quote.id}>{quote.quote_number} — {quote.title}</option>)}</select></Field>
-      <Field label="Client"><select className={inputClass} name="clientId" value={clientId} onChange={(event) => { setQuoteId(""); setClientId(event.target.value); }} required><option value="">Select client</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.company_name}</option>)}</select></Field>
+      <Field label="Client"><select className={inputClass} name="clientId" value={clientId} onChange={(event) => { setQuoteId(""); setClientId(event.target.value); }} required><option value="">Select client</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.company_name}</option>)}</select><FieldError messages={state.fieldErrors?.clientId} /></Field>
       <Field label="Invoice #"><input className={inputClass} name="invoiceNumber" value={invoiceNumber} onChange={(event) => setInvoiceNumber(event.target.value)} placeholder="Auto if empty" /></Field>
       <Field label="Status"><select className={inputClass} name="status" defaultValue="SENT">{invoiceStatuses.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}</select></Field>
       <Field label="Due date"><input className={inputClass} name="dueDate" type="date" /></Field>

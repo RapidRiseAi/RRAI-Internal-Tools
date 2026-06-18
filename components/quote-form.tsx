@@ -1,6 +1,6 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useActionState, useMemo, useState } from "react";
 import { Plus, Trash2 } from "lucide-react";
 import { upsertQuote } from "@/lib/actions";
 import { labelize, quoteStatuses } from "@/lib/constants";
@@ -13,9 +13,18 @@ type QuoteLineItem = { serviceId: string; description: string; quantity: string;
 
 const randToCents = (value: string) => Math.round(Number(value || 0) * 100);
 const centsToRand = (value: number) => String(Math.round(value / 100));
+
+function FormError({ message }: { message?: string }) {
+  return message ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{message}</p> : null;
+}
+
+function FieldError({ messages }: { messages?: string[] }) {
+  return messages?.length ? <p className="text-xs font-medium text-red-300">{messages[0]}</p> : null;
+}
 const blankLineItem = (): QuoteLineItem => ({ serviceId: "", description: "", quantity: "1", onceOffCents: "0", monthlyCents: "0" });
 
 export function QuoteForm({ clients, leads, services }: { clients: ClientOption[]; leads: LeadOption[]; services: ServiceOption[] }) {
+  const [state, formAction] = useActionState(upsertQuote, { ok: false });
   const submissionKey = useMemo(() => `upsert-quote:${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`, []);
   const [title, setTitle] = useState("");
   const [items, setItems] = useState<QuoteLineItem[]>([{ ...blankLineItem(), description: "Rapid Rise AI implementation package" }]);
@@ -33,10 +42,10 @@ export function QuoteForm({ clients, leads, services }: { clients: ClientOption[
   const onceOffTotal = items.reduce((sum, item) => sum + Number(item.quantity || 1) * randToCents(item.onceOffCents), 0);
   const monthlyTotal = items.reduce((sum, item) => sum + Number(item.quantity || 1) * randToCents(item.monthlyCents), 0);
 
-  return <form action={upsertQuote} className="grid gap-5">
+  return <form action={formAction} className="grid gap-5"><FormError message={state.formError} />
     <input type="hidden" name="submissionKey" value={submissionKey} />
     <div className="grid gap-4 md:grid-cols-3">
-      <Field label="Title"><input className={inputClass} name="title" value={title} onChange={(event) => setTitle(event.target.value)} required /></Field>
+      <Field label="Title"><input className={inputClass} name="title" value={title} onChange={(event) => setTitle(event.target.value)} required /><FieldError messages={state.fieldErrors?.title} /></Field>
       <Field label="Status"><select className={inputClass} name="status" defaultValue="DRAFT">{quoteStatuses.map((value) => <option key={value} value={value}>{labelize(value)}</option>)}</select></Field>
       <Field label="Valid until"><input className={inputClass} type="date" name="validUntil" /></Field>
       <Field label="Client"><select className={inputClass} name="clientId"><option value="">No client yet</option>{clients.map((client) => <option key={client.id} value={client.id}>{client.company_name}</option>)}</select></Field>
