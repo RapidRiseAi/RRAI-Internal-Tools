@@ -138,9 +138,8 @@ async function resolveChecklistTemplateIdForQuote(quoteId?: string | null) {
   return template?.id as string | undefined;
 }
 
-async function seedProjectChecklist(projectId: string, templateId?: string, options: { replaceExisting?: boolean } = {}) {
+async function seedProjectChecklist(projectId: string, templateId?: string) {
   const supabase = getSupabaseAdmin();
-  if (options.replaceExisting) await supabase.from("project_checklists").delete().eq("project_id", projectId);
   const selectedTemplateId = templateId || await resolveDefaultChecklistTemplateId();
   let query = supabase.from("checklist_items").select("id,title").order("sort_order").limit(12);
   if (selectedTemplateId) query = query.eq("template_id", selectedTemplateId);
@@ -306,8 +305,7 @@ export async function acceptQuote(formData: FormData) {
   const id = str(formData, "id");
   const { data, error } = await getSupabaseAdmin().rpc("accept_quote_atomic", { p_quote_id: id, p_actor_id: user.id, p_invoice_number: numberCode("INV") }).single<AcceptQuoteResult>();
   if (error || !data?.project_id) throw workflowError(error ?? new Error("No project id returned."), "Quote acceptance");
-  const quoteTemplateId = await resolveChecklistTemplateIdForQuote(id);
-  if (quoteTemplateId) await seedProjectChecklist(data.project_id, quoteTemplateId, { replaceExisting: true });
+  await seedProjectChecklist(data.project_id, await resolveChecklistTemplateIdForQuote(id));
   revalidatePath("/quotes");
   revalidatePath("/projects");
   revalidatePath("/billing");
