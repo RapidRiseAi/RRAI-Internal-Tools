@@ -1,4 +1,6 @@
 import { AppShell } from "@/components/app-shell";
+import { requirePagePermission } from "@/lib/auth";
+import { permissions } from "@/lib/constants";
 import { ServiceForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
@@ -8,6 +10,8 @@ import { money } from "@/lib/format";
 export const dynamic = "force-dynamic";
 
 export default async function Services() {
+  await requirePagePermission(permissions.settingsManage);
+
   const services = await listServices();
 
   return (

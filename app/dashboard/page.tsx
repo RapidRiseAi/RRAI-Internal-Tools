@@ -1,4 +1,6 @@
 import { AppShell } from "@/components/app-shell";
+import { requirePagePermission } from "@/lib/auth";
+import { permissions } from "@/lib/constants";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listLeads, recentActivity } from "@/lib/data";
 import { dateShort, money } from "@/lib/format";
@@ -7,6 +9,7 @@ import type { Invoice, Project, Quote, Retainer, SupportTicket, Task } from "@/l
 export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
+  await requirePagePermission(permissions.dashboard);
   const [leads, quotes, projects, tasks, tickets, retainers, invoices, activity] = await Promise.all([
     // Dashboard lead metrics are operational snapshots, so listLeads() intentionally excludes archived and converted leads.
     listLeads(),
