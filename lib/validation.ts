@@ -87,7 +87,6 @@ export const projectSchema = z.object({
   progress: z.coerce.number().int().min(0).max(100).default(0),
   blocker: optionalText,
   seedChecklist: z.boolean().default(false),
-  checklistTemplateId: optionalUuid,
   assignedToId: optionalUuid,
 });
 
