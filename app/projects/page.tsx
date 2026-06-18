@@ -3,20 +3,19 @@ import { AppShell } from "@/components/app-shell";
 import { ProjectForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
-import { genericList, listChecklistTemplates, listClients, listUsers } from "@/lib/data";
+import { genericList, listClients, listUsers } from "@/lib/data";
 import type { Project, Quote, Task } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 export const dynamic = "force-dynamic";
 export default async function Projects() {
   await requirePagePermission(permissions.projectsRead);
-  const [projects, tasks, clients, quotes, users, checklistTemplates] = await Promise.all([
+  const [projects, tasks, clients, quotes, users] = await Promise.all([
     genericList<Project>("projects"),
     genericList<Task>("tasks"),
     listClients(),
     genericList<Quote>("quotes"),
     listUsers(),
-    listChecklistTemplates(),
   ]);
   const activeProjects = projects.filter(
     (project) => project.status !== "COMPLETED",
@@ -29,7 +28,7 @@ export default async function Projects() {
         description="Project stats and active delivery work first. Create projects only when needed from the action button."
         actions={
           <ModalPanel title="Create project" triggerLabel="Add project">
-            <ProjectForm clients={clients} quotes={quotes} users={users} checklistTemplates={checklistTemplates} />
+            <ProjectForm clients={clients} quotes={quotes} users={users} />
           </ModalPanel>
         }
       />
