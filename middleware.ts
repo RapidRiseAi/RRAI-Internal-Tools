@@ -1,6 +1,11 @@
 import { NextResponse, type NextRequest } from "next/server";
 
 export function middleware(request: NextRequest) {
+  // This middleware is intentionally a lightweight UX guard for simple login
+  // redirects only. It is not authoritative authorization: every protected
+  // page and route must still call requireUser() or requirePagePermission()
+  // before loading sensitive data. JWT verification can be added here only if
+  // the session secret handling remains edge-runtime compatible.
   const session = request.cookies.get("rrai_session")?.value;
   const { pathname } = request.nextUrl;
 

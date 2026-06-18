@@ -67,7 +67,7 @@ export function permissionsFor(user: User | null) {
 
 export async function requirePermission(permission: string) {
   const user = await requireUser();
-  if (!permissionsFor(user).includes(permission)) redirect("/dashboard");
+  if (!permissionsFor(user).includes(permission)) redirect("/unauthorized");
   return user;
 }
 
