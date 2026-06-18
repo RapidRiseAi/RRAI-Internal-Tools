@@ -8,6 +8,7 @@ export const dynamic = "force-dynamic";
 
 export default async function DashboardPage() {
   const [leads, quotes, projects, tasks, tickets, retainers, invoices, activity] = await Promise.all([
+    // Dashboard lead metrics are operational snapshots, so listLeads() intentionally excludes archived and converted leads.
     listLeads(),
     genericList<Quote>("quotes"),
     genericList<Project>("projects"),
