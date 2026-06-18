@@ -9,7 +9,7 @@ import {
   UserForm,
 } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
-import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { Card, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions, rolePermissionMap } from "@/lib/constants";
 import {
@@ -46,7 +46,7 @@ export default async function SettingsPage() {
       <PageHeader
         eyebrow="Admin"
         title="Settings"
-        description="Review system settings and open focused pop-ups to edit employees, login details, documents and reusable SOP checklists."
+        description="Review system settings and open focused pop-ups to edit employees, login details, documents and reusable SOP checklists. Manage the Services catalogue from its dedicated page."
         actions={
           <>
             <ModalPanel
@@ -82,7 +82,7 @@ export default async function SettingsPage() {
         <div className="grid gap-4 md:grid-cols-4">
           {[
             ["Users", users.length],
-            ["Services", services.length],
+            ["Services catalogue", services.length],
             ["Checklist templates", templates.length],
             ["Document templates", documentTemplates.length],
           ].map(([label, value]) => (
@@ -209,16 +209,21 @@ export default async function SettingsPage() {
           </div>
         </Card>
         <Card>
-          <h2 className="mb-4 text-lg font-semibold text-white">
-            Services catalogue
-          </h2>
-          <div className="grid gap-2 md:grid-cols-2 xl:grid-cols-3">
-            {services.map((service) => (
-              <div key={service.id} className="rounded-xl bg-white/[0.04] p-3">
-                <p className="font-semibold text-white">{service.name}</p>
-                <p className="text-xs text-slate-400">{service.category}</p>
-              </div>
-            ))}
+          <div className="flex flex-col gap-4 md:flex-row md:items-center md:justify-between">
+            <div>
+              <h2 className="text-lg font-semibold text-white">
+                Services catalogue
+              </h2>
+              <p className="mt-1 text-sm leading-6 text-slate-400">
+                Service pricing, descriptions and active status are managed from
+                the dedicated Services catalogue page so quote defaults stay in
+                one canonical place.
+              </p>
+              <p className="mt-3 text-xs font-semibold uppercase tracking-[0.22em] text-slate-500">
+                {services.length} services configured
+              </p>
+            </div>
+            <LinkButton href="/services">Open Services catalogue</LinkButton>
           </div>
         </Card>
       </div>

@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BarChart3, BriefcaseBusiness, Building2, CalendarDays, CircleDollarSign, ClipboardCheck, FileText, Gauge, Handshake, Headset, Library, Megaphone, PlusCircle, Search, Settings, Shield, Target } from "lucide-react";
+import { BarChart3, BriefcaseBusiness, Building2, CalendarDays, CircleDollarSign, ClipboardCheck, FileText, Gauge, Handshake, Headset, Library, Megaphone, PlusCircle, Search, Settings, Shield, Tags, Target } from "lucide-react";
 import { getCurrentUser, permissionsFor } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 import { logoutAction } from "@/lib/actions";
@@ -21,6 +21,7 @@ const nav = [
   ["Marketing", "/marketing", Megaphone, permissions.marketingRead],
   ["Knowledge Base", "/knowledge-base", Library, permissions.dashboard],
   ["Reports", "/reports", BarChart3, permissions.dashboard],
+  ["Services catalogue", "/services", Tags, permissions.settingsManage],
   ["Settings", "/settings", Settings, permissions.settingsManage],
 ] as const;
 
