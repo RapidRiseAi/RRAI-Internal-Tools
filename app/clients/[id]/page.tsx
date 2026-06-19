@@ -222,7 +222,7 @@ export default async function ClientDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {tasks.filter((task) => task.client_id === client.id && task.status !== "DONE").slice(0, 6).map((task) => (
-                <a key={task.id} href={`/tasks#${task.id}`} className="rounded-xl bg-white/[0.04] p-3 text-sm text-slate-200">
+                <a key={task.id} href={`/tasks/${task.id}`} className="rounded-xl bg-white/[0.04] p-3 text-sm text-slate-200">
                   <span className="font-semibold text-white">{task.title}</span>
                   <span className="ml-2 text-slate-400">{task.status}</span>
                 </a>

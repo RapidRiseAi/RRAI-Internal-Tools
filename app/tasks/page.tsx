@@ -87,7 +87,7 @@ export default async function TasksPage() {
                       className="border-t border-white/10"
                     >
                       <td className="p-3 font-semibold text-white">
-                        {task.title}
+                        <a href={`/tasks/${task.id}`} className="text-white hover:text-rapid-cyan">{task.title}</a>
                       </td>
                       <td>
                         <StatusBadge value={task.status} />

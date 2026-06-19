@@ -155,3 +155,10 @@ This document is the operational map for the app. It explains what each module d
 - Tasks now capture instructions, expected outcome, schedule/due dates, attachments, and multiple supporting links so the assignee has the information needed to complete the task.
 - Task close-out happens from the Tasks page or the task log flow. Completing or scrapping a task requires logging what happened, and scrapping can include a reason.
 - `SCRAPPED` is a task status so cancelled/invalid work can be separated from completed work.
+
+## Task detail workspace update
+
+- Every task row/card should link to `/tasks/[id]` so the user can open the task itself instead of only jumping to the Tasks list.
+- The task detail page is the working panel for a task: it shows status, priority, due date, assignee, instructions, expected outcome text, files, links, client/project context, and timestamps.
+- Task detail includes an **Update task** action for changing the task data and a **Complete task** action for logging the outcome, scrapping it, or marking it blocked.
+- Task detail includes an **Upload / add link** action using the file workflow so files and external links can be added while the task is being completed.

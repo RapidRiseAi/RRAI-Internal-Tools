@@ -421,42 +421,45 @@ export function TaskForm({
   projects,
   clients,
   redirectTo,
+  task,
 }: {
   users: UserOption[];
   projects: ProjectOption[];
   clients?: ClientOption[];
   redirectTo?: string;
+  task?: Task;
 }) {
   const [linkRows, setLinkRows] = useState([0]);
   return (
     <form action={upsertTask} className="grid gap-4 md:grid-cols-3">
       <SubmissionInput scope="upsert-task" />
+      {task?.id ? <input type="hidden" name="id" value={task.id} /> : null}
       {redirectTo ? (
         <input type="hidden" name="redirectTo" value={redirectTo} />
       ) : null}
       <Field label="Title">
-        <input className={inputClass} name="title" required />
+        <input className={inputClass} name="title" defaultValue={task?.title ?? ""} required />
       </Field>
       <Field label="Type">
-        <select className={inputClass} name="type">
+        <select className={inputClass} name="type" defaultValue={task?.type ?? "ADMIN_TASK"}>
           <Options values={taskTypes} />
         </select>
       </Field>
       <Field label="Status">
-        <select className={inputClass} name="status">
+        <select className={inputClass} name="status" defaultValue={task?.status ?? "TO_DO"}>
           <Options values={taskStatuses} />
         </select>
       </Field>
       <Field label="Priority">
-        <select className={inputClass} name="priority">
+        <select className={inputClass} name="priority" defaultValue={task?.priority ?? "MEDIUM"}>
           <Options values={priorities} />
         </select>
       </Field>
       <Field label="Due date/time">
-        <input className={inputClass} type="datetime-local" name="dueDate" />
+        <input className={inputClass} type="datetime-local" name="dueDate" defaultValue={dateTimeInput(task?.due_date)} />
       </Field>
       <Field label="Assignee">
-        <select className={inputClass} name="assignedToId">
+        <select className={inputClass} name="assignedToId" defaultValue={task?.assigned_to ?? ""}>
           <option value="">Unassigned</option>
           {users.map((user) => (
             <option key={user.id} value={user.id}>
@@ -466,7 +469,7 @@ export function TaskForm({
         </select>
       </Field>
       <Field label="Client">
-        <select className={inputClass} name="clientId">
+        <select className={inputClass} name="clientId" defaultValue={task?.client_id ?? ""}>
           <option value="">No client</option>
           {clients?.map((client) => (
             <option key={client.id} value={client.id}>
@@ -476,7 +479,7 @@ export function TaskForm({
         </select>
       </Field>
       <Field label="Project">
-        <select className={inputClass} name="projectId">
+        <select className={inputClass} name="projectId" defaultValue={task?.project_id ?? ""}>
           <option value="">No project</option>
           {projects.map((project) => (
             <option key={project.id} value={project.id}>
@@ -486,7 +489,7 @@ export function TaskForm({
         </select>
       </Field>
       <Field label="Instructions">
-        <textarea className={inputClass} name="instructions" placeholder="What needs to be done and how should it be handled?" />
+        <textarea className={inputClass} name="instructions" defaultValue={task?.description ?? ""} placeholder="What needs to be done and how should it be handled?" />
       </Field>
       <Field label="Expected outcome">
         <textarea className={inputClass} name="expectedOutcome" placeholder="What should be true when this task is complete?" />
@@ -513,7 +516,7 @@ export function TaskForm({
         className="md:col-span-3"
       />
       <div className="flex items-end">
-        <SubmitButton>Create task</SubmitButton>
+        <SubmitButton>{task?.id ? "Save task" : "Create task"}</SubmitButton>
       </div>
     </form>
   );
