@@ -1,39 +1,9 @@
 import { z } from "zod";
-import {
-  affiliateStatuses,
-  clientStatuses,
-  contentStatuses,
-  documentTemplateTypes,
-  invoiceStatuses,
-  knowledgeCategories,
-  leadStages,
-  paymentStatuses,
-  priorities,
-  projectStatuses,
-  quoteStatuses,
-  retainerStatuses,
-  taskStatuses,
-  taskTypes,
-  ticketCategories,
-  ticketStatuses,
-} from "./constants";
+import { affiliateStatuses, clientStatuses, contentStatuses, documentTemplateTypes, invoiceStatuses, knowledgeCategories, leadStages, paymentStatuses, priorities, projectStatuses, quoteStatuses, retainerStatuses, taskStatuses, taskTypes, ticketCategories, ticketStatuses } from "./constants";
 
-const optionalEmail = z
-  .string()
-  .trim()
-  .email()
-  .or(z.literal(""))
-  .optional()
-  .transform((value) => value || undefined);
-const optionalText = z
-  .string()
-  .trim()
-  .optional()
-  .transform((value) => value || undefined);
-const optionalDate = z
-  .string()
-  .optional()
-  .transform((value) => (value ? new Date(value) : undefined));
+const optionalEmail = z.string().trim().email().or(z.literal("")).optional().transform((value) => value || undefined);
+const optionalText = z.string().trim().optional().transform((value) => value || undefined);
+const optionalDate = z.string().optional().transform((value) => value ? new Date(value) : undefined);
 const cents = z.coerce.number().int().min(0).default(0);
 const optionalUuid = optionalText;
 
@@ -147,8 +117,6 @@ export const expenseSchema = z.object({
   notes: optionalText,
   clientId: optionalUuid,
   projectId: optionalUuid,
-  recurrence: z.enum(["NONE", "MONTHLY"]).default("NONE"),
-  nextDueDate: optionalDate,
 });
 
 export const retainerSchema = z.object({
@@ -181,63 +149,13 @@ export const affiliateSchema = z.object({
   defaultCommissionRate: z.coerce.number().int().min(0).max(100),
 });
 
-export const referralSchema = z.object({
-  affiliateId: z.string().min(1),
-  leadId: optionalUuid,
-  clientId: optionalUuid,
-  status: z.string().trim().min(2).default("PENDING"),
-});
-export const commissionSchema = z.object({
-  affiliateId: z.string().min(1),
-  quoteId: optionalUuid,
-  projectId: optionalUuid,
-  paymentId: optionalUuid,
-  status: z.string().trim().min(2),
-  amountCents: z.coerce.number().int().min(1),
-  commissionType: z.enum(["ONCE_OFF", "RECURRING"]),
-});
-export const campaignSchema = z.object({
-  name: z.string().trim().min(2),
-  platform: z.string().trim().min(2),
-  targetIndustry: optionalText,
-  offerMessage: optionalText,
-  numberContacted: cents,
-  replies: cents,
-  callsBooked: cents,
-  quotesSent: cents,
-  dealsClosed: cents,
-});
-export const contentItemSchema = z.object({
-  title: z.string().trim().min(2),
-  status: z.enum(contentStatuses),
-  platform: optionalText,
-  postUrl: optionalText,
-  performanceNotes: optionalText,
-  leadsGenerated: cents,
-});
-export const knowledgeBaseSchema = z.object({
-  title: z.string().trim().min(2),
-  category: z.enum(knowledgeCategories),
-  body: z.string().trim().min(10),
-  visibility: z.enum(["INTERNAL", "TEAM", "PRIVATE"]),
-});
-export const noteSchema = z.object({
-  body: z.string().trim().min(2),
-  entityType: z.string().trim().min(2),
-  entityId: z.string().min(1),
-  clientId: optionalUuid,
-  leadId: optionalUuid,
-  projectId: optionalUuid,
-});
-export const allowedFileEntityTypes = [
-  "Lead",
-  "Client",
-  "Project",
-  "KnowledgeBase",
-  "Task",
-  "Expense",
-  "ActivityLog",
-] as const;
+export const referralSchema = z.object({ affiliateId: z.string().min(1), leadId: optionalUuid, clientId: optionalUuid, status: z.string().trim().min(2).default("PENDING") });
+export const commissionSchema = z.object({ affiliateId: z.string().min(1), quoteId: optionalUuid, projectId: optionalUuid, paymentId: optionalUuid, status: z.string().trim().min(2), amountCents: z.coerce.number().int().min(1), commissionType: z.enum(["ONCE_OFF", "RECURRING"]) });
+export const campaignSchema = z.object({ name: z.string().trim().min(2), platform: z.string().trim().min(2), targetIndustry: optionalText, offerMessage: optionalText, numberContacted: cents, replies: cents, callsBooked: cents, quotesSent: cents, dealsClosed: cents });
+export const contentItemSchema = z.object({ title: z.string().trim().min(2), status: z.enum(contentStatuses), platform: optionalText, postUrl: optionalText, performanceNotes: optionalText, leadsGenerated: cents });
+export const knowledgeBaseSchema = z.object({ title: z.string().trim().min(2), category: z.enum(knowledgeCategories), body: z.string().trim().min(10), visibility: z.enum(["INTERNAL", "TEAM", "PRIVATE"]) });
+export const noteSchema = z.object({ body: z.string().trim().min(2), entityType: z.string().trim().min(2), entityId: z.string().min(1), clientId: optionalUuid, leadId: optionalUuid, projectId: optionalUuid });
+export const allowedFileEntityTypes = ["Lead", "Client", "Project", "KnowledgeBase"] as const;
 export const allowedFileMimeTypes = [
   "application/pdf",
   "image/jpeg",
@@ -252,111 +170,22 @@ export const allowedFileMimeTypes = [
 ] as const;
 export const maxUploadFileSizeBytes = 10 * 1024 * 1024;
 
-export const fileEntitySchema = z.object({
-  entityType: z.enum(allowedFileEntityTypes),
-  entityId: z.string().uuid(),
-  clientId: optionalUuid,
-  leadId: optionalUuid,
-  projectId: optionalUuid,
-  knowledgeBaseItemId: optionalUuid,
-});
-export const fileRecordSchema = fileEntitySchema.extend({
-  filename: z.string().trim().min(2),
-  url: z.string().trim().url(),
-  mimeType: optionalText,
-});
+export const fileEntitySchema = z.object({ entityType: z.enum(allowedFileEntityTypes), entityId: z.string().uuid(), clientId: optionalUuid, leadId: optionalUuid, projectId: optionalUuid, knowledgeBaseItemId: optionalUuid });
+export const fileRecordSchema = fileEntitySchema.extend({ filename: z.string().trim().min(2), url: z.string().trim().url(), mimeType: optionalText });
 export const uploadFileSchema = fileEntitySchema.extend({
   filename: z.string().trim().min(2),
   mimeType: z.enum(allowedFileMimeTypes),
   size: z.number().int().min(1).max(maxUploadFileSizeBytes),
 });
-export const checklistTemplateSchema = z.object({
-  id: optionalUuid,
-  name: z.string().trim().min(2),
-  serviceId: optionalUuid,
-  description: optionalText,
-  firstItemTitle: optionalText,
-  isActive: z.boolean().default(true),
-});
-export const checklistItemSchema = z.object({
-  id: optionalUuid,
-  templateId: z.string().min(1),
-  title: z.string().trim().min(2),
-  description: optionalText,
-  sortOrder: z.coerce.number().int().min(0).default(0),
-});
-export const projectChecklistSchema = z.object({
-  id: z.string().min(1),
-  status: z.enum(taskStatuses),
-});
+export const checklistTemplateSchema = z.object({ id: optionalUuid, name: z.string().trim().min(2), serviceId: optionalUuid, description: optionalText, firstItemTitle: optionalText, isActive: z.boolean().default(true) });
+export const checklistItemSchema = z.object({ id: optionalUuid, templateId: z.string().min(1), title: z.string().trim().min(2), description: optionalText, sortOrder: z.coerce.number().int().min(0).default(0) });
+export const projectChecklistSchema = z.object({ id: z.string().min(1), status: z.enum(taskStatuses) });
 
-export const serviceSchema = z.object({
-  id: optionalUuid,
-  name: z.string().trim().min(2),
-  category: z.string().trim().min(2),
-  description: z.string().trim().min(5),
-  baseOnceOffCents: cents,
-  baseMonthlyCents: cents,
-  isActive: z.boolean().default(true),
-});
-export const interactionEventSchema = z.object({
-  entityType: z.enum(["Lead", "Client"]),
-  leadId: optionalUuid,
-  clientId: optionalUuid,
-  eventType: z.enum(["CALL", "EMAIL", "MESSAGE", "TASK", "OTHER"]),
-  direction: z.enum(["OUTBOUND", "RECEIVED", "INTERNAL"]),
-  summary: z.string().trim().min(2),
-  objections: optionalText,
-  outcome: optionalText,
-  taskId: optionalUuid,
-});
-export const bookEventSchema = z.object({
-  entityType: z.enum(["Lead", "Client"]),
-  leadId: optionalUuid,
-  clientId: optionalUuid,
-  eventType: z.enum(["CALL", "MEETING", "FOLLOW_UP", "OTHER"]),
-  title: z.string().trim().min(2),
-  eventAt: optionalDate,
-  notes: optionalText,
-  assignedToId: optionalUuid,
-});
-export const linkedTaskSchema = z.object({
-  entityType: z.enum(["Lead", "Client"]),
-  leadId: optionalUuid,
-  clientId: optionalUuid,
-  title: z.string().trim().min(2),
-  description: optionalText,
-  dueDate: optionalDate,
-  assignedToId: optionalUuid,
-});
-export const leadCallSchema = z.object({
-  leadId: z.string().min(1),
-  callSummary: z.string().trim().min(2),
-  objections: optionalText,
-  outcome: z.string().trim().min(2),
-  nextAction: optionalText,
-  bookedCallAt: optionalDate,
-  assignedToId: optionalUuid,
-});
-export const taskStatusSchema = z.object({
-  id: z.string().min(1),
-  status: z.enum(taskStatuses),
-  assignedToId: optionalUuid,
-});
-export const companySettingsSchema = z.object({
-  companyName: z.string().trim().min(2),
-  billingEmail: optionalEmail,
-  bankName: optionalText,
-  bankAccountName: optionalText,
-  bankAccountNumber: optionalText,
-  bankBranchCode: optionalText,
-  paymentTerms: optionalText,
-  quoteFooter: optionalText,
-  invoiceFooter: optionalText,
-});
-export const documentTemplateSchema = z.object({
-  name: z.string().trim().min(2),
-  type: z.enum(documentTemplateTypes),
-  content: z.string().trim().min(10),
-  isDefault: z.boolean().default(false),
-});
+export const serviceSchema = z.object({ id: optionalUuid, name: z.string().trim().min(2), category: z.string().trim().min(2), description: z.string().trim().min(5), baseOnceOffCents: cents, baseMonthlyCents: cents, isActive: z.boolean().default(true) });
+export const interactionEventSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, eventType: z.enum(["CALL", "EMAIL", "MESSAGE", "TASK", "OTHER"]), direction: z.enum(["OUTBOUND", "RECEIVED", "INTERNAL"]), summary: z.string().trim().min(2), objections: optionalText, outcome: optionalText, taskId: optionalUuid });
+export const bookEventSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, eventType: z.enum(["CALL", "MEETING", "FOLLOW_UP", "OTHER"]), title: z.string().trim().min(2), eventAt: optionalDate, notes: optionalText, assignedToId: optionalUuid });
+export const linkedTaskSchema = z.object({ entityType: z.enum(["Lead", "Client"]), leadId: optionalUuid, clientId: optionalUuid, title: z.string().trim().min(2), description: optionalText, dueDate: optionalDate, assignedToId: optionalUuid });
+export const leadCallSchema = z.object({ leadId: z.string().min(1), callSummary: z.string().trim().min(2), objections: optionalText, outcome: z.string().trim().min(2), nextAction: optionalText, bookedCallAt: optionalDate, assignedToId: optionalUuid });
+export const taskStatusSchema = z.object({ id: z.string().min(1), status: z.enum(taskStatuses), assignedToId: optionalUuid });
+export const companySettingsSchema = z.object({ companyName: z.string().trim().min(2), billingEmail: optionalEmail, bankName: optionalText, bankAccountName: optionalText, bankAccountNumber: optionalText, bankBranchCode: optionalText, paymentTerms: optionalText, quoteFooter: optionalText, invoiceFooter: optionalText });
+export const documentTemplateSchema = z.object({ name: z.string().trim().min(2), type: z.enum(documentTemplateTypes), content: z.string().trim().min(10), isDefault: z.boolean().default(false) });
