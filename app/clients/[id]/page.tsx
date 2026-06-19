@@ -4,6 +4,7 @@ import { AppShell } from "@/components/app-shell";
 import {
   ActivityWorkflowForm,
   ClientForm,
+  FileRecordForm,
   ProjectForm,
   QuoteForm,
   SupportTicketForm,
@@ -103,23 +104,6 @@ export default async function ClientDetail({
               variant="ghost"
             >
               <ClientForm client={client} />
-            </ModalPanel>
-            <ModalPanel
-              title="Activity workflow"
-              triggerLabel="Activity"
-              variant="ghost"
-            >
-              <ActivityWorkflowForm
-                entityType="Client"
-                clientId={client.id}
-                users={users}
-                tasks={tasks.filter(
-                  (task) =>
-                    task.client_id === client.id && task.status !== "DONE",
-                )}
-                redirectTo={redirectTo}
-                defaultTitle={`Follow up with ${client.company_name}`}
-              />
             </ModalPanel>
             <ModalPanel title="Create quote" triggerLabel="Add quote">
               <QuoteForm
@@ -248,7 +232,12 @@ export default async function ClientDetail({
             </div>
           </Card>
           <Card>
-            <h2 className="text-lg font-semibold">Files</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Files</h2>
+              <ModalPanel title="Upload client file" triggerLabel="Upload file" variant="ghost">
+                <FileRecordForm entityType="Client" entityId={client.id} clientId={client.id} redirectTo={redirectTo} />
+              </ModalPanel>
+            </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
                 <a

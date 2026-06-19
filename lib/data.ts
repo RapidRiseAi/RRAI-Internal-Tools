@@ -38,5 +38,6 @@ export async function listReferrals() { return genericList<Referral>("referrals"
 export async function listCommissions() { return genericList<Commission>("commissions"); }
 export async function listCompanySettings() { if (!hasSupabaseConfig()) return null; const { data } = await getSupabaseAdmin().from("company_settings").select("*").eq("id", true).maybeSingle(); return data as CompanySettings | null; }
 export async function listDocumentTemplates() { return genericList<DocumentTemplate>("document_templates"); }
+export async function listPayrollItems() { if (!hasSupabaseConfig()) return [] as import("./types").PayrollItem[]; const { data } = await getSupabaseAdmin().from("payroll_items").select("*, user:users(id,name,title)").order("created_at", { ascending: false }); return (data ?? []) as import("./types").PayrollItem[]; }
 
 export type ModuleData = { quotes: Quote[]; projects: Project[]; invoices: Invoice[]; retainers: Retainer[]; tickets: SupportTicket[]; affiliates: Affiliate[]; campaigns: Campaign[]; content: ContentItem[]; kb: KnowledgeBaseItem[]; };

@@ -13,6 +13,14 @@ export type User = {
   role_id: string;
   role?: Role;
   status: "ACTIVE" | "INACTIVE";
+  employment_type: string;
+  department: string | null;
+  specialties: string | null;
+  pay_type: string;
+  pay_rate_cents: number;
+  start_date: string | null;
+  emergency_contact: string | null;
+  employee_notes: string | null;
   title: string | null;
   phone: string | null;
   created_at: string;
@@ -172,6 +180,8 @@ export type FileRecord = { id: string; filename: string; url: string; mime_type:
 export type Invoice = { id: string; invoice_number: string; status: string; amount_cents: number; client_id: string; quote_id: string | null; due_date: string | null; issued_at: string | null; created_at: string; updated_at: string; };
 export type InvoiceItem = { id: string; invoice_id: string; description: string; quantity: number; unit_amount_cents: number; sort_order: number; };
 export type Payment = { id: string; invoice_id: string; amount_cents: number; status: string; paid_at: string | null; method: string | null; reference: string | null; created_at: string; updated_at: string; };
+export type PayrollRun = { id: string; period_start: string; period_end: string; status: string; notes: string | null; created_by: string | null; created_at: string; updated_at: string; };
+export type PayrollItem = { id: string; payroll_run_id: string; user_id: string; role_snapshot: string | null; pay_type: string; hours: number; gross_pay_cents: number; deductions_cents: number; net_pay_cents: number; notes: string | null; paid_at: string | null; created_at: string; user?: Pick<User, "id" | "name" | "title"> | null; };
 export type Retainer = { id: string; type: string; status: string; monthly_amount_cents: number; client_id: string; next_billing_date: string | null; created_at: string; updated_at: string; };
 export type Vendor = { id: string; name: string; category: string | null; contact_name: string | null; email: string | null; phone: string | null; website: string | null; notes: string | null; created_at: string; updated_at: string; };
 export type Expense = { id: string; vendor: string; category: string; amount_cents: number; status: string; expense_date: string; recurrence: "NONE" | "WEEKLY" | "MONTHLY" | "QUARTERLY" | "ANNUAL"; next_due_date: string | null; notes: string | null; client_id: string | null; project_id: string | null; created_by: string | null; created_at: string; updated_at: string; };

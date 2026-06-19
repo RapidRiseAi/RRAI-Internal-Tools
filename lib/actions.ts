@@ -39,6 +39,8 @@ import {
   leadSchema,
   noteSchema,
   paymentSchema,
+  payrollItemSchema,
+  payrollRunSchema,
   projectChecklistSchema,
   projectSchema,
   quoteSchema,
@@ -760,20 +762,38 @@ export async function upsertUser(
       title: str(formData, "title"),
       phone: str(formData, "phone"),
       status: str(formData, "status"),
+      employmentType: str(formData, "employmentType") || "FULL_TIME",
+      department: str(formData, "department"),
+      specialties: str(formData, "specialties"),
+      payType: str(formData, "payType") || "SALARY",
+      payRateCents: randsToCents(formData.get("payRateRands")),
+      startDate: str(formData, "startDate"),
+      emergencyContact: str(formData, "emergencyContact"),
+      employeeNotes: str(formData, "employeeNotes"),
     });
-    if (!parsed.password)
+    const id = str(formData, "id") || undefined;
+    if (!id && !parsed.password)
       throw new Error("Password is required for new users.");
-    const { error } = await getSupabaseAdmin()
-      .from("users")
-      .insert({
-        name: parsed.name,
-        email: parsed.email,
-        password_hash: await bcrypt.hash(parsed.password, 12),
-        role_id: parsed.roleId,
-        title: parsed.title ?? null,
-        phone: parsed.phone ?? null,
-        status: parsed.status,
-      });
+    const payload = {
+      name: parsed.name,
+      email: parsed.email,
+      role_id: parsed.roleId,
+      title: parsed.title ?? null,
+      phone: parsed.phone ?? null,
+      status: parsed.status,
+      employment_type: parsed.employmentType,
+      department: parsed.department ?? null,
+      specialties: parsed.specialties ?? null,
+      pay_type: parsed.payType,
+      pay_rate_cents: parsed.payRateCents,
+      start_date: parsed.startDate?.toISOString().slice(0, 10) ?? null,
+      emergency_contact: parsed.emergencyContact ?? null,
+      employee_notes: parsed.employeeNotes ?? null,
+      ...(parsed.password ? { password_hash: await bcrypt.hash(parsed.password, 12) } : {}),
+    };
+    const { error } = id
+      ? await getSupabaseAdmin().from("users").update(payload).eq("id", id)
+      : await getSupabaseAdmin().from("users").insert(payload);
     if (error) throw error;
     revalidatePath("/settings");
     redirect("/settings");
@@ -2270,20 +2290,105 @@ export async function upsertCompanySettings(formData: FormData) {
   redirect("/settings");
 }
 
+export async function createPayrollRun(formData: FormData) {
+  const user = await requirePermission(permissions.payrollWrite);
+  if (!(await reserveSubmission(user.id, formData, "payroll-run:create")))
+    redirect("/payroll");
+  const parsed = payrollRunSchema.parse({
+    periodStart: str(formData, "periodStart"),
+    periodEnd: str(formData, "periodEnd"),
+    status: str(formData, "status") || "DRAFT",
+    notes: str(formData, "notes"),
+  });
+  const { data, error } = await getSupabaseAdmin()
+    .from("payroll_runs")
+    .insert({
+      period_start: parsed.periodStart.toISOString().slice(0, 10),
+      period_end: parsed.periodEnd.toISOString().slice(0, 10),
+      status: parsed.status,
+      notes: parsed.notes ?? null,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await logActivity({
+    action: "PAYROLL_RUN_CREATED",
+    entityType: "PayrollRun",
+    entityId: data.id,
+    actorId: user.id,
+    message: "Payroll run created",
+  });
+  revalidatePath("/payroll");
+  redirect("/payroll");
+}
+
+export async function addPayrollItem(formData: FormData) {
+  const user = await requirePermission(permissions.payrollWrite);
+  if (!(await reserveSubmission(user.id, formData, "payroll-item:create")))
+    redirect("/payroll");
+  const parsed = payrollItemSchema.parse({
+    payrollRunId: str(formData, "payrollRunId"),
+    userId: str(formData, "userId"),
+    payType: str(formData, "payType"),
+    hours: str(formData, "hours"),
+    grossPayCents: randsToCents(formData.get("grossPayRands")),
+    deductionsCents: randsToCents(formData.get("deductionsRands")),
+    notes: str(formData, "notes"),
+  });
+  const selectedUser = await getSupabaseAdmin()
+    .from("users")
+    .select("title,role:roles(name)")
+    .eq("id", parsed.userId)
+    .maybeSingle();
+  const role = selectedUser.data?.role as { name?: string } | { name?: string }[] | null | undefined;
+  const roleName = Array.isArray(role) ? role[0]?.name : role?.name;
+  const roleSnapshot = [selectedUser.data?.title, roleName].filter(Boolean).join(" / ") || null;
+  const { data, error } = await getSupabaseAdmin()
+    .from("payroll_items")
+    .insert({
+      payroll_run_id: parsed.payrollRunId,
+      user_id: parsed.userId,
+      role_snapshot: roleSnapshot,
+      pay_type: parsed.payType,
+      hours: parsed.hours,
+      gross_pay_cents: parsed.grossPayCents,
+      deductions_cents: parsed.deductionsCents,
+      notes: parsed.notes ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await logActivity({
+    action: "PAYROLL_ITEM_ADDED",
+    entityType: "PayrollItem",
+    entityId: data.id,
+    actorId: user.id,
+    message: "Payroll line item added",
+  });
+  revalidatePath("/payroll");
+  redirect("/payroll");
+}
+
 export async function createDocumentTemplate(formData: FormData) {
   await requirePermission(permissions.settingsManage);
   const parsed = documentTemplateSchema.parse({
+    id: str(formData, "id"),
     name: str(formData, "name"),
     type: str(formData, "type"),
     content: str(formData, "content"),
     isDefault: bool(formData, "isDefault"),
   });
-  await getSupabaseAdmin().from("document_templates").insert({
+  const payload = {
     name: parsed.name,
     type: parsed.type,
     content: parsed.content,
     is_default: parsed.isDefault,
-  });
+  };
+  const result = parsed.id
+    ? await getSupabaseAdmin().from("document_templates").update(payload).eq("id", parsed.id)
+    : await getSupabaseAdmin().from("document_templates").insert(payload);
+  if (result.error) throw result.error;
   revalidatePath("/settings");
   redirect("/settings");
 }

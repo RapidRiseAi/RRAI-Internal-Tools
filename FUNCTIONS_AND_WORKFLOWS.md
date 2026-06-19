@@ -1,94 +1,148 @@
-# Functions and Workflows
+# Rapid Rise OS — Functions and Workflows Map
 
-This document maps the current Rapid Rise OS workflows so missing connections can be found quickly before future improvements.
+This document is the operational map for the app. It explains what each module does, how records connect, what actions are available, and which gaps remain so future work can be prioritized without rediscovering the codebase.
 
-## Global patterns
+## Core architecture
 
-- Most create/update workflows are implemented as server actions in `lib/actions.ts` and validate form input with schemas in `lib/validation.ts`.
-- List/detail pages fetch database records through helpers in `lib/data.ts`.
-- Modal-based forms in `components/forms.tsx`, `components/quote-form.tsx`, and `components/invoice-form.tsx` keep the main pages focused on summary cards and lists.
-- Each mutating workflow checks permissions in `lib/auth.ts`, reserves a submission key when needed, writes to Supabase, logs activity where appropriate, revalidates the impacted route, and redirects or returns an action-state error.
-- File records can be attached to leads, clients, projects, knowledge base items, tasks, expenses, and activity logs. Uploaded files are stored in the `internal-files` Supabase storage bucket and linked through the `files` table.
+- **UI shell and navigation:** `components/app-shell.tsx` renders the authenticated app layout, permission-filtered navigation, quick lead/task links, and logout.
+- **Data reads:** `lib/data.ts` contains server-only list/get helpers. Most pages call these helpers in parallel with `Promise.all`.
+- **Writes and workflows:** `lib/actions.ts` contains server actions for create/update workflows. Actions validate input, check permissions, reserve submission keys, write to Supabase, log activity where useful, revalidate paths, and redirect.
+- **Validation:** `lib/validation.ts` contains Zod schemas for form input.
+- **Reusable forms:** `components/forms.tsx`, `components/quote-form.tsx`, and `components/invoice-form.tsx` provide modal-based workflows.
+- **Files:** files upload to the `internal-files` storage bucket and save signed URLs in the `files` table with typed links to leads, clients, projects, knowledge base items, expenses, tasks, and activity logs.
+- **Activity logs:** important workflow events write `activity_logs` entries so entity timelines can show what happened.
 
-## Leads
+## Permissions and roles
 
-1. A user opens the Leads page and creates or edits a lead with `LeadForm`.
-2. `upsertLead` validates company/contact details, source, service interest, stage, score, follow-up, next action, pain points, and assignee.
-3. Lead detail pages show notes, files, and activity history.
-4. The activity workflow can add notes, book events, upload files, and assign tasks linked to a lead.
-5. Accepted sales outcomes can convert leads into clients through the quote acceptance workflow.
+- Roles are seeded in the `roles` table and mapped in `rolePermissionMap`.
+- Pages call `requirePagePermission(...)`; server actions call `requirePermission(...)`.
+- Key permissions include dashboard, leads, clients, quotes, projects, tasks, billing, payroll, support, marketing, and settings.
+- Settings now shows users and role permission cards as clickable modals so admins can inspect users and permission coverage.
 
-## Clients
+## Leads workflow
 
-1. A user creates or edits a client with `ClientForm`.
-2. `upsertClient` records company status, industry, website, contact details, next action, and MRR.
-3. Client detail pages aggregate related projects, notes, files, tasks, and activity.
-4. The activity workflow supports quick note, event, file, and task actions for the client.
+1. Leads are created or edited with `LeadForm`.
+2. A lead tracks company, contact, email, phone, source, service interest, stage, score, follow-up date, next action, pain points, and owner.
+3. Lead detail page actions include edit lead, create quote, convert to client, and archive.
+4. The duplicate top Activity button was removed; the Quick actions card remains the place to log notes, assign tasks, book events, or attach workflow files.
+5. The Files card now has its own Upload file button directly above the file list for fast standalone uploads.
+6. Lead notes, files, and activity history are displayed on the lead detail page.
+7. Lead-to-client conversion creates a client and links the lead to the converted client.
 
-## Quotes
+## Clients workflow
 
-1. A user creates a quote from the Quotes page with `QuoteForm`.
-2. The form supports a quote header plus one or more line items.
-3. Line items can be custom or populated from services. Totals are calculated client-side and then recomputed server-side.
-4. `upsertQuote` writes the quote, replaces quote line items, logs activity, and now surfaces quote line-item insert errors instead of silently continuing.
-5. Users can open a quote PDF route for generated output.
-6. Accepting a quote can create follow-on project and invoice records according to business rules.
+1. Clients are created or edited with `ClientForm`.
+2. A client tracks company status, industry, website, primary email/phone, next action, and MRR.
+3. Client detail actions include edit client, create quote, create project, and create support ticket.
+4. The duplicate top Activity button was removed; Quick actions remains the consolidated note/task/event/file workflow.
+5. The Files card now has its own Upload file button directly above the client file list.
+6. Client detail aggregates projects, notes, files, invoices, tickets, retainers, quotes, and timeline activity.
 
-## Projects
+## Quotes workflow
 
-1. A project is created with `ProjectForm`, usually connected to a client and optionally to a quote.
-2. Projects track status, stage, priority, deadline, progress, blocker, assignee, and optional seeded checklist templates.
-3. Project detail supports creating linked tasks, adding notes, and uploading files.
-4. Project checklists can be updated item-by-item as delivery progresses.
+1. Quotes are created with `QuoteForm` from the Quotes page, lead detail, or client detail.
+2. Quote line items can be custom or populated from the services catalogue.
+3. Totals are calculated in the browser and recalculated server-side before saving.
+4. `upsertQuote` inserts or updates the quote, replaces quote line items, checks line-item insert errors, logs activity, and redirects.
+5. Quote PDFs render from the quote PDF route.
+6. Accepting a quote can create downstream project/invoice records according to business rules.
 
-## Tasks
+## Projects workflow
 
-1. Tasks are created from the Tasks page, project detail, or activity workflow.
-2. `upsertTask` stores title, description, type, status, priority, due date, linked client/project, and assignee.
-3. Tasks can be tied to leads or clients indirectly through activity workflow context and activity logs.
+1. Projects are created from Projects or client detail.
+2. Projects track client, quote, status, stage, priority, deadline, progress, blocker, assignee, and optional seeded checklist template.
+3. Project list cards link to project detail.
+4. Project detail supports editing, linked tasks, notes, checklists, file uploads, and activity review.
+5. Project files are intended to be standalone resources for delivery assets, URLs, credentials, and handover documents.
 
-## Billing, invoices, payments, retainers, expenses, and vendors
+## Tasks workflow
 
-### Invoices and payments
+1. Tasks are created from Tasks, project detail, or activity workflow.
+2. Tasks track title, description, type, status, priority, due date, client, project, assignee, creator, and completion state.
+3. Task rows currently allow status and assignee updates from an Update modal.
+4. Future improvement: add a dedicated task detail page or full edit modal everywhere tasks are listed, including notes and files.
 
-1. A user creates invoices with `InvoiceForm` and can optionally seed invoice line items from quote items.
-2. `upsertInvoice` writes invoice totals and related line items.
-3. Payments are recorded with `PaymentForm`; paid payments update invoice status to paid.
+## Billing workflow
+
+### Invoices
+
+1. Invoices are created with `InvoiceForm`.
+2. Invoices can reference a quote and seed line items from quote items.
+3. Invoice totals are stored on the invoice record; detailed rows are stored in `invoice_items`.
+4. Invoice PDFs render from the billing PDF route.
+
+### Payments
+
+1. Payments are recorded against invoices.
+2. A paid payment updates the invoice status to paid.
+3. Payment activity is logged.
 
 ### Retainers
 
-1. Retainers capture the client, type, status, monthly amount, and next billing date.
-2. Active retainers contribute to the finance page MRR summary.
+1. Retainers track client, type, status, monthly amount, and next billing date.
+2. Active retainers feed Billing MRR summary cards.
 
 ### Expenses
 
-1. The first expense question is now the expense type: one-time, weekly recurring, monthly recurring, quarterly recurring, or annual recurring.
-2. For one-time expenses, the form asks only for the expense date.
-3. For recurring expenses, the form asks for the first due date and an optional next due date. If next due date is omitted, the server uses the first due date or today.
-4. Expense records can include vendor name, category, amount, status, notes, client/project links, and receipt attachments.
+1. The first field is now expense type: one-time, weekly recurring, monthly recurring, quarterly recurring, or annual recurring.
+2. One-time expenses only show expense date.
+3. Recurring expenses show first due date and optional next due date.
+4. Expense records track vendor name, category, amount, status, notes, client/project links, recurrence, and attachments.
+5. Recurring expense scheduling stores recurrence metadata; automated creation of future expense instances remains a future improvement.
 
 ### Vendors
 
-1. Vendors can now be added from Billing.
-2. A vendor records name, category, contact person, email, phone, website, and notes.
-3. The Billing page lists vendor contact details so expenses and supplier relationships can be managed from the finance workspace.
+1. Vendors are added from Billing.
+2. Vendors track name, category, contact, email, phone, website, and notes.
+3. Billing shows vendor count and vendor contact cards.
+4. Future improvement: add `vendor_id` to expenses so expenses can be linked directly to vendor records instead of plain-text vendor names.
 
-## Files and uploads
+## Payroll and employee workflow
 
-1. Detail pages and activity workflows use `FileRecordForm` or the activity workflow upload modal.
-2. Upload inputs now accept multiple files in a single submission.
-3. Each uploaded file is validated, stored, inserted into the `files` table, and associated with the relevant typed entity IDs.
-4. External URL links can still be saved one at a time with optional MIME type metadata.
+1. Payroll is available from the main navigation for users with payroll permission.
+2. Employees are managed through the same `users` table, extended with employment type, department, specialties, pay type, pay rate, start date, emergency contact, and employee notes.
+3. Adding or editing an employee lets admins assign login role/access, job title, specialties, department, and compensation details in one form.
+4. Payroll runs define a pay period, status, notes, creator, and timestamps.
+5. Payroll items connect an employee to a payroll run and store pay type, hours, gross pay, deductions, generated net pay, role snapshot, notes, and paid timestamp.
+6. Payroll summary cards show active employees, run count, item count, and total net pay.
+7. Future improvement: add approval workflows, payslip PDFs, payment exports, tax/benefit deductions, and employee self-service profiles.
 
-## Settings
+## Files and uploads workflow
 
-1. Company settings store billing/footer details used by generated documents.
-2. Services, document templates, users, roles, workflow automations, and checklist templates are managed from Settings.
-3. Checklist templates can seed project delivery checklists.
+1. `FileRecordForm` supports multiple file selection.
+2. Each selected file is validated, uploaded, signed, inserted into `files`, and typed to the correct entity.
+3. Activity workflow attachment uploads also support multiple files.
+4. External URL links can still be saved one at a time.
+5. Lead and client detail pages now expose dedicated Upload file buttons directly above their Files sections.
+6. Future improvement: add file categories, versioning, delete/archive controls, and upload progress UI.
 
-## Known improvement opportunities
+## Settings workflow
 
-- Vendor records are currently separate from expense vendor names; a future improvement could add `vendor_id` to expenses and auto-fill vendor details.
-- Recurring expense scheduling stores recurrence and next due date, but automated generation of the next expense occurrence is not yet implemented.
-- File upload progress is browser-native only; a future UI enhancement could add per-file progress and retry states.
-- Quote acceptance creates downstream records, but more visual workflow status could make the quote-to-project-to-invoice chain easier to audit.
+1. Company settings manage company name, billing email, bank details, payment terms, quote footer, and invoice footer.
+2. Document templates are clickable. Clicking a template opens a modal to view and edit content, type, name, and default status.
+3. Checklist templates can be managed from the checklist modal and can seed project delivery checklists.
+4. Users are clickable. Clicking a user opens a modal to edit access, role, employee profile, specialties, and pay settings.
+5. Role permission cards are clickable and show their permission lists.
+6. Services are managed from the dedicated Services page and are reused by quotes.
+
+## Marketing, affiliates, support, and knowledge base
+
+- Marketing stores campaigns and content items with performance metrics.
+- Affiliates track partners, referrals, commissions, and commission states.
+- Support tickets connect clients/projects to issue categories, priorities, statuses, assignments, and resolution notes.
+- Knowledge base items store SOPs/articles and can have uploaded knowledge files.
+
+## Missing connections and improvement opportunities
+
+1. Link expenses to vendor IDs, not only vendor names.
+2. Add automated recurring expense generation and reminders.
+3. Add full CRUD/detail pages for tasks, notes, files, templates, payroll runs, and payroll items.
+4. Add delete/archive flows for files, notes, vendors, payroll runs, and document templates.
+5. Add payroll approvals, payslip PDFs, payment export files, tax/benefit fields, and contractor invoice matching.
+6. Add project notes/files inline editing and richer project health dashboards.
+7. Add dashboard global search that links directly to leads, clients, projects, tasks, files, templates, and employees.
+8. Add notification rules for overdue follow-ups, due tasks, quote expiry, unpaid invoices, support SLA breaches, and payroll approval deadlines.
+9. Add audit trail detail pages to inspect who changed high-risk records such as payroll, permissions, invoices, and quotes.
+10. Add CRM contact records per client/lead so multiple stakeholders can be tracked.
+11. Add role editing UI for custom permission sets instead of only static role permission map display.
+12. Add document template preview with sample data before generating PDFs.

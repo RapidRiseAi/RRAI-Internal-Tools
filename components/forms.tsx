@@ -3,6 +3,7 @@
 import { useActionState, useMemo, useRef, useState } from "react";
 import {
   acceptQuote,
+  addPayrollItem,
   addFileRecord,
   assignLinkedTask,
   addNote,
@@ -11,6 +12,7 @@ import {
   createChecklistTemplate,
   createCommission,
   createDocumentTemplate,
+  createPayrollRun,
   createReferral,
   logInteractionEvent,
   logLeadCall,
@@ -40,8 +42,11 @@ import {
   contentStatuses,
   knowledgeCategories,
   labelize,
+  employmentTypes,
   leadStages,
   paymentStatuses,
+  payTypes,
+  payrollStatuses,
   priorities,
   projectStatuses,
   retainerStatuses,
@@ -57,12 +62,14 @@ import type {
   Client,
   Lead,
   Payment,
+  PayrollRun,
   Project,
   Quote,
   Service,
   SupportTicket,
   Task,
   User,
+  DocumentTemplate,
 } from "@/lib/types";
 import { ModalPanel } from "./modal-panel";
 import { Card, Field, inputClass } from "./ui";
@@ -537,7 +544,7 @@ export function AccountLoginForm({ user }: { user: User }) {
   );
 }
 
-export function UserForm({ roles }: { roles: RoleOption[] }) {
+export function UserForm({ roles, user }: { roles: RoleOption[]; user?: User }) {
   const [state, formAction] = useActionState(upsertUser, { ok: false });
   return (
     <form action={formAction} className="grid gap-4 md:grid-cols-3">
@@ -545,43 +552,36 @@ export function UserForm({ roles }: { roles: RoleOption[] }) {
         <FormError message={state.formError} />
       </div>
       <SubmissionInput scope="upsert-user" />
+      {user?.id ? <input type="hidden" name="id" value={user.id} /> : null}
       <Field label="Name">
-        <input className={inputClass} name="name" required />
+        <input className={inputClass} name="name" defaultValue={user?.name ?? ""} required />
         <FieldError messages={state.fieldErrors?.name} />
       </Field>
       <Field label="Email">
-        <input className={inputClass} name="email" type="email" required />
+        <input className={inputClass} name="email" type="email" defaultValue={user?.email ?? ""} required />
         <FieldError messages={state.fieldErrors?.email} />
       </Field>
       <Field label="Temporary password">
-        <input
-          className={inputClass}
-          name="password"
-          type="password"
-          minLength={10}
-          required
-        />
+        <input className={inputClass} name="password" type="password" minLength={10} required={!user?.id} placeholder={user?.id ? "Leave blank to keep current password" : ""} />
         <FieldError messages={state.fieldErrors?.password} />
       </Field>
       <Field label="Role">
-        <select className={inputClass} name="roleId">
-          {roles.map((role) => (
-            <option key={role.id} value={role.id}>
-              {role.name}
-            </option>
-          ))}
+        <select className={inputClass} name="roleId" defaultValue={user?.role_id ?? ""}>
+          {roles.map((role) => <option key={role.id} value={role.id}>{role.name}</option>)}
         </select>
       </Field>
-      <Field label="Title">
-        <input className={inputClass} name="title" />
-      </Field>
-      <Field label="Phone">
-        <input className={inputClass} name="phone" />
-      </Field>
-      <input type="hidden" name="status" value="ACTIVE" />
-      <div className="md:col-span-3">
-        <SubmitButton>Add employee</SubmitButton>
-      </div>
+      <Field label="Title"><input className={inputClass} name="title" defaultValue={user?.title ?? ""} /></Field>
+      <Field label="Phone"><input className={inputClass} name="phone" defaultValue={user?.phone ?? ""} /></Field>
+      <Field label="Status"><select className={inputClass} name="status" defaultValue={user?.status ?? "ACTIVE"}><option value="ACTIVE">Active</option><option value="INACTIVE">Inactive</option></select></Field>
+      <Field label="Employment type"><select className={inputClass} name="employmentType" defaultValue={user?.employment_type ?? "FULL_TIME"}><Options values={employmentTypes} /></select></Field>
+      <Field label="Department"><input className={inputClass} name="department" defaultValue={user?.department ?? ""} /></Field>
+      <Field label="Specialties"><input className={inputClass} name="specialties" defaultValue={user?.specialties ?? ""} placeholder="SEO, automations, design" /></Field>
+      <Field label="Pay type"><select className={inputClass} name="payType" defaultValue={user?.pay_type ?? "SALARY"}><Options values={payTypes} /></select></Field>
+      <Field label="Pay rate (R)"><input className={inputClass} name="payRateRands" type="number" min="0" defaultValue={user ? Math.round(user.pay_rate_cents / 100) : 0} /></Field>
+      <Field label="Start date"><input className={inputClass} name="startDate" type="date" defaultValue={dateInput(user?.start_date)} /></Field>
+      <Field label="Emergency contact"><input className={inputClass} name="emergencyContact" defaultValue={user?.emergency_contact ?? ""} /></Field>
+      <Field label="Employee notes"><textarea className={inputClass} name="employeeNotes" defaultValue={user?.employee_notes ?? ""} /></Field>
+      <div className="md:col-span-3"><SubmitButton>{user?.id ? "Save employee" : "Add employee"}</SubmitButton></div>
     </form>
   );
 }
@@ -2312,32 +2312,23 @@ export function CompanySettingsForm({
   );
 }
 
-export function DocumentTemplateForm() {
+export function PayrollRunForm() {
+  return <form action={createPayrollRun} className="grid gap-4 md:grid-cols-2"><SubmissionInput scope="create-payroll-run" /><Field label="Period start"><input className={inputClass} name="periodStart" type="date" required /></Field><Field label="Period end"><input className={inputClass} name="periodEnd" type="date" required /></Field><Field label="Status"><select className={inputClass} name="status" defaultValue="DRAFT"><Options values={payrollStatuses} /></select></Field><Field label="Notes"><textarea className={inputClass} name="notes" /></Field><div className="md:col-span-2"><SubmitButton>Create payroll run</SubmitButton></div></form>;
+}
+
+export function PayrollItemForm({ runs, users }: { runs: PayrollRun[]; users: User[] }) {
+  return <form action={addPayrollItem} className="grid gap-4 md:grid-cols-2"><SubmissionInput scope="add-payroll-item" /><Field label="Payroll run"><select className={inputClass} name="payrollRunId" required>{runs.map((run) => <option key={run.id} value={run.id}>{dateInput(run.period_start)} to {dateInput(run.period_end)} • {labelize(run.status)}</option>)}</select></Field><Field label="Employee"><select className={inputClass} name="userId" required>{users.map((user) => <option key={user.id} value={user.id}>{user.name} • {user.title ?? user.role?.name ?? "Team"}</option>)}</select></Field><Field label="Pay type"><select className={inputClass} name="payType" defaultValue="SALARY"><Options values={payTypes} /></select></Field><Field label="Hours"><input className={inputClass} name="hours" type="number" min="0" step="0.25" defaultValue="0" /></Field><Field label="Gross pay (R)"><input className={inputClass} name="grossPayRands" type="number" min="0" required /></Field><Field label="Deductions (R)"><input className={inputClass} name="deductionsRands" type="number" min="0" defaultValue="0" /></Field><Field label="Notes"><textarea className={inputClass} name="notes" /></Field><div className="md:col-span-2"><SubmitButton>Add payroll item</SubmitButton></div></form>;
+}
+
+export function DocumentTemplateForm({ template }: { template?: DocumentTemplate }) {
   return (
     <form action={createDocumentTemplate} className="grid gap-4">
-      <Field label="Template name">
-        <input className={inputClass} name="name" required />
-      </Field>
-      <Field label="Type">
-        <select className={inputClass} name="type">
-          <option value="QUOTE">Quote</option>
-          <option value="INVOICE">Invoice</option>
-          <option value="PROPOSAL">Proposal</option>
-          <option value="HANDOVER">Handover</option>
-        </select>
-      </Field>
-      <Field label="Template content">
-        <textarea
-          className={`${inputClass} min-h-32`}
-          name="content"
-          placeholder="Use placeholders like {{client_name}}, {{quote_title}}, {{amount}}"
-          required
-        />
-      </Field>
-      <label className="flex items-center gap-3 text-sm text-slate-300">
-        <input name="isDefault" type="checkbox" /> Make default
-      </label>
-      <SubmitButton>Add document template</SubmitButton>
+      {template?.id ? <input type="hidden" name="id" value={template.id} /> : null}
+      <Field label="Template name"><input className={inputClass} name="name" defaultValue={template?.name ?? ""} required /></Field>
+      <Field label="Type"><select className={inputClass} name="type" defaultValue={template?.type ?? "QUOTE"}><option value="QUOTE">Quote</option><option value="INVOICE">Invoice</option><option value="PROPOSAL">Proposal</option><option value="HANDOVER">Handover</option></select></Field>
+      <Field label="Template content"><textarea className={`${inputClass} min-h-32`} name="content" defaultValue={template?.content ?? ""} placeholder="Use placeholders like {{client_name}}, {{quote_title}}, {{amount}}" required /></Field>
+      <label className="flex items-center gap-3 text-sm text-slate-300"><input name="isDefault" type="checkbox" defaultChecked={template?.is_default ?? false} /> Make default</label>
+      <SubmitButton>{template?.id ? "Save document template" : "Add document template"}</SubmitButton>
     </form>
   );
 }

@@ -24,6 +24,8 @@ export const permissions = {
   tasksWrite: "tasks:write",
   billingRead: "billing:read",
   billingWrite: "billing:write",
+  payrollRead: "payroll:read",
+  payrollWrite: "payroll:write",
   supportRead: "support:read",
   supportWrite: "support:write",
   marketingRead: "marketing:read",
@@ -40,9 +42,9 @@ export const rolePermissionMap: Record<string, string[]> = {
   "Project Manager": [permissions.dashboard, permissions.clientsRead, permissions.quotesRead, permissions.projectsRead, permissions.projectsWrite, permissions.tasksRead, permissions.tasksWrite, permissions.supportRead],
   "Developer/Designer": [permissions.dashboard, permissions.clientsRead, permissions.projectsRead, permissions.tasksRead, permissions.tasksWrite, permissions.supportRead],
   Support: [permissions.dashboard, permissions.clientsRead, permissions.projectsRead, permissions.tasksRead, permissions.tasksWrite, permissions.supportRead, permissions.supportWrite],
-  Finance: [permissions.dashboard, permissions.clientsRead, permissions.quotesRead, permissions.billingRead, permissions.billingWrite],
+  Finance: [permissions.dashboard, permissions.clientsRead, permissions.quotesRead, permissions.billingRead, permissions.billingWrite, permissions.payrollRead, permissions.payrollWrite],
   "Affiliate/Partner": [permissions.dashboard],
-  "Read-only": [permissions.dashboard, permissions.leadsRead, permissions.clientsRead, permissions.quotesRead, permissions.projectsRead, permissions.tasksRead, permissions.billingRead, permissions.supportRead, permissions.marketingRead],
+  "Read-only": [permissions.dashboard, permissions.leadsRead, permissions.clientsRead, permissions.quotesRead, permissions.projectsRead, permissions.tasksRead, permissions.billingRead, permissions.payrollRead, permissions.supportRead, permissions.marketingRead],
 };
 
 export const leadStages = ["NEW_LEAD", "CONTACTED", "REPLIED", "DISCOVERY_NEEDED", "DISCOVERY_COMPLETED", "QUOTE_NEEDED", "QUOTE_SENT", "NEGOTIATING", "WON", "LOST", "FOLLOW_UP_LATER"] as const;
@@ -61,6 +63,9 @@ export const affiliateStatuses = ["ACTIVE", "PAUSED", "INACTIVE"] as const;
 export const commissionStatuses = ["PENDING", "APPROVED", "PAYABLE", "PAID", "CANCELLED", "DISPUTED"] as const;
 export const knowledgeCategories = ["SOP", "Sales", "Troubleshooting", "Handover", "Pricing", "Internal"] as const;
 export const contentStatuses = ["IDEA", "DRAFT", "SCHEDULED", "PUBLISHED", "ARCHIVED"] as const;
+export const employmentTypes = ["FULL_TIME", "PART_TIME", "CONTRACTOR", "INTERN"] as const;
+export const payTypes = ["SALARY", "HOURLY", "CONTRACT"] as const;
+export const payrollStatuses = ["DRAFT", "APPROVED", "PAID", "CANCELLED"] as const;
 export const documentTemplateTypes = ["QUOTE", "INVOICE", "PROPOSAL", "HANDOVER"] as const;
 
 export const coreServices = [

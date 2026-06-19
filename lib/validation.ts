@@ -4,6 +4,9 @@ import {
   clientStatuses,
   contentStatuses,
   documentTemplateTypes,
+  employmentTypes,
+  payTypes,
+  payrollStatuses,
   invoiceStatuses,
   knowledgeCategories,
   leadStages,
@@ -83,6 +86,14 @@ export const userSchema = z.object({
   title: optionalText,
   phone: optionalText,
   status: z.enum(["ACTIVE", "INACTIVE"]),
+  employmentType: z.enum(employmentTypes).default("FULL_TIME"),
+  department: optionalText,
+  specialties: optionalText,
+  payType: z.enum(payTypes).default("SALARY"),
+  payRateCents: cents,
+  startDate: optionalDate,
+  emergencyContact: optionalText,
+  employeeNotes: optionalText,
 });
 
 export const accountLoginSchema = z.object({
@@ -364,7 +375,25 @@ export const companySettingsSchema = z.object({
   quoteFooter: optionalText,
   invoiceFooter: optionalText,
 });
+export const payrollRunSchema = z.object({
+  periodStart: z.string().min(1).transform((value) => new Date(value)),
+  periodEnd: z.string().min(1).transform((value) => new Date(value)),
+  status: z.enum(payrollStatuses).default("DRAFT"),
+  notes: optionalText,
+});
+
+export const payrollItemSchema = z.object({
+  payrollRunId: z.string().min(1),
+  userId: z.string().min(1),
+  payType: z.enum(payTypes),
+  hours: z.coerce.number().min(0).default(0),
+  grossPayCents: z.coerce.number().int().min(0),
+  deductionsCents: z.coerce.number().int().min(0).default(0),
+  notes: optionalText,
+});
+
 export const documentTemplateSchema = z.object({
+  id: optionalText,
   name: z.string().trim().min(2),
   type: z.enum(documentTemplateTypes),
   content: z.string().trim().min(10),

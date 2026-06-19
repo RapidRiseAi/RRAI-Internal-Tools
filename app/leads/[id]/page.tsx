@@ -1,7 +1,7 @@
 import { randomUUID } from "crypto";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
-import { ActivityWorkflowForm, LeadForm, QuoteForm } from "@/components/forms";
+import { ActivityWorkflowForm, FileRecordForm, LeadForm, QuoteForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
@@ -57,16 +57,6 @@ export default async function LeadDetail({
               variant="ghost"
             >
               <LeadForm lead={lead} users={userOptions} />
-            </ModalPanel>
-            <ModalPanel title="Activity workflow" triggerLabel="Activity">
-              <ActivityWorkflowForm
-                entityType="Lead"
-                leadId={lead.id}
-                users={userOptions}
-                tasks={tasks.filter((task) => task.status !== "DONE")}
-                redirectTo={redirectTo}
-                defaultTitle={`Follow up with ${lead.company_name}`}
-              />
             </ModalPanel>
             <ModalPanel title="Create quote" triggerLabel="Add quote">
               <QuoteForm
@@ -147,7 +137,12 @@ export default async function LeadDetail({
             </div>
           </Card>
           <Card>
-            <h2 className="text-lg font-semibold">Files</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Files</h2>
+              <ModalPanel title="Upload lead file" triggerLabel="Upload file" variant="ghost">
+                <FileRecordForm entityType="Lead" entityId={lead.id} leadId={lead.id} redirectTo={redirectTo} />
+              </ModalPanel>
+            </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
                 <a
