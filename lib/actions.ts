@@ -121,6 +121,14 @@ function parseInvoiceLineItems(formData: FormData) {
     .filter((item) => item.description);
 }
 
+function parseTaskLinks(formData: FormData) {
+  const urls = formData.getAll("taskLinkUrl").map((value) => String(value).trim());
+  const labels = formData.getAll("taskLinkLabel").map((value) => String(value).trim());
+  return urls
+    .map((url, index) => ({ url, label: labels[index] || url }))
+    .filter((link) => link.url);
+}
+
 function numberCode(prefix: string) {
   return `${prefix}-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${Math.random().toString(36).slice(2, 7).toUpperCase()}`;
 }
@@ -692,9 +700,19 @@ export async function upsertTask(formData: FormData) {
     projectId: str(formData, "projectId"),
     assignedToId: str(formData, "assignedToId"),
   });
+  const instructions = str(formData, "instructions").trim();
+  const expectedOutcome = str(formData, "expectedOutcome").trim();
+  const scheduledAt = str(formData, "scheduledAt").trim();
+  const taskLinks = parseTaskLinks(formData);
+  const descriptionParts = [
+    parsed.description,
+    instructions ? `Instructions:\n${instructions}` : null,
+    expectedOutcome ? `Expected outcome:\n${expectedOutcome}` : null,
+    scheduledAt ? `Scheduled date/time: ${scheduledAt}` : null,
+  ].filter(Boolean);
   const payload = {
     title: parsed.title,
-    description: parsed.description ?? null,
+    description: descriptionParts.join("\n\n") || null,
     type: parsed.type,
     status: parsed.status,
     priority: parsed.priority,
@@ -726,6 +744,20 @@ export async function upsertTask(formData: FormData) {
     actorId: user.id,
     activityMessage: `File attached to task ${result.data.title}`,
   });
+  if (taskLinks.length) {
+    const { error: linkError } = await getSupabaseAdmin().from("files").insert(
+      taskLinks.map((link) => ({
+        filename: link.label,
+        url: link.url,
+        mime_type: "text/uri-list",
+        entity_type: "Task",
+        entity_id: result.data.id,
+        client_id: parsed.clientId ?? null,
+        project_id: parsed.projectId ?? null,
+      })),
+    );
+    if (linkError) throw linkError;
+  }
   await logActivity({
     action:
       parsed.status === "DONE"
@@ -1803,122 +1835,54 @@ export async function upsertActivityWorkflow(formData: FormData) {
 
   const entityId =
     str(formData, "entityId") ||
-    (entityType === "Lead"
-      ? str(formData, "leadId")
-      : str(formData, "clientId"));
+    (entityType === "Lead" ? str(formData, "leadId") : str(formData, "clientId"));
   if (!entityId || !["Lead", "Client"].includes(entityType))
-    throw new Error("Activity workflow must be linked to a lead or client.");
+    throw new Error("Activity log must be linked to a lead or client.");
 
-  const leadId =
-    entityType === "Lead" ? entityId : str(formData, "leadId") || null;
-  const clientId =
-    entityType === "Client" ? entityId : str(formData, "clientId") || null;
-  const workflowMode = str(formData, "workflowMode") || "NOTE";
-  const eventType =
-    str(formData, "eventType") || (workflowMode === "NOTE" ? "NOTE" : "OTHER");
+  const leadId = entityType === "Lead" ? entityId : str(formData, "leadId") || null;
+  const clientId = entityType === "Client" ? entityId : str(formData, "clientId") || null;
+  const eventType = str(formData, "eventType") || "CALL";
   const direction = str(formData, "direction") || "INTERNAL";
   const summary = str(formData, "summary").trim();
   const objections = str(formData, "objections").trim();
   const outcome = str(formData, "outcome").trim();
-  const title =
-    str(formData, "title").trim() || outcome || `${eventType} activity`;
-  const dueDateValue = str(formData, "dueDate");
-  const dueDate = dueDateValue ? new Date(dueDateValue) : undefined;
-  const assignedToId = str(formData, "assignedToId") || null;
+  const scrapReason = str(formData, "scrapReason").trim();
+  const title = str(formData, "title").trim() || outcome || `${eventType} log`;
   const taskId = str(formData, "taskId") || null;
-
-  const shouldCreateTask =
-    bool(formData, "createTask") ||
-    workflowMode === "FOLLOW_UP" ||
-    workflowMode === "TASK";
-  const shouldCreateNote =
-    bool(formData, "createNote") ||
-    workflowMode === "NOTE" ||
-    workflowMode === "INTERACTION" ||
-    shouldCreateTask;
-  const shouldUpdateEntity =
-    bool(formData, "updateEntity") ||
-    workflowMode === "FOLLOW_UP" ||
-    workflowMode === "TASK";
+  const taskCloseMode = str(formData, "taskCloseMode") || "KEEP_OPEN";
 
   const body = [
-    `${workflowMode} • ${eventType} • ${direction}`,
+    `Log type: ${eventType}`,
+    `Direction: ${direction}`,
+    taskId ? `Related task: ${taskId}` : null,
     `Summary: ${summary}`,
-    objections ? `Objections/replies: ${objections}` : null,
+    objections ? `Important replies: ${objections}` : null,
     outcome ? `Outcome: ${outcome}` : null,
-    dueDate ? `Follow-up: ${dueDate.toISOString()}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+    scrapReason ? `Scrap/blocker reason: ${scrapReason}` : null,
+  ].filter(Boolean).join("\n");
 
   const supabase = getSupabaseAdmin();
-  let createdTaskId: string | null = null;
+  const { error: noteError } = await supabase.from("notes").insert({
+    body,
+    entity_type: entityType,
+    entity_id: entityId,
+    client_id: clientId,
+    lead_id: leadId,
+  });
+  if (noteError) throw noteError;
 
-  if (shouldCreateNote) {
-    const { error } = await supabase.from("notes").insert({
-      body,
-      entity_type: entityType,
-      entity_id: entityId,
-      client_id: clientId,
-      lead_id: leadId,
-    });
-    if (error) throw error;
-  }
-
-  if (shouldCreateTask) {
-    const { data, error } = await supabase
+  if (taskId && taskCloseMode !== "KEEP_OPEN") {
+    const status = taskCloseMode === "SCRAPPED" ? "SCRAPPED" : "DONE";
+    const { error: taskError } = await supabase
       .from("tasks")
-      .insert({
-        title,
-        description: body,
-        type:
-          eventType === "CALL" || eventType === "MEETING"
-            ? "DISCOVERY_CALL"
-            : "SALES_FOLLOW_UP",
-        status: "TO_DO",
-        priority: workflowMode === "TASK" ? "MEDIUM" : "HIGH",
-        due_date: dueDate?.toISOString() ?? null,
-        assigned_to: assignedToId,
-        client_id: clientId,
-        created_by: user.id,
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-    createdTaskId = data.id;
-  }
-
-  if (taskId && bool(formData, "completeRelatedTask")) {
-    const { error } = await supabase
-      .from("tasks")
-      .update({ status: "DONE", completed_at: new Date().toISOString() })
+      .update({ status, completed_at: new Date().toISOString() })
       .eq("id", taskId);
-    if (error) throw error;
-  }
-
-  if (shouldUpdateEntity) {
-    if (entityType === "Lead") {
-      const { error } = await supabase
-        .from("leads")
-        .update({
-          next_action: title,
-          follow_up_date: dueDate?.toISOString() ?? null,
-          assigned_to: assignedToId,
-        })
-        .eq("id", entityId);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from("clients")
-        .update({ next_action: title })
-        .eq("id", entityId);
-      if (error) throw error;
-    }
+    if (taskError) throw taskError;
   }
 
   await attachOptionalFile(formData, {
-    entityType: createdTaskId ? "Task" : entityType,
-    entityId: createdTaskId ?? entityId,
+    entityType,
+    entityId,
     clientId,
     leadId,
     actorId: user.id,
@@ -1926,19 +1890,18 @@ export async function upsertActivityWorkflow(formData: FormData) {
   });
 
   await logActivity({
-    action: "ACTIVITY_WORKFLOW_UPSERTED",
+    action: eventType === "TASK" ? "TASK_OUTCOME_LOGGED" : "ACTIVITY_LOGGED",
     entityType,
     entityId,
     leadId,
     clientId,
-    taskId: createdTaskId ?? taskId,
+    taskId,
     actorId: user.id,
     message: `${title}: ${outcome || summary}`,
   });
 
   revalidatePath(path(formData, "/dashboard"));
   revalidatePath("/tasks");
-  if (shouldCreateTask) revalidatePath("/calendar");
   redirect(path(formData, "/dashboard"));
 }
 
@@ -2242,20 +2205,39 @@ export async function logLeadCall(formData: FormData) {
 }
 
 export async function updateTaskStatus(formData: FormData) {
-  await requirePermission(permissions.tasksWrite);
+  const user = await requirePermission(permissions.tasksWrite);
   const parsed = taskStatusSchema.parse({
     id: str(formData, "id"),
     status: str(formData, "status"),
     assignedToId: str(formData, "assignedToId"),
   });
-  await getSupabaseAdmin()
+  const outcome = str(formData, "outcome").trim();
+  const scrapReason = str(formData, "scrapReason").trim();
+  const { data, error } = await getSupabaseAdmin()
     .from("tasks")
     .update({
       status: parsed.status,
       assigned_to: parsed.assignedToId ?? null,
-      completed_at: parsed.status === "DONE" ? new Date().toISOString() : null,
+      completed_at: ["DONE", "SCRAPPED"].includes(parsed.status)
+        ? new Date().toISOString()
+        : null,
     })
-    .eq("id", parsed.id);
+    .eq("id", parsed.id)
+    .select("id,title,client_id,project_id")
+    .single();
+  if (error) throw error;
+  if (outcome || scrapReason) {
+    await logActivity({
+      action: parsed.status === "SCRAPPED" ? "TASK_SCRAPPED" : "TASK_OUTCOME_LOGGED",
+      entityType: "Task",
+      entityId: data.id,
+      taskId: data.id,
+      clientId: data.client_id,
+      projectId: data.project_id,
+      actorId: user.id,
+      message: `${data.title}: ${outcome || scrapReason}`,
+    });
+  }
   revalidatePath(path(formData, "/tasks"));
 }
 

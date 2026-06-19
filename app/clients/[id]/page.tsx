@@ -5,7 +5,9 @@ import {
   ActivityWorkflowForm,
   ClientForm,
   FileRecordForm,
+  NoteForm,
   ProjectForm,
+  TaskForm,
   QuoteForm,
   SupportTicketForm,
 } from "@/components/forms";
@@ -113,18 +115,6 @@ export default async function ClientDetail({
               />
             </ModalPanel>
             <ModalPanel
-              title="Create project"
-              triggerLabel="Add project"
-              variant="ghost"
-            >
-              <ProjectFormWithChecklist
-                clients={clients.filter((item) => item.id === client.id)}
-                quotes={clientQuotes}
-                users={users}
-                checklistTemplates={checklistTemplates}
-              />
-            </ModalPanel>
-            <ModalPanel
               title="Create support ticket"
               triggerLabel="Add ticket"
               variant="ghost"
@@ -167,7 +157,7 @@ export default async function ClientDetail({
             <h2 className="mb-3 text-lg font-semibold">Quick actions</h2>
             <ModalPanel
               title="Activity workflow"
-              triggerLabel="Log note, task or file"
+              triggerLabel="Log activity"
               variant="ghost"
             >
               <ActivityWorkflowForm
@@ -200,7 +190,12 @@ export default async function ClientDetail({
         </div>
         <div className="grid gap-6">
           <Card>
-            <h2 className="text-lg font-semibold">Projects</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Projects</h2>
+              <ModalPanel title="Create project" triggerLabel="Add project" variant="ghost">
+                <ProjectFormWithChecklist clients={clients.filter((item) => item.id === client.id)} quotes={clientQuotes} users={users} checklistTemplates={checklistTemplates} />
+              </ModalPanel>
+            </div>
             <div className="mt-4 grid gap-2">
               {clientProjects.slice(0, 6).map((project) => (
                 <a
@@ -219,7 +214,28 @@ export default async function ClientDetail({
             </div>
           </Card>
           <Card>
-            <h2 className="text-lg font-semibold">Notes</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Tasks</h2>
+              <ModalPanel title="Add client task" triggerLabel="Add task" variant="ghost">
+                <TaskForm users={users.map((user) => ({ id: user.id, name: user.name }))} clients={clients.filter((item) => item.id === client.id)} projects={clientProjects.map((project) => ({ id: project.id, name: project.name, client_id: project.client_id }))} redirectTo={redirectTo} />
+              </ModalPanel>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {tasks.filter((task) => task.client_id === client.id && task.status !== "DONE").slice(0, 6).map((task) => (
+                <a key={task.id} href={`/tasks#${task.id}`} className="rounded-xl bg-white/[0.04] p-3 text-sm text-slate-200">
+                  <span className="font-semibold text-white">{task.title}</span>
+                  <span className="ml-2 text-slate-400">{task.status}</span>
+                </a>
+              ))}
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Notes</h2>
+              <ModalPanel title="Add client note" triggerLabel="Add note" variant="ghost">
+                <NoteForm entityType="Client" entityId={client.id} clientId={client.id} redirectTo={redirectTo} />
+              </ModalPanel>
+            </div>
             <div className="mt-4 grid gap-2">
               {notes.slice(0, 5).map((note) => (
                 <p

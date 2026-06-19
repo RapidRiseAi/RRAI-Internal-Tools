@@ -146,3 +146,12 @@ This document is the operational map for the app. It explains what each module d
 10. Add CRM contact records per client/lead so multiple stakeholders can be tracked.
 11. Add role editing UI for custom permission sets instead of only static role permission map display.
 12. Add document template preview with sample data before generating PDFs.
+
+## Task and activity logging update
+
+- Entity pages should place action buttons inside the section where the record will appear: project creation in Projects, task creation in Tasks, note creation in Notes, and uploads in Files.
+- The Activity workflow is now a pure log workflow. It records calls, messages, emails, or task outcomes and can optionally link the log to an existing task.
+- Task creation is handled by Task sections and the Tasks page, not by the Activity workflow.
+- Tasks now capture instructions, expected outcome, schedule/due dates, attachments, and multiple supporting links so the assignee has the information needed to complete the task.
+- Task close-out happens from the Tasks page or the task log flow. Completing or scrapping a task requires logging what happened, and scrapping can include a reason.
+- `SCRAPPED` is a task status so cancelled/invalid work can be separated from completed work.

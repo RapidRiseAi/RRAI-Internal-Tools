@@ -40,16 +40,16 @@ export default async function TasksPage() {
         }
       />
       <div className="grid gap-6">
-        <div className="grid gap-4 md:grid-cols-4">
+        <div className="grid gap-4 md:grid-cols-5">
           {[
-            ["Open", tasks.filter((task) => task.status !== "DONE").length],
+            ["Open", tasks.filter((task) => !["DONE", "SCRAPPED"].includes(task.status)).length],
             [
               "Overdue",
               tasks.filter(
                 (task) =>
                   task.due_date &&
                   new Date(task.due_date) < new Date() &&
-                  task.status !== "DONE",
+                  !["DONE", "SCRAPPED"].includes(task.status),
               ).length,
             ],
             [
@@ -57,6 +57,7 @@ export default async function TasksPage() {
               tasks.filter((task) => task.status === "BLOCKED").length,
             ],
             ["Done", tasks.filter((task) => task.status === "DONE").length],
+            ["Scrapped", tasks.filter((task) => task.status === "SCRAPPED").length],
           ].map(([label, value]) => (
             <Card key={label}>
               <p className="text-sm text-slate-400">{label}</p>
@@ -132,7 +133,7 @@ export default async function TasksPage() {
                                     Waiting Client
                                   </option>
                                   <option value="BLOCKED">Blocked</option>
-                                  <option value="DONE">Done</option>
+                                  <option value="DONE">Done</option><option value="SCRAPPED">Scrapped</option>
                                 </select>
                               </label>
                               <button className="rounded-lg border border-white/10 px-3 py-2 text-sm text-rapid-cyan">
@@ -144,33 +145,25 @@ export default async function TasksPage() {
                               className="grid gap-3"
                             >
                               <input type="hidden" name="id" value={task.id} />
-                              <input
-                                type="hidden"
-                                name="status"
-                                value={task.status}
-                              />
-                              <input
-                                type="hidden"
-                                name="redirectTo"
-                                value="/tasks"
-                              />
+                              <input type="hidden" name="redirectTo" value="/tasks" />
                               <label className="grid gap-2 text-sm text-slate-300">
-                                Assignee
-                                <select
-                                  className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm"
-                                  name="assignedToId"
-                                  defaultValue={task.assigned_to ?? ""}
-                                >
-                                  <option value="">Unassigned</option>
-                                  {users.map((user) => (
-                                    <option key={user.id} value={user.id}>
-                                      {user.name}
-                                    </option>
-                                  ))}
+                                Close task as
+                                <select className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="status" defaultValue="DONE">
+                                  <option value="DONE">Complete</option>
+                                  <option value="SCRAPPED">Scrap</option>
+                                  <option value="BLOCKED">Blocked</option>
                                 </select>
                               </label>
+                              <label className="grid gap-2 text-sm text-slate-300">
+                                Outcome / what happened
+                                <textarea className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="outcome" required />
+                              </label>
+                              <label className="grid gap-2 text-sm text-slate-300">
+                                Scrap / blocker reason
+                                <textarea className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="scrapReason" />
+                              </label>
                               <button className="rounded-lg border border-white/10 px-3 py-2 text-sm text-rapid-cyan">
-                                Save assignee
+                                Save outcome
                               </button>
                             </form>
                           </div>

@@ -427,6 +427,7 @@ export function TaskForm({
   clients?: ClientOption[];
   redirectTo?: string;
 }) {
+  const [linkRows, setLinkRows] = useState([0]);
   return (
     <form action={upsertTask} className="grid gap-4 md:grid-cols-3">
       <SubmissionInput scope="upsert-task" />
@@ -484,9 +485,29 @@ export function TaskForm({
           ))}
         </select>
       </Field>
-      <Field label="Description">
-        <textarea className={inputClass} name="description" />
+      <Field label="Instructions">
+        <textarea className={inputClass} name="instructions" placeholder="What needs to be done and how should it be handled?" />
       </Field>
+      <Field label="Expected outcome">
+        <textarea className={inputClass} name="expectedOutcome" placeholder="What should be true when this task is complete?" />
+      </Field>
+      <Field label="Meeting / work date">
+        <input className={inputClass} type="datetime-local" name="scheduledAt" />
+      </Field>
+      <div className="md:col-span-3 rounded-2xl border border-white/10 bg-white/[0.03] p-4">
+        <div className="mb-3 flex items-center justify-between gap-3">
+          <p className="text-sm font-semibold text-white">Task links</p>
+          <button type="button" onClick={() => setLinkRows((rows) => [...rows, rows.length])} className="rounded-xl border border-rapid-cyan/30 px-3 py-2 text-sm text-rapid-cyan">Add link</button>
+        </div>
+        <div className="grid gap-3">
+          {linkRows.map((row) => (
+            <div key={row} className="grid gap-3 md:grid-cols-[1fr_2fr]">
+              <input className={inputClass} name="taskLinkLabel" placeholder="Link label" />
+              <input className={inputClass} name="taskLinkUrl" type="url" placeholder="https://..." />
+            </div>
+          ))}
+        </div>
+      </div>
       <AttachmentButtonFields
         label="Optional task attachment"
         className="md:col-span-3"
@@ -1356,7 +1377,6 @@ export function ActivityWorkflowForm({
   entityType,
   leadId,
   clientId,
-  users,
   tasks = [],
   redirectTo,
   defaultTitle,
@@ -1369,20 +1389,9 @@ export function ActivityWorkflowForm({
   redirectTo: string;
   defaultTitle?: string;
 }) {
-  const [workflowMode, setWorkflowMode] = useState("NOTE");
-  const [eventType, setEventType] = useState("NOTE");
+  const [eventType, setEventType] = useState("CALL");
+  const isTaskLog = eventType === "TASK";
   const entityId = entityType === "Lead" ? leadId : clientId;
-  const isInteraction = workflowMode === "INTERACTION";
-  const isFollowUp = workflowMode === "FOLLOW_UP";
-  const isTask = workflowMode === "TASK";
-  const showEventFields = isInteraction || isFollowUp;
-  const showTaskFields = isFollowUp || isTask;
-  const summaryLabel = isInteraction
-    ? "What happened?"
-    : isTask
-      ? "Task instructions"
-      : "Note";
-
   return (
     <form action={upsertActivityWorkflow} className="grid gap-5">
       <SubmissionInput scope="activity-workflow" />
@@ -1391,153 +1400,39 @@ export function ActivityWorkflowForm({
       <input type="hidden" name="leadId" value={leadId ?? ""} />
       <input type="hidden" name="clientId" value={clientId ?? ""} />
       <input type="hidden" name="redirectTo" value={redirectTo} />
-      <input type="hidden" name="createNote" value="true" />
-      {isFollowUp || isTask ? (
-        <input type="hidden" name="createTask" value="true" />
-      ) : null}
-      {isFollowUp || isTask || isInteraction ? (
-        <input type="hidden" name="updateEntity" value="true" />
-      ) : null}
-
+      <input type="hidden" name="workflowMode" value="LOG" />
       <div className="rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/5 p-4">
-        <Field label="What do you want to do?">
-          <select
-            className={inputClass}
-            name="workflowMode"
-            value={workflowMode}
-            onChange={(event) => {
-              const value = event.target.value;
-              setWorkflowMode(value);
-              if (value === "NOTE") setEventType("NOTE");
-              if (value === "INTERACTION") setEventType("CALL");
-              if (value === "FOLLOW_UP") setEventType("FOLLOW_UP");
-              if (value === "TASK") setEventType("TASK");
-            }}
-          >
-            <option value="NOTE">Add a note</option>
-            <option value="INTERACTION">Log a call / message / email</option>
-            <option value="FOLLOW_UP">Schedule a follow-up</option>
-            <option value="TASK">Assign a task</option>
+        <Field label="Log type">
+          <select className={inputClass} name="eventType" value={eventType} onChange={(event) => setEventType(event.target.value)}>
+            <option value="CALL">Call</option>
+            <option value="MESSAGE">Message</option>
+            <option value="EMAIL">Email</option>
+            <option value="TASK">Task outcome</option>
           </select>
         </Field>
-        <p className="mt-2 text-xs text-slate-400">
-          Only the fields needed for this action are shown. The activity is
-          automatically linked to this {entityType.toLowerCase()}.
-        </p>
+        <p className="mt-2 text-xs text-slate-400">This workflow only logs what happened. Create tasks from the Tasks section.</p>
       </div>
-
       <div className="grid gap-4 md:grid-cols-2">
-        <Field
-          label={isTask ? "Task title" : isFollowUp ? "Next action" : "Title"}
-        >
-          <input
-            className={inputClass}
-            name="title"
-            defaultValue={defaultTitle ?? ""}
-            placeholder="Follow up, send recap, collect files…"
-          />
-        </Field>
-        {showEventFields ? (
-          <Field label="Log type">
-            <select
-              className={inputClass}
-              name="eventType"
-              value={eventType}
-              onChange={(event) => setEventType(event.target.value)}
-            >
-              <option value="CALL">Call</option>
-              <option value="EMAIL">Email</option>
-              <option value="MESSAGE">Message</option>
-              <option value="MEETING">Meeting</option>
-              <option value="FOLLOW_UP">Follow-up</option>
-              <option value="OTHER">Other</option>
+        <Field label="Title"><input className={inputClass} name="title" defaultValue={defaultTitle ?? ""} /></Field>
+        {isTaskLog ? (
+          <Field label="Task to log">
+            <select className={inputClass} name="taskId" required>
+              <option value="">Select task</option>
+              {tasks.map((task) => <option key={task.id} value={task.id}>{task.title}</option>)}
             </select>
           </Field>
         ) : (
-          <input type="hidden" name="eventType" value={eventType} />
+          <Field label="Direction"><select className={inputClass} name="direction"><option value="OUTBOUND">Outbound</option><option value="RECEIVED">Received</option><option value="INTERNAL">Internal</option></select></Field>
         )}
-        {showEventFields ? (
-          <Field label="Direction">
-            <select className={inputClass} name="direction">
-              <option value="OUTBOUND">Outbound</option>
-              <option value="RECEIVED">Received</option>
-              <option value="INTERNAL">Internal</option>
-            </select>
-          </Field>
-        ) : (
-          <input type="hidden" name="direction" value="INTERNAL" />
-        )}
-        {showEventFields ? (
-          <Field label="Outcome">
-            <input
-              className={inputClass}
-              name="outcome"
-              placeholder="Interested / sent proposal / no answer"
-            />
-          </Field>
-        ) : null}
-        {showTaskFields ? (
-          <Field label="Due date">
-            <input
-              className={inputClass}
-              name="dueDate"
-              type="datetime-local"
-            />
-          </Field>
-        ) : null}
-        {showTaskFields ? (
-          <Field label="Assign to">
-            <select className={inputClass} name="assignedToId">
-              <option value="">Unassigned</option>
-              {users.map((user) => (
-                <option key={user.id} value={user.id}>
-                  {user.name}
-                </option>
-              ))}
-            </select>
-          </Field>
-        ) : null}
-        {(showEventFields || showTaskFields) && tasks.length ? (
-          <Field label="Related task">
-            <select className={inputClass} name="taskId">
-              <option value="">No task</option>
-              {tasks.map((task) => (
-                <option key={task.id} value={task.id}>
-                  {task.title}
-                </option>
-              ))}
-            </select>
-          </Field>
+        <Field label="Outcome"><input className={inputClass} name="outcome" placeholder={isTaskLog ? "Completed / blocked / scrapped" : "Interested / sent proposal / no answer"} /></Field>
+        {isTaskLog ? (
+          <Field label="Close task as"><select className={inputClass} name="taskCloseMode" defaultValue="DONE"><option value="DONE">Complete task</option><option value="SCRAPPED">Scrap task</option><option value="KEEP_OPEN">Keep open</option></select></Field>
         ) : null}
       </div>
-
-      <Field label={summaryLabel}>
-        <textarea
-          className={inputClass}
-          name="summary"
-          placeholder="Keep it short and specific."
-          required
-        />
-      </Field>
-      {showEventFields ? (
-        <Field label="Objections / important replies">
-          <textarea
-            className={inputClass}
-            name="objections"
-            placeholder="Price, timing, blockers, decision maker, etc."
-          />
-        </Field>
-      ) : null}
-      {(showEventFields || showTaskFields) && tasks.length ? (
-        <label className="flex items-center gap-2 text-sm text-slate-300">
-          <input name="completeRelatedTask" type="checkbox" /> Complete the
-          selected related task
-        </label>
-      ) : null}
-
-      <AttachmentButtonFields label="Optional attachment for this activity" />
-
-      <SubmitButton pendingLabel="Saving…">Save</SubmitButton>
+      <Field label={isTaskLog ? "What happened on this task?" : "What happened?"}><textarea className={inputClass} name="summary" placeholder="Keep it short and specific." required /></Field>
+      {isTaskLog ? <Field label="Scrap / blocker reason"><textarea className={inputClass} name="scrapReason" placeholder="Only needed if the task is scrapped or blocked." /></Field> : <Field label="Important replies"><textarea className={inputClass} name="objections" placeholder="Price, timing, blockers, decision maker, etc." /></Field>}
+      <AttachmentButtonFields label="Optional attachment for this log" />
+      <SubmitButton pendingLabel="Saving log…">Save log</SubmitButton>
     </form>
   );
 }
