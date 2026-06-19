@@ -39,6 +39,8 @@ import {
   leadSchema,
   noteSchema,
   paymentSchema,
+  payrollItemSchema,
+  payrollRunSchema,
   projectChecklistSchema,
   projectSchema,
   quoteSchema,
@@ -50,6 +52,7 @@ import {
   taskStatusSchema,
   uploadFileSchema,
   userSchema,
+  vendorSchema,
 } from "./validation";
 
 function str(formData: FormData, key: string) {
@@ -116,6 +119,23 @@ function parseInvoiceLineItems(formData: FormData) {
       sort_order: index,
     }))
     .filter((item) => item.description);
+}
+
+function nextRecurringDate(dateValue: string | null | undefined, recurrence: string) {
+  const date = dateValue ? new Date(`${dateValue}T00:00:00.000Z`) : new Date();
+  if (recurrence === "WEEKLY") date.setUTCDate(date.getUTCDate() + 7);
+  if (recurrence === "MONTHLY") date.setUTCMonth(date.getUTCMonth() + 1);
+  if (recurrence === "QUARTERLY") date.setUTCMonth(date.getUTCMonth() + 3);
+  if (recurrence === "ANNUAL") date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
+function parseTaskLinks(formData: FormData) {
+  const urls = formData.getAll("taskLinkUrl").map((value) => String(value).trim());
+  const labels = formData.getAll("taskLinkLabel").map((value) => String(value).trim());
+  return urls
+    .map((url, index) => ({ url, label: labels[index] || url }))
+    .filter((link) => link.url);
 }
 
 function numberCode(prefix: string) {
@@ -192,8 +212,8 @@ async function attachOptionalFile(
     actorId?: string;
   },
 ) {
-  const uploadedFile = formData.get("file");
-  const hasUpload = uploadedFile instanceof File && uploadedFile.size > 0;
+  const uploadedFiles = formData.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
+  const hasUpload = uploadedFiles.length > 0;
   const url = str(formData, "url");
   if (!hasUpload && !url) return;
 
@@ -203,32 +223,70 @@ async function attachOptionalFile(
   let mimeType = str(formData, "mimeType") || null;
 
   if (hasUpload) {
-    const upload = uploadFileSchema.parse({
-      filename: filename || uploadedFile.name,
-      mimeType: uploadedFile.type,
-      size: uploadedFile.size,
-      entityType: target.entityType,
-      entityId: target.entityId,
-      clientId: target.clientId ?? "",
-      leadId: target.leadId ?? "",
-      projectId: target.projectId ?? "",
-      knowledgeBaseItemId: target.knowledgeBaseItemId ?? "",
-    });
-    filename = upload.filename;
-    mimeType = upload.mimeType;
-    const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
-    const { error: uploadError } = await supabase.storage
-      .from(internalFilesBucket)
-      .upload(storagePath, uploadedFile, {
-        contentType: mimeType,
-        upsert: false,
+    const uploadedRecords = await Promise.all(
+      uploadedFiles.map(async (file) => {
+        const upload = uploadFileSchema.parse({
+          filename:
+            uploadedFiles.length === 1 && filename ? filename : file.name,
+          mimeType: file.type,
+          size: file.size,
+          entityType: target.entityType,
+          entityId: target.entityId,
+          clientId: target.clientId ?? "",
+          leadId: target.leadId ?? "",
+          projectId: target.projectId ?? "",
+          knowledgeBaseItemId: target.knowledgeBaseItemId ?? "",
+        });
+        const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
+        const { error: uploadError } = await supabase.storage
+          .from(internalFilesBucket)
+          .upload(storagePath, file, {
+            contentType: upload.mimeType,
+            upsert: false,
+          });
+        if (uploadError) throw uploadError;
+        const { data: signed, error: signedError } = await supabase.storage
+          .from(internalFilesBucket)
+          .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+        if (signedError) throw signedError;
+        return {
+          filename: upload.filename,
+          url: signed.signedUrl,
+          mimeType: upload.mimeType,
+        };
+      }),
+    );
+    const { error: filesError } = await supabase.from("files").insert(
+      uploadedRecords.map((record) => ({
+        filename: record.filename,
+        url: record.url,
+        mime_type: record.mimeType ?? null,
+        entity_type: target.entityType,
+        entity_id: target.entityId,
+        client_id: target.clientId ?? null,
+        lead_id: target.leadId ?? null,
+        project_id: target.projectId ?? null,
+        knowledge_base_item_id: target.knowledgeBaseItemId ?? null,
+      })),
+    );
+    if (filesError) throw filesError;
+    if (target.activityMessage || uploadedRecords.length) {
+      await logActivity({
+        action: "FILE_UPLOADED",
+        entityType: target.entityType,
+        entityId: target.entityId,
+        clientId: target.clientId ?? null,
+        leadId: target.leadId ?? null,
+        projectId: target.projectId ?? null,
+        actorId: target.actorId,
+        message:
+          uploadedRecords.length === 1
+            ? (target.activityMessage ?? `${uploadedRecords[0].filename} uploaded`)
+            : `${uploadedRecords.length} files uploaded`,
       });
-    if (uploadError) throw uploadError;
-    const { data: signed, error: signedError } = await supabase.storage
-      .from(internalFilesBucket)
-      .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
-    if (signedError) throw signedError;
-    fileUrl = signed.signedUrl;
+    }
+    return;
+
   } else {
     const parsed = fileRecordSchema.parse({
       filename:
@@ -651,9 +709,19 @@ export async function upsertTask(formData: FormData) {
     projectId: str(formData, "projectId"),
     assignedToId: str(formData, "assignedToId"),
   });
+  const instructions = str(formData, "instructions").trim();
+  const expectedOutcome = str(formData, "expectedOutcome").trim();
+  const scheduledAt = str(formData, "scheduledAt").trim();
+  const taskLinks = parseTaskLinks(formData);
+  const descriptionParts = [
+    parsed.description,
+    instructions ? `Instructions:\n${instructions}` : null,
+    expectedOutcome ? `Expected outcome:\n${expectedOutcome}` : null,
+    scheduledAt ? `Scheduled date/time: ${scheduledAt}` : null,
+  ].filter(Boolean);
   const payload = {
     title: parsed.title,
-    description: parsed.description ?? null,
+    description: descriptionParts.join("\n\n") || null,
     type: parsed.type,
     status: parsed.status,
     priority: parsed.priority,
@@ -685,6 +753,20 @@ export async function upsertTask(formData: FormData) {
     actorId: user.id,
     activityMessage: `File attached to task ${result.data.title}`,
   });
+  if (taskLinks.length) {
+    const { error: linkError } = await getSupabaseAdmin().from("files").insert(
+      taskLinks.map((link) => ({
+        filename: link.label,
+        url: link.url,
+        mime_type: "text/uri-list",
+        entity_type: "Task",
+        entity_id: result.data.id,
+        client_id: parsed.clientId ?? null,
+        project_id: parsed.projectId ?? null,
+      })),
+    );
+    if (linkError) throw linkError;
+  }
   await logActivity({
     action:
       parsed.status === "DONE"
@@ -721,20 +803,38 @@ export async function upsertUser(
       title: str(formData, "title"),
       phone: str(formData, "phone"),
       status: str(formData, "status"),
+      employmentType: str(formData, "employmentType") || "FULL_TIME",
+      department: str(formData, "department"),
+      specialties: str(formData, "specialties"),
+      payType: str(formData, "payType") || "SALARY",
+      payRateCents: randsToCents(formData.get("payRateRands")),
+      startDate: str(formData, "startDate"),
+      emergencyContact: str(formData, "emergencyContact"),
+      employeeNotes: str(formData, "employeeNotes"),
     });
-    if (!parsed.password)
+    const id = str(formData, "id") || undefined;
+    if (!id && !parsed.password)
       throw new Error("Password is required for new users.");
-    const { error } = await getSupabaseAdmin()
-      .from("users")
-      .insert({
-        name: parsed.name,
-        email: parsed.email,
-        password_hash: await bcrypt.hash(parsed.password, 12),
-        role_id: parsed.roleId,
-        title: parsed.title ?? null,
-        phone: parsed.phone ?? null,
-        status: parsed.status,
-      });
+    const payload = {
+      name: parsed.name,
+      email: parsed.email,
+      role_id: parsed.roleId,
+      title: parsed.title ?? null,
+      phone: parsed.phone ?? null,
+      status: parsed.status,
+      employment_type: parsed.employmentType,
+      department: parsed.department ?? null,
+      specialties: parsed.specialties ?? null,
+      pay_type: parsed.payType,
+      pay_rate_cents: parsed.payRateCents,
+      start_date: parsed.startDate?.toISOString().slice(0, 10) ?? null,
+      emergency_contact: parsed.emergencyContact ?? null,
+      employee_notes: parsed.employeeNotes ?? null,
+      ...(parsed.password ? { password_hash: await bcrypt.hash(parsed.password, 12) } : {}),
+    };
+    const { error } = id
+      ? await getSupabaseAdmin().from("users").update(payload).eq("id", id)
+      : await getSupabaseAdmin().from("users").insert(payload);
     if (error) throw error;
     revalidatePath("/settings");
     redirect("/settings");
@@ -805,9 +905,10 @@ export async function upsertQuote(
           .single();
     if (result.error) throw result.error;
     await supabase.from("quote_items").delete().eq("quote_id", result.data.id);
-    await supabase
+    const { error: lineItemsError } = await supabase
       .from("quote_items")
       .insert(lineItems.map((item) => ({ ...item, quote_id: result.data.id })));
+    if (lineItemsError) throw lineItemsError;
     await logActivity({
       action: id ? "QUOTE_UPDATED" : "QUOTE_CREATED",
       entityType: "Quote",
@@ -1083,6 +1184,44 @@ export async function recordPayment(formData: FormData) {
   redirect("/billing");
 }
 
+export async function upsertVendor(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "vendor:create")))
+    redirect("/billing?tab=vendors");
+  const parsed = vendorSchema.parse({
+    name: str(formData, "name"),
+    category: str(formData, "category"),
+    contactName: str(formData, "contactName"),
+    email: str(formData, "email"),
+    phone: str(formData, "phone"),
+    website: str(formData, "website"),
+    notes: str(formData, "notes"),
+  });
+  const { data, error } = await getSupabaseAdmin()
+    .from("vendors")
+    .insert({
+      name: parsed.name,
+      category: parsed.category ?? null,
+      contact_name: parsed.contactName ?? null,
+      email: parsed.email ?? null,
+      phone: parsed.phone ?? null,
+      website: parsed.website ?? null,
+      notes: parsed.notes ?? null,
+    })
+    .select("id,name")
+    .single();
+  if (error) throw error;
+  await logActivity({
+    action: "VENDOR_CREATED",
+    entityType: "Vendor",
+    entityId: data.id,
+    actorId: user.id,
+    message: `${data.name} vendor created`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing?tab=vendors");
+}
+
 export async function recordExpense(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "expense:create")))
@@ -1115,11 +1254,10 @@ export async function recordExpense(formData: FormData) {
       created_by: user.id,
       recurrence: parsed.recurrence,
       next_due_date:
-        parsed.nextDueDate?.toISOString().slice(0, 10) ??
-        (parsed.recurrence === "MONTHLY"
-          ? (parsed.expenseDate?.toISOString().slice(0, 10) ??
-            new Date().toISOString().slice(0, 10))
-          : null),
+        parsed.recurrence === "NONE"
+          ? null
+          : (parsed.expenseDate?.toISOString().slice(0, 10) ??
+            new Date().toISOString().slice(0, 10)),
     })
     .select("id,vendor")
     .single();
@@ -1140,6 +1278,43 @@ export async function recordExpense(formData: FormData) {
     projectId: parsed.projectId ?? null,
     actorId: user.id,
     message: `${data.vendor} expense recorded`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing?tab=expenses");
+}
+
+export async function markExpensePaid(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  const id = str(formData, "id");
+  const { data: expense, error: fetchError } = await getSupabaseAdmin()
+    .from("expenses")
+    .select("id,vendor,recurrence,expense_date,client_id,project_id")
+    .eq("id", id)
+    .single();
+  if (fetchError) throw fetchError;
+  const recurring = expense.recurrence && expense.recurrence !== "NONE";
+  const nextDate = recurring
+    ? nextRecurringDate(expense.expense_date, expense.recurrence)
+    : null;
+  const { error } = await getSupabaseAdmin()
+    .from("expenses")
+    .update(
+      recurring
+        ? { status: "PENDING", expense_date: nextDate, next_due_date: nextDate }
+        : { status: "PAID" },
+    )
+    .eq("id", id);
+  if (error) throw error;
+  await logActivity({
+    action: "EXPENSE_PAID",
+    entityType: "Expense",
+    entityId: id,
+    clientId: expense.client_id,
+    projectId: expense.project_id,
+    actorId: user.id,
+    message: recurring
+      ? `${expense.vendor} paid; next ${expense.recurrence.toLowerCase()} due ${nextDate}`
+      : `${expense.vendor} marked paid`,
   });
   revalidatePath("/billing");
   redirect("/billing?tab=expenses");
@@ -1441,6 +1616,16 @@ function filePermission(entityType: string) {
   return permissions.clientsWrite;
 }
 
+
+function fileTypedIds(parsed: { entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; knowledgeBaseItemId?: string }) {
+  return {
+    lead_id: parsed.leadId ?? (parsed.entityType === "Lead" ? parsed.entityId : null),
+    client_id: parsed.clientId ?? (parsed.entityType === "Client" ? parsed.entityId : null),
+    project_id: parsed.projectId ?? (parsed.entityType === "Project" ? parsed.entityId : null),
+    knowledge_base_item_id: parsed.knowledgeBaseItemId ?? (parsed.entityType === "KnowledgeBase" ? parsed.entityId : null),
+  };
+}
+
 function safeStorageName(filename: string) {
   const cleaned = filename
     .normalize("NFKD")
@@ -1461,8 +1646,8 @@ export async function addFileRecord(
     if (!(await reserveSubmission(user.id, formData, "file-record:create")))
       return;
 
-    const uploadedFile = formData.get("file");
-    const hasUpload = uploadedFile instanceof File && uploadedFile.size > 0;
+    const uploadedFiles = formData.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
+    const hasUpload = uploadedFiles.length > 0;
     const supabase = getSupabaseAdmin();
     let parsed: {
       filename: string;
@@ -1477,30 +1662,63 @@ export async function addFileRecord(
     };
 
     if (hasUpload) {
-      const upload = uploadFileSchema.parse({
-        filename: str(formData, "filename") || uploadedFile.name,
-        mimeType: uploadedFile.type,
-        size: uploadedFile.size,
-        entityType,
-        entityId: str(formData, "entityId"),
-        clientId: str(formData, "clientId"),
-        leadId: str(formData, "leadId"),
-        projectId: str(formData, "projectId"),
-        knowledgeBaseItemId: str(formData, "knowledgeBaseItemId"),
+      const records = await Promise.all(
+        uploadedFiles.map(async (file) => {
+          const upload = uploadFileSchema.parse({
+            filename:
+              uploadedFiles.length === 1 && str(formData, "filename")
+                ? str(formData, "filename")
+                : file.name,
+            mimeType: file.type,
+            size: file.size,
+            entityType,
+            entityId: str(formData, "entityId"),
+            clientId: str(formData, "clientId"),
+            leadId: str(formData, "leadId"),
+            projectId: str(formData, "projectId"),
+            knowledgeBaseItemId: str(formData, "knowledgeBaseItemId"),
+          });
+          const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
+          const { error: uploadError } = await supabase.storage
+            .from(internalFilesBucket)
+            .upload(storagePath, file, {
+              contentType: upload.mimeType,
+              upsert: false,
+            });
+          if (uploadError) throw uploadError;
+          const { data: signed, error: signedError } = await supabase.storage
+            .from(internalFilesBucket)
+            .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+          if (signedError) throw signedError;
+          return { ...upload, url: signed.signedUrl };
+        }),
+      );
+      parsed = records[0];
+      const rows = records.map((record) => {
+        const typedIds = fileTypedIds(record);
+        return {
+          filename: record.filename,
+          url: record.url,
+          mime_type: record.mimeType ?? null,
+          entity_type: record.entityType,
+          entity_id: record.entityId,
+          ...typedIds,
+        };
       });
-      const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
-      const { error: uploadError } = await supabase.storage
-        .from(internalFilesBucket)
-        .upload(storagePath, uploadedFile, {
-          contentType: upload.mimeType,
-          upsert: false,
-        });
-      if (uploadError) throw uploadError;
-      const { data: signed, error: signedError } = await supabase.storage
-        .from(internalFilesBucket)
-        .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
-      if (signedError) throw signedError;
-      parsed = { ...upload, url: signed.signedUrl };
+      const { error } = await supabase.from("files").insert(rows);
+      if (error) throw error;
+      await logActivity({
+        action: "FILE_UPLOADED",
+        entityType: parsed.entityType,
+        entityId: parsed.entityId,
+        clientId: fileTypedIds(parsed).client_id,
+        leadId: fileTypedIds(parsed).lead_id,
+        projectId: fileTypedIds(parsed).project_id,
+        actorId: user.id,
+        message: `${records.length} file${records.length === 1 ? "" : "s"} uploaded`,
+      });
+      revalidatePath(path(formData, "/dashboard"));
+      return;
     } else {
       parsed = fileRecordSchema.parse({
         filename:
@@ -1520,20 +1738,7 @@ export async function addFileRecord(
       });
     }
 
-    const typedIds = {
-      lead_id:
-        parsed.leadId ??
-        (parsed.entityType === "Lead" ? parsed.entityId : null),
-      client_id:
-        parsed.clientId ??
-        (parsed.entityType === "Client" ? parsed.entityId : null),
-      project_id:
-        parsed.projectId ??
-        (parsed.entityType === "Project" ? parsed.entityId : null),
-      knowledge_base_item_id:
-        parsed.knowledgeBaseItemId ??
-        (parsed.entityType === "KnowledgeBase" ? parsed.entityId : null),
-    };
+    const typedIds = fileTypedIds(parsed);
     const { error } = await supabase.from("files").insert({
       filename: parsed.filename,
       url: parsed.url,
@@ -1675,122 +1880,54 @@ export async function upsertActivityWorkflow(formData: FormData) {
 
   const entityId =
     str(formData, "entityId") ||
-    (entityType === "Lead"
-      ? str(formData, "leadId")
-      : str(formData, "clientId"));
+    (entityType === "Lead" ? str(formData, "leadId") : str(formData, "clientId"));
   if (!entityId || !["Lead", "Client"].includes(entityType))
-    throw new Error("Activity workflow must be linked to a lead or client.");
+    throw new Error("Activity log must be linked to a lead or client.");
 
-  const leadId =
-    entityType === "Lead" ? entityId : str(formData, "leadId") || null;
-  const clientId =
-    entityType === "Client" ? entityId : str(formData, "clientId") || null;
-  const workflowMode = str(formData, "workflowMode") || "NOTE";
-  const eventType =
-    str(formData, "eventType") || (workflowMode === "NOTE" ? "NOTE" : "OTHER");
+  const leadId = entityType === "Lead" ? entityId : str(formData, "leadId") || null;
+  const clientId = entityType === "Client" ? entityId : str(formData, "clientId") || null;
+  const eventType = str(formData, "eventType") || "CALL";
   const direction = str(formData, "direction") || "INTERNAL";
   const summary = str(formData, "summary").trim();
   const objections = str(formData, "objections").trim();
   const outcome = str(formData, "outcome").trim();
-  const title =
-    str(formData, "title").trim() || outcome || `${eventType} activity`;
-  const dueDateValue = str(formData, "dueDate");
-  const dueDate = dueDateValue ? new Date(dueDateValue) : undefined;
-  const assignedToId = str(formData, "assignedToId") || null;
+  const scrapReason = str(formData, "scrapReason").trim();
+  const title = str(formData, "title").trim() || outcome || `${eventType} log`;
   const taskId = str(formData, "taskId") || null;
-
-  const shouldCreateTask =
-    bool(formData, "createTask") ||
-    workflowMode === "FOLLOW_UP" ||
-    workflowMode === "TASK";
-  const shouldCreateNote =
-    bool(formData, "createNote") ||
-    workflowMode === "NOTE" ||
-    workflowMode === "INTERACTION" ||
-    shouldCreateTask;
-  const shouldUpdateEntity =
-    bool(formData, "updateEntity") ||
-    workflowMode === "FOLLOW_UP" ||
-    workflowMode === "TASK";
+  const taskCloseMode = str(formData, "taskCloseMode") || "KEEP_OPEN";
 
   const body = [
-    `${workflowMode} • ${eventType} • ${direction}`,
+    `Log type: ${eventType}`,
+    `Direction: ${direction}`,
+    taskId ? `Related task: ${taskId}` : null,
     `Summary: ${summary}`,
-    objections ? `Objections/replies: ${objections}` : null,
+    objections ? `Important replies: ${objections}` : null,
     outcome ? `Outcome: ${outcome}` : null,
-    dueDate ? `Follow-up: ${dueDate.toISOString()}` : null,
-  ]
-    .filter(Boolean)
-    .join("\n");
+    scrapReason ? `Scrap/blocker reason: ${scrapReason}` : null,
+  ].filter(Boolean).join("\n");
 
   const supabase = getSupabaseAdmin();
-  let createdTaskId: string | null = null;
+  const { error: noteError } = await supabase.from("notes").insert({
+    body,
+    entity_type: entityType,
+    entity_id: entityId,
+    client_id: clientId,
+    lead_id: leadId,
+  });
+  if (noteError) throw noteError;
 
-  if (shouldCreateNote) {
-    const { error } = await supabase.from("notes").insert({
-      body,
-      entity_type: entityType,
-      entity_id: entityId,
-      client_id: clientId,
-      lead_id: leadId,
-    });
-    if (error) throw error;
-  }
-
-  if (shouldCreateTask) {
-    const { data, error } = await supabase
+  if (taskId && taskCloseMode !== "KEEP_OPEN") {
+    const status = taskCloseMode === "SCRAPPED" ? "SCRAPPED" : "DONE";
+    const { error: taskError } = await supabase
       .from("tasks")
-      .insert({
-        title,
-        description: body,
-        type:
-          eventType === "CALL" || eventType === "MEETING"
-            ? "DISCOVERY_CALL"
-            : "SALES_FOLLOW_UP",
-        status: "TO_DO",
-        priority: workflowMode === "TASK" ? "MEDIUM" : "HIGH",
-        due_date: dueDate?.toISOString() ?? null,
-        assigned_to: assignedToId,
-        client_id: clientId,
-        created_by: user.id,
-      })
-      .select("id")
-      .single();
-    if (error) throw error;
-    createdTaskId = data.id;
-  }
-
-  if (taskId && bool(formData, "completeRelatedTask")) {
-    const { error } = await supabase
-      .from("tasks")
-      .update({ status: "DONE", completed_at: new Date().toISOString() })
+      .update({ status, completed_at: new Date().toISOString() })
       .eq("id", taskId);
-    if (error) throw error;
-  }
-
-  if (shouldUpdateEntity) {
-    if (entityType === "Lead") {
-      const { error } = await supabase
-        .from("leads")
-        .update({
-          next_action: title,
-          follow_up_date: dueDate?.toISOString() ?? null,
-          assigned_to: assignedToId,
-        })
-        .eq("id", entityId);
-      if (error) throw error;
-    } else {
-      const { error } = await supabase
-        .from("clients")
-        .update({ next_action: title })
-        .eq("id", entityId);
-      if (error) throw error;
-    }
+    if (taskError) throw taskError;
   }
 
   await attachOptionalFile(formData, {
-    entityType: createdTaskId ? "Task" : entityType,
-    entityId: createdTaskId ?? entityId,
+    entityType,
+    entityId,
     clientId,
     leadId,
     actorId: user.id,
@@ -1798,19 +1935,18 @@ export async function upsertActivityWorkflow(formData: FormData) {
   });
 
   await logActivity({
-    action: "ACTIVITY_WORKFLOW_UPSERTED",
+    action: eventType === "TASK" ? "TASK_OUTCOME_LOGGED" : "ACTIVITY_LOGGED",
     entityType,
     entityId,
     leadId,
     clientId,
-    taskId: createdTaskId ?? taskId,
+    taskId,
     actorId: user.id,
     message: `${title}: ${outcome || summary}`,
   });
 
   revalidatePath(path(formData, "/dashboard"));
   revalidatePath("/tasks");
-  if (shouldCreateTask) revalidatePath("/calendar");
   redirect(path(formData, "/dashboard"));
 }
 
@@ -2114,20 +2250,39 @@ export async function logLeadCall(formData: FormData) {
 }
 
 export async function updateTaskStatus(formData: FormData) {
-  await requirePermission(permissions.tasksWrite);
+  const user = await requirePermission(permissions.tasksWrite);
   const parsed = taskStatusSchema.parse({
     id: str(formData, "id"),
     status: str(formData, "status"),
     assignedToId: str(formData, "assignedToId"),
   });
-  await getSupabaseAdmin()
+  const outcome = str(formData, "outcome").trim();
+  const scrapReason = str(formData, "scrapReason").trim();
+  const { data, error } = await getSupabaseAdmin()
     .from("tasks")
     .update({
       status: parsed.status,
       assigned_to: parsed.assignedToId ?? null,
-      completed_at: parsed.status === "DONE" ? new Date().toISOString() : null,
+      completed_at: ["DONE", "SCRAPPED"].includes(parsed.status)
+        ? new Date().toISOString()
+        : null,
     })
-    .eq("id", parsed.id);
+    .eq("id", parsed.id)
+    .select("id,title,client_id,project_id")
+    .single();
+  if (error) throw error;
+  if (outcome || scrapReason) {
+    await logActivity({
+      action: parsed.status === "SCRAPPED" ? "TASK_SCRAPPED" : "TASK_OUTCOME_LOGGED",
+      entityType: "Task",
+      entityId: data.id,
+      taskId: data.id,
+      clientId: data.client_id,
+      projectId: data.project_id,
+      actorId: user.id,
+      message: `${data.title}: ${outcome || scrapReason}`,
+    });
+  }
   revalidatePath(path(formData, "/tasks"));
 }
 
@@ -2162,20 +2317,130 @@ export async function upsertCompanySettings(formData: FormData) {
   redirect("/settings");
 }
 
+export async function updateRolePermissions(formData: FormData) {
+  await requirePermission(permissions.settingsManage);
+  const roleId = str(formData, "roleId");
+  const selectedPermissions = formData
+    .getAll("permissions")
+    .map((value) => String(value));
+  const { error } = await getSupabaseAdmin()
+    .from("roles")
+    .update({ permissions: selectedPermissions })
+    .eq("id", roleId);
+  if (error) throw error;
+  revalidatePath("/settings");
+  redirect("/settings");
+}
+
+export async function createPayrollRun(formData: FormData) {
+  const user = await requirePermission(permissions.payrollWrite);
+  if (!(await reserveSubmission(user.id, formData, "payroll-run:create")))
+    redirect("/payroll");
+  const parsed = payrollRunSchema.parse({
+    periodStart: str(formData, "periodStart"),
+    periodEnd: str(formData, "periodEnd"),
+    status: str(formData, "status") || "DRAFT",
+    notes: str(formData, "notes"),
+  });
+  const { data, error } = await getSupabaseAdmin()
+    .from("payroll_runs")
+    .insert({
+      period_start: parsed.periodStart.toISOString().slice(0, 10),
+      period_end: parsed.periodEnd.toISOString().slice(0, 10),
+      status: parsed.status,
+      notes: parsed.notes ?? null,
+      created_by: user.id,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await logActivity({
+    action: "PAYROLL_RUN_CREATED",
+    entityType: "PayrollRun",
+    entityId: data.id,
+    actorId: user.id,
+    message: "Payroll run created",
+  });
+  revalidatePath("/payroll");
+  redirect("/payroll");
+}
+
+export async function addPayrollItem(formData: FormData) {
+  const user = await requirePermission(permissions.payrollWrite);
+  if (!(await reserveSubmission(user.id, formData, "payroll-item:create")))
+    redirect("/payroll");
+  const parsed = payrollItemSchema.parse({
+    payrollRunId: str(formData, "payrollRunId"),
+    userId: str(formData, "userId"),
+    payType: str(formData, "payType"),
+    hours: str(formData, "hours"),
+    grossPayCents: randsToCents(formData.get("grossPayRands")),
+    deductionsCents: randsToCents(formData.get("deductionsRands")),
+    notes: str(formData, "notes"),
+  });
+  const selectedUser = await getSupabaseAdmin()
+    .from("users")
+    .select("name,title,role:roles(name)")
+    .eq("id", parsed.userId)
+    .maybeSingle();
+  const role = selectedUser.data?.role as { name?: string } | { name?: string }[] | null | undefined;
+  const roleName = Array.isArray(role) ? role[0]?.name : role?.name;
+  const roleSnapshot = [selectedUser.data?.title, roleName].filter(Boolean).join(" / ") || null;
+  const { data, error } = await getSupabaseAdmin()
+    .from("payroll_items")
+    .insert({
+      payroll_run_id: parsed.payrollRunId,
+      user_id: parsed.userId,
+      role_snapshot: roleSnapshot,
+      pay_type: parsed.payType,
+      hours: parsed.hours,
+      gross_pay_cents: parsed.grossPayCents,
+      deductions_cents: parsed.deductionsCents,
+      notes: parsed.notes ?? null,
+    })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await getSupabaseAdmin().from("expenses").insert({
+    vendor: selectedUser.data?.name ?? "Employee payroll",
+    category: "Payroll",
+    amount_cents: parsed.grossPayCents,
+    status: "PENDING",
+    expense_date: new Date().toISOString().slice(0, 10),
+    notes: parsed.notes ?? "Payroll item",
+    created_by: user.id,
+    recurrence: "NONE",
+  });
+  await logActivity({
+    action: "PAYROLL_ITEM_ADDED",
+    entityType: "PayrollItem",
+    entityId: data.id,
+    actorId: user.id,
+    message: "Payroll line item added",
+  });
+  revalidatePath("/payroll");
+  redirect("/payroll");
+}
+
 export async function createDocumentTemplate(formData: FormData) {
   await requirePermission(permissions.settingsManage);
   const parsed = documentTemplateSchema.parse({
+    id: str(formData, "id"),
     name: str(formData, "name"),
     type: str(formData, "type"),
     content: str(formData, "content"),
     isDefault: bool(formData, "isDefault"),
   });
-  await getSupabaseAdmin().from("document_templates").insert({
+  const payload = {
     name: parsed.name,
     type: parsed.type,
     content: parsed.content,
     is_default: parsed.isDefault,
-  });
+  };
+  const result = parsed.id
+    ? await getSupabaseAdmin().from("document_templates").update(payload).eq("id", parsed.id)
+    : await getSupabaseAdmin().from("document_templates").insert(payload);
+  if (result.error) throw result.error;
   revalidatePath("/settings");
   redirect("/settings");
 }

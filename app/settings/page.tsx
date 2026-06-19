@@ -6,12 +6,13 @@ import {
   ChecklistTemplateForm,
   CompanySettingsForm,
   DocumentTemplateForm,
+  RolePermissionForm,
   UserForm,
 } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
-import { permissions, rolePermissionMap } from "@/lib/constants";
+import { permissions } from "@/lib/constants";
 import {
   listChecklistItems,
   listChecklistTemplates,
@@ -107,13 +108,14 @@ export default async function SettingsPage() {
           </div>
           <div className="grid gap-2">
             {documentTemplates.map((template) => (
-              <div key={template.id} className="rounded-xl bg-white/[0.04] p-3">
-                <p className="font-semibold text-white">{template.name}</p>
-                <p className="text-xs text-slate-400">
-                  {template.type}
-                  {template.is_default ? " • Default" : ""}
-                </p>
-              </div>
+              <ModalPanel key={template.id} title={`Edit ${template.name}`} triggerLabel={template.name} variant="ghost">
+                <div className="mb-4 rounded-xl bg-white/[0.04] p-3 text-sm text-slate-300">
+                  <p className="font-semibold text-white">{template.name}</p>
+                  <p>{template.type}{template.is_default ? " • Default" : ""}</p>
+                  <pre className="mt-3 max-h-64 overflow-auto whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/60 p-3 text-xs text-slate-300">{template.content}</pre>
+                </div>
+                <DocumentTemplateForm template={template} />
+              </ModalPanel>
             ))}
           </div>
         </Card>
@@ -178,18 +180,19 @@ export default async function SettingsPage() {
           </h2>
           <div className="grid gap-3">
             {users.map((user) => (
-              <div
-                key={user.id}
-                className="flex items-center justify-between rounded-xl bg-white/[0.04] p-3"
-              >
-                <div>
-                  <p className="font-semibold text-white">{user.name}</p>
-                  <p className="text-sm text-slate-400">
-                    {user.email} • {user.role?.name ?? "No role"}
-                  </p>
+              <ModalPanel key={user.id} title={`Edit ${user.name}`} triggerLabel={user.name} variant="ghost">
+                <div className="mb-4 flex items-center justify-between rounded-xl bg-white/[0.04] p-3">
+                  <div>
+                    <p className="font-semibold text-white">{user.name}</p>
+                    <p className="text-sm text-slate-400">
+                      {user.email} • {user.role?.name ?? "No role"} • {user.department ?? "No department"}
+                    </p>
+                    <p className="mt-1 text-xs text-slate-500">{user.specialties ?? "No specialties"}</p>
+                  </div>
+                  <StatusBadge value={user.status} />
                 </div>
-                <StatusBadge value={user.status} />
-              </div>
+                <UserForm roles={roles} user={user} />
+              </ModalPanel>
             ))}
           </div>
         </Card>
@@ -198,13 +201,11 @@ export default async function SettingsPage() {
             Role permission matrix
           </h2>
           <div className="grid gap-3 md:grid-cols-2">
-            {Object.entries(rolePermissionMap).map(([role, perms]) => (
-              <div key={role} className="rounded-xl border border-white/10 p-3">
-                <p className="font-semibold text-white">{role}</p>
-                <p className="mt-1 text-xs text-slate-400">
-                  {perms.length} permissions
-                </p>
-              </div>
+            {roles.map((role) => (
+              <ModalPanel key={role.id} title={`Edit ${role.name} permissions`} triggerLabel={role.name} variant="ghost">
+                <p className="mb-4 text-sm text-slate-400">{role.permissions.length} permissions assigned to this role.</p>
+                <RolePermissionForm role={role} />
+              </ModalPanel>
             ))}
           </div>
         </Card>

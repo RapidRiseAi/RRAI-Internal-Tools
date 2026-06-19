@@ -56,3 +56,16 @@ button, input, select, textarea { font: inherit; }
 .page-transition-in {
   animation: page-in 260ms ease-out both;
 }
+
+
+input[type="date"],
+input[type="datetime-local"] {
+  color-scheme: dark;
+}
+
+input[type="date"]::-webkit-calendar-picker-indicator,
+input[type="datetime-local"]::-webkit-calendar-picker-indicator {
+  cursor: pointer;
+  filter: invert(1) brightness(1.8);
+  opacity: 1;
+}

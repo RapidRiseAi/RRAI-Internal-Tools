@@ -4,10 +4,12 @@ import {
   InvoiceForm,
   PaymentForm,
   RetainerForm,
+  VendorForm,
 } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listPayments } from "@/lib/data";
+import { markExpensePaid } from "@/lib/actions";
 import { dateShort, money } from "@/lib/format";
 import type {
   Expense,
@@ -17,6 +19,7 @@ import type {
   Quote,
   QuoteItem,
   Retainer,
+  Vendor,
 } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
@@ -32,6 +35,7 @@ export default async function Billing() {
     retainers,
     expenses,
     projects,
+    vendors,
   ] = await Promise.all([
     genericList<Invoice>("invoices"),
     listClients(),
@@ -41,6 +45,7 @@ export default async function Billing() {
     genericList<Retainer>("retainers"),
     genericList<Expense>("expenses", "expense_date"),
     genericList<Project>("projects"),
+    genericList<Vendor>("vendors", "name"),
   ]);
   const paid = invoices
     .filter((invoice) => invoice.status === "PAID")
@@ -58,7 +63,7 @@ export default async function Billing() {
     0,
   );
   const monthlyRecurringExpenses = expenses
-    .filter((expense) => expense.recurrence === "MONTHLY")
+    .filter((expense) => expense.recurrence !== "NONE")
     .reduce((sum, expense) => sum + expense.amount_cents, 0);
   return (
     <AppShell>
@@ -89,6 +94,9 @@ export default async function Billing() {
             >
               <RetainerForm clients={clients} />
             </ModalPanel>
+            <ModalPanel title="Add vendor" triggerLabel="Add vendor" variant="ghost">
+              <VendorForm />
+            </ModalPanel>
             <ModalPanel
               title="Record expense"
               triggerLabel="Add expense"
@@ -108,6 +116,7 @@ export default async function Billing() {
             ["Expenses", money(expenseTotal)],
             ["Monthly costs", money(monthlyRecurringExpenses)],
             ["Payments", payments.length],
+            ["Vendors", vendors.length],
           ].map(([label, value]) => (
             <Card key={label} className="p-4">
               <p className="text-xs uppercase tracking-wider text-slate-400">
@@ -196,6 +205,21 @@ export default async function Billing() {
           </div>
         </div>
         <Card>
+          <h2 className="mb-4 text-lg font-semibold">Vendors</h2>
+          <div className="grid gap-3 md:grid-cols-2">
+            {vendors.map((vendor) => (
+              <div key={vendor.id} className="rounded-xl bg-white/[0.04] p-3">
+                <p className="font-semibold text-white">{vendor.name}</p>
+                <p className="text-sm text-slate-400">
+                  {[vendor.category, vendor.email, vendor.phone]
+                    .filter(Boolean)
+                    .join(" • ") || "No contact details yet"}
+                </p>
+              </div>
+            ))}
+          </div>
+        </Card>
+        <Card>
           <h2 className="mb-4 text-lg font-semibold">Expenses</h2>
           <div className="grid gap-3">
             {expenses.map((expense) => (
@@ -207,17 +231,25 @@ export default async function Billing() {
                   <p className="font-semibold text-white">{expense.vendor}</p>
                   <p className="text-sm text-slate-400">
                     {expense.category} • {dateShort(expense.expense_date)}
-                    {expense.recurrence === "MONTHLY"
+                    {expense.recurrence !== "NONE"
                       ? ` • next ${dateShort(expense.next_due_date)}`
                       : ""}
                   </p>
                 </div>
                 <div className="flex items-center gap-3">
-                  {expense.recurrence === "MONTHLY" ? (
-                    <StatusBadge value="MONTHLY" />
+                  {expense.recurrence !== "NONE" ? (
+                    <StatusBadge value={expense.recurrence} />
                   ) : null}
                   <p>{money(expense.amount_cents)}</p>
                   <StatusBadge value={expense.status} />
+                  {expense.status !== "PAID" ? (
+                    <form action={markExpensePaid}>
+                      <input type="hidden" name="id" value={expense.id} />
+                      <button className="rounded-lg border border-emerald-400/30 px-3 py-1 text-xs text-emerald-200">
+                        Mark paid
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               </div>
             ))}

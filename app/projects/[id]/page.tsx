@@ -65,40 +65,6 @@ export default async function ProjectDetail({
                 users={users}
               />
             </ModalPanel>
-            <ModalPanel title="Create linked task" triggerLabel="Add task">
-              <TaskForm
-                users={users}
-                clients={clients}
-                projects={[{ id: project.id, name: project.name }]}
-                redirectTo={redirectTo}
-              />
-            </ModalPanel>
-            <ModalPanel
-              title="Add note"
-              triggerLabel="Add note"
-              variant="ghost"
-            >
-              <NoteForm
-                entityType="Project"
-                entityId={project.id}
-                clientId={project.client_id}
-                projectId={project.id}
-                redirectTo={redirectTo}
-              />
-            </ModalPanel>
-            <ModalPanel
-              title="Upload file"
-              triggerLabel="Upload file"
-              variant="ghost"
-            >
-              <FileRecordForm
-                entityType="Project"
-                entityId={project.id}
-                clientId={project.client_id}
-                projectId={project.id}
-                redirectTo={redirectTo}
-              />
-            </ModalPanel>
           </>
         }
       />
@@ -176,7 +142,28 @@ export default async function ProjectDetail({
             </div>
           </Card>
           <Card>
-            <h2 className="text-lg font-semibold">Notes</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Tasks</h2>
+              <ModalPanel title="Create linked task" triggerLabel="Add task" variant="ghost">
+                <TaskForm users={users} clients={clients} projects={[{ id: project.id, name: project.name }]} redirectTo={redirectTo} />
+              </ModalPanel>
+            </div>
+            <div className="mt-4 grid gap-2">
+              {tasks.filter((task) => task.project_id === project.id).slice(0, 6).map((task) => (
+                <a key={task.id} href={`/tasks/${task.id}`} className="rounded-xl bg-white/[0.04] p-3 text-sm text-slate-200">
+                  <span className="font-semibold text-white">{task.title}</span>
+                  <span className="ml-2 text-slate-400">{task.status}</span>
+                </a>
+              ))}
+            </div>
+          </Card>
+          <Card>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Notes</h2>
+              <ModalPanel title="Add project note" triggerLabel="Add note" variant="ghost">
+                <NoteForm entityType="Project" entityId={project.id} clientId={project.client_id} projectId={project.id} redirectTo={redirectTo} />
+              </ModalPanel>
+            </div>
             <div className="mt-4 grid gap-2">
               {notes.map((note) => (
                 <p
@@ -189,7 +176,12 @@ export default async function ProjectDetail({
             </div>
           </Card>
           <Card>
-            <h2 className="text-lg font-semibold">Files</h2>
+            <div className="flex items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Files</h2>
+              <ModalPanel title="Upload project file" triggerLabel="Upload file" variant="ghost">
+                <FileRecordForm entityType="Project" entityId={project.id} clientId={project.client_id} projectId={project.id} redirectTo={redirectTo} />
+              </ModalPanel>
+            </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
                 <a

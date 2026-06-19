@@ -1,7 +1,7 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
 import { redirect } from "next/navigation";
-import { BriefcaseBusiness, Building2, CalendarDays, CircleDollarSign, ClipboardCheck, FileText, Gauge, Headset, Megaphone, PlusCircle, Search, Settings, Target } from "lucide-react";
+import { BriefcaseBusiness, Building2, CalendarDays, CircleDollarSign, ClipboardCheck, FileText, Gauge, Headset, Megaphone, PlusCircle, Search, Settings, Target, UsersRound } from "lucide-react";
 import { getCurrentUser, permissionsFor } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 import { logoutAction } from "@/lib/actions";
@@ -15,6 +15,7 @@ const primaryNav = [
   ["Tasks", "/tasks", ClipboardCheck, permissions.tasksRead],
   ["Calendar", "/calendar", CalendarDays, permissions.tasksRead],
   ["Finance", "/billing", CircleDollarSign, permissions.billingRead],
+  ["Payroll", "/payroll", UsersRound, permissions.payrollRead],
   ["Support", "/support", Headset, permissions.supportRead],
   ["Marketing", "/marketing", Megaphone, permissions.marketingRead],
 ] as const;
