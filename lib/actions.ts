@@ -121,6 +121,15 @@ function parseInvoiceLineItems(formData: FormData) {
     .filter((item) => item.description);
 }
 
+function nextRecurringDate(dateValue: string | null | undefined, recurrence: string) {
+  const date = dateValue ? new Date(`${dateValue}T00:00:00.000Z`) : new Date();
+  if (recurrence === "WEEKLY") date.setUTCDate(date.getUTCDate() + 7);
+  if (recurrence === "MONTHLY") date.setUTCMonth(date.getUTCMonth() + 1);
+  if (recurrence === "QUARTERLY") date.setUTCMonth(date.getUTCMonth() + 3);
+  if (recurrence === "ANNUAL") date.setUTCFullYear(date.getUTCFullYear() + 1);
+  return date.toISOString().slice(0, 10);
+}
+
 function parseTaskLinks(formData: FormData) {
   const urls = formData.getAll("taskLinkUrl").map((value) => String(value).trim());
   const labels = formData.getAll("taskLinkLabel").map((value) => String(value).trim());
@@ -1247,8 +1256,7 @@ export async function recordExpense(formData: FormData) {
       next_due_date:
         parsed.recurrence === "NONE"
           ? null
-          : (parsed.nextDueDate?.toISOString().slice(0, 10) ??
-            parsed.expenseDate?.toISOString().slice(0, 10) ??
+          : (parsed.expenseDate?.toISOString().slice(0, 10) ??
             new Date().toISOString().slice(0, 10)),
     })
     .select("id,vendor")
@@ -1270,6 +1278,43 @@ export async function recordExpense(formData: FormData) {
     projectId: parsed.projectId ?? null,
     actorId: user.id,
     message: `${data.vendor} expense recorded`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing?tab=expenses");
+}
+
+export async function markExpensePaid(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  const id = str(formData, "id");
+  const { data: expense, error: fetchError } = await getSupabaseAdmin()
+    .from("expenses")
+    .select("id,vendor,recurrence,expense_date,client_id,project_id")
+    .eq("id", id)
+    .single();
+  if (fetchError) throw fetchError;
+  const recurring = expense.recurrence && expense.recurrence !== "NONE";
+  const nextDate = recurring
+    ? nextRecurringDate(expense.expense_date, expense.recurrence)
+    : null;
+  const { error } = await getSupabaseAdmin()
+    .from("expenses")
+    .update(
+      recurring
+        ? { status: "PENDING", expense_date: nextDate, next_due_date: nextDate }
+        : { status: "PAID" },
+    )
+    .eq("id", id);
+  if (error) throw error;
+  await logActivity({
+    action: "EXPENSE_PAID",
+    entityType: "Expense",
+    entityId: id,
+    clientId: expense.client_id,
+    projectId: expense.project_id,
+    actorId: user.id,
+    message: recurring
+      ? `${expense.vendor} paid; next ${expense.recurrence.toLowerCase()} due ${nextDate}`
+      : `${expense.vendor} marked paid`,
   });
   revalidatePath("/billing");
   redirect("/billing?tab=expenses");
@@ -2272,6 +2317,21 @@ export async function upsertCompanySettings(formData: FormData) {
   redirect("/settings");
 }
 
+export async function updateRolePermissions(formData: FormData) {
+  await requirePermission(permissions.settingsManage);
+  const roleId = str(formData, "roleId");
+  const selectedPermissions = formData
+    .getAll("permissions")
+    .map((value) => String(value));
+  const { error } = await getSupabaseAdmin()
+    .from("roles")
+    .update({ permissions: selectedPermissions })
+    .eq("id", roleId);
+  if (error) throw error;
+  revalidatePath("/settings");
+  redirect("/settings");
+}
+
 export async function createPayrollRun(formData: FormData) {
   const user = await requirePermission(permissions.payrollWrite);
   if (!(await reserveSubmission(user.id, formData, "payroll-run:create")))
@@ -2320,7 +2380,7 @@ export async function addPayrollItem(formData: FormData) {
   });
   const selectedUser = await getSupabaseAdmin()
     .from("users")
-    .select("title,role:roles(name)")
+    .select("name,title,role:roles(name)")
     .eq("id", parsed.userId)
     .maybeSingle();
   const role = selectedUser.data?.role as { name?: string } | { name?: string }[] | null | undefined;
@@ -2341,6 +2401,16 @@ export async function addPayrollItem(formData: FormData) {
     .select("id")
     .single();
   if (error) throw error;
+  await getSupabaseAdmin().from("expenses").insert({
+    vendor: selectedUser.data?.name ?? "Employee payroll",
+    category: "Payroll",
+    amount_cents: parsed.grossPayCents,
+    status: "PENDING",
+    expense_date: new Date().toISOString().slice(0, 10),
+    notes: parsed.notes ?? "Payroll item",
+    created_by: user.id,
+    recurrence: "NONE",
+  });
   await logActivity({
     action: "PAYROLL_ITEM_ADDED",
     entityType: "PayrollItem",

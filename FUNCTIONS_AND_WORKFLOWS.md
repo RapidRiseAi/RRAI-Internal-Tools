@@ -162,3 +162,11 @@ This document is the operational map for the app. It explains what each module d
 - The task detail page is the working panel for a task: it shows status, priority, due date, assignee, instructions, expected outcome text, files, links, client/project context, and timestamps.
 - Task detail includes an **Update task** action for changing the task data and a **Complete task** action for logging the outcome, scrapping it, or marking it blocked.
 - Task detail includes an **Upload / add link** action using the file workflow so files and external links can be added while the task is being completed.
+
+## Calendar, permission, expense, and payroll expense update
+
+- Date and datetime fields use a global picker activator so focusing or clicking the field opens the browser calendar/time picker, and calendar picker icons are styled white for dark UI contrast.
+- Role permission cards in Settings are editable: admins can select/deselect individual permissions and save them back to the role record.
+- Recurring expenses now use the expense date as the schedule anchor. Weekly, monthly, quarterly, and annual expenses no longer ask for a separate next-due field.
+- Expense rows can be marked paid. One-time expenses become paid; recurring expenses log the payment and roll their next pending date forward based on recurrence.
+- Payroll items also create pending Payroll expenses so employee pay is visible in the expense workflow.

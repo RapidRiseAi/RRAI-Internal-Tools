@@ -9,6 +9,7 @@ import {
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listPayments } from "@/lib/data";
+import { markExpensePaid } from "@/lib/actions";
 import { dateShort, money } from "@/lib/format";
 import type {
   Expense,
@@ -241,6 +242,14 @@ export default async function Billing() {
                   ) : null}
                   <p>{money(expense.amount_cents)}</p>
                   <StatusBadge value={expense.status} />
+                  {expense.status !== "PAID" ? (
+                    <form action={markExpensePaid}>
+                      <input type="hidden" name="id" value={expense.id} />
+                      <button className="rounded-lg border border-emerald-400/30 px-3 py-1 text-xs text-emerald-200">
+                        Mark paid
+                      </button>
+                    </form>
+                  ) : null}
                 </div>
               </div>
             ))}

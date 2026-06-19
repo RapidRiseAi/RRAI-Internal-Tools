@@ -6,12 +6,13 @@ import {
   ChecklistTemplateForm,
   CompanySettingsForm,
   DocumentTemplateForm,
+  RolePermissionForm,
   UserForm,
 } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
-import { permissions, rolePermissionMap } from "@/lib/constants";
+import { permissions } from "@/lib/constants";
 import {
   listChecklistItems,
   listChecklistTemplates,
@@ -200,16 +201,10 @@ export default async function SettingsPage() {
             Role permission matrix
           </h2>
           <div className="grid gap-3 md:grid-cols-2">
-            {Object.entries(rolePermissionMap).map(([role, perms]) => (
-              <ModalPanel key={role} title={`${role} permissions`} triggerLabel={role} variant="ghost">
-                <p className="mb-4 text-sm text-slate-400">{perms.length} permissions assigned to this role.</p>
-                <div className="grid gap-2 md:grid-cols-2">
-                  {perms.map((permission) => (
-                    <span key={permission} className="rounded-xl border border-white/10 bg-white/[0.04] px-3 py-2 text-sm text-slate-200">
-                      {permission}
-                    </span>
-                  ))}
-                </div>
+            {roles.map((role) => (
+              <ModalPanel key={role.id} title={`Edit ${role.name} permissions`} triggerLabel={role.name} variant="ghost">
+                <p className="mb-4 text-sm text-slate-400">{role.permissions.length} permissions assigned to this role.</p>
+                <RolePermissionForm role={role} />
               </ModalPanel>
             ))}
           </div>

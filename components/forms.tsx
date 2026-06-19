@@ -31,11 +31,13 @@ import {
   upsertService,
   upsertSupportTicket,
   updateOwnLoginDetails,
+  updateRolePermissions,
   upsertTask,
   upsertVendor,
   upsertUser,
 } from "@/lib/actions";
 import {
+  allPermissions,
   affiliateStatuses,
   clientStatuses,
   commissionStatuses,
@@ -568,6 +570,25 @@ export function AccountLoginForm({ user }: { user: User }) {
   );
 }
 
+
+export function RolePermissionForm({ role }: { role: RoleOption & { permissions?: string[] } }) {
+  const currentPermissions = new Set(role.permissions ?? []);
+  return (
+    <form action={updateRolePermissions} className="grid gap-4">
+      <input type="hidden" name="roleId" value={role.id} />
+      <div className="grid gap-2 md:grid-cols-2">
+        {allPermissions.map((permission) => (
+          <label key={permission} className="flex items-center gap-3 rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-slate-200">
+            <input name="permissions" type="checkbox" value={permission} defaultChecked={currentPermissions.has(permission)} />
+            {permission}
+          </label>
+        ))}
+      </div>
+      <SubmitButton pendingLabel="Saving permissions…">Save permissions</SubmitButton>
+    </form>
+  );
+}
+
 export function UserForm({ roles, user }: { roles: RoleOption[]; user?: User }) {
   const [state, formAction] = useActionState(upsertUser, { ok: false });
   return (
@@ -909,11 +930,7 @@ export function ExpenseForm({
       <Field label={recurrence === "NONE" ? "Expense date" : "First due date"}>
         <input className={inputClass} name="expenseDate" type="date" />
       </Field>
-      {recurrence !== "NONE" ? (
-        <Field label="Next due date">
-          <input className={inputClass} name="nextDueDate" type="date" />
-        </Field>
-      ) : null}
+
       <Field label="Client">
         <select className={inputClass} name="clientId">
           <option value="">No client</option>
