@@ -1,5 +1,6 @@
 import { AppShell } from "@/components/app-shell";
 import {
+  DeleteExpenseForm,
   ExpenseForm,
   InvoiceForm,
   PaymentForm,
@@ -102,7 +103,7 @@ export default async function Billing() {
               triggerLabel="Add expense"
               variant="ghost"
             >
-              <ExpenseForm clients={clients} projects={projects} />
+              <ExpenseForm clients={clients} projects={projects} vendors={vendors} />
             </ModalPanel>
           </>
         }
@@ -230,7 +231,7 @@ export default async function Billing() {
                 <div>
                   <p className="font-semibold text-white">{expense.vendor}</p>
                   <p className="text-sm text-slate-400">
-                    {expense.category} • {dateShort(expense.expense_date)}
+                    {expense.category} • {expense.expense_type ?? "GENERAL"} • {dateShort(expense.expense_date)}
                     {expense.recurrence !== "NONE"
                       ? ` • next ${dateShort(expense.next_due_date)}`
                       : ""}
@@ -242,6 +243,10 @@ export default async function Billing() {
                   ) : null}
                   <p>{money(expense.amount_cents)}</p>
                   <StatusBadge value={expense.status} />
+                  <ModalPanel title={`Update ${expense.vendor}`} triggerLabel="Update" variant="ghost">
+                    <ExpenseForm clients={clients} projects={projects} vendors={vendors} expense={expense} />
+                  </ModalPanel>
+                  <DeleteExpenseForm expense={expense} />
                   {expense.status !== "PAID" ? (
                     <form action={markExpensePaid}>
                       <input type="hidden" name="id" value={expense.id} />

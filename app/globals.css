@@ -66,6 +66,7 @@ input[type="datetime-local"] {
 input[type="date"]::-webkit-calendar-picker-indicator,
 input[type="datetime-local"]::-webkit-calendar-picker-indicator {
   cursor: pointer;
-  filter: invert(1) brightness(1.8);
+  color: white;
+  filter: brightness(0) invert(1);
   opacity: 1;
 }

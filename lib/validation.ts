@@ -162,6 +162,7 @@ export const vendorSchema = z.object({
 export const expenseSchema = z.object({
   vendor: z.string().trim().min(2),
   category: z.string().trim().min(2),
+  expenseType: z.string().trim().min(2).default("General"),
   amountCents: z.coerce.number().int().min(1),
   status: z.enum(["PENDING", "APPROVED", "PAID", "REJECTED"]),
   expenseDate: optionalDate,

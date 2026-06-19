@@ -10,7 +10,7 @@ import {
   requireUser,
 } from "./auth";
 import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
-import { permissions } from "./constants";
+import { labelize, permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
 import {
   actionFormData,
@@ -832,11 +832,48 @@ export async function upsertUser(
       employee_notes: parsed.employeeNotes ?? null,
       ...(parsed.password ? { password_hash: await bcrypt.hash(parsed.password, 12) } : {}),
     };
-    const { error } = id
-      ? await getSupabaseAdmin().from("users").update(payload).eq("id", id)
-      : await getSupabaseAdmin().from("users").insert(payload);
+    const { data: savedUser, error } = id
+      ? await getSupabaseAdmin()
+          .from("users")
+          .update(payload)
+          .eq("id", id)
+          .select("id,name,pay_rate_cents,start_date")
+          .single()
+      : await getSupabaseAdmin()
+          .from("users")
+          .insert(payload)
+          .select("id,name,pay_rate_cents,start_date")
+          .single();
     if (error) throw error;
+    if (savedUser.pay_rate_cents > 0) {
+      const expenseDate = savedUser.start_date ?? new Date().toISOString().slice(0, 10);
+      const payrollExpense = {
+        vendor: savedUser.name,
+        category: "Payroll",
+        expense_type: "PAYROLL",
+        amount_cents: savedUser.pay_rate_cents,
+        status: "PENDING",
+        expense_date: expenseDate,
+        recurrence: parsed.payType === "HOURLY" ? "NONE" : "MONTHLY",
+        next_due_date: parsed.payType === "HOURLY" ? null : expenseDate,
+        notes: `${labelize(parsed.payType)} employee pay`,
+        created_by: user.id,
+      };
+      const { data: existingPayrollExpense, error: payrollFindError } = await getSupabaseAdmin()
+        .from("expenses")
+        .select("id")
+        .eq("expense_type", "PAYROLL")
+        .eq("vendor", savedUser.name)
+        .maybeSingle();
+      if (payrollFindError) throw payrollFindError;
+      const { error: payrollExpenseError } = existingPayrollExpense
+        ? await getSupabaseAdmin().from("expenses").update(payrollExpense).eq("id", existingPayrollExpense.id)
+        : await getSupabaseAdmin().from("expenses").insert(payrollExpense);
+      if (payrollExpenseError) throw payrollExpenseError;
+    }
     revalidatePath("/settings");
+    revalidatePath("/payroll");
+    revalidatePath("/billing");
     redirect("/settings");
   });
 }
@@ -1222,13 +1259,61 @@ export async function upsertVendor(formData: FormData) {
   redirect("/billing?tab=vendors");
 }
 
+async function ensureVendor(name: string, category?: string | null) {
+  const cleanName = name.trim();
+  if (!cleanName) return;
+  const { data: existing, error: findError } = await getSupabaseAdmin()
+    .from("vendors")
+    .select("id")
+    .ilike("name", cleanName)
+    .maybeSingle();
+  if (findError) throw findError;
+  if (existing) return;
+  const { error } = await getSupabaseAdmin().from("vendors").insert({
+    name: cleanName,
+    category: category ?? null,
+  });
+  if (error && error.code !== "23505") throw error;
+}
+
+function expensePayload(parsed: {
+  vendor: string;
+  category: string;
+  expenseType: string;
+  amountCents: number;
+  status: string;
+  expenseDate?: Date;
+  notes?: string;
+  clientId?: string;
+  projectId?: string;
+  recurrence: string;
+}) {
+  const expenseDate =
+    parsed.expenseDate?.toISOString().slice(0, 10) ??
+    new Date().toISOString().slice(0, 10);
+  return {
+    vendor: parsed.vendor,
+    category: parsed.category,
+    expense_type: parsed.expenseType,
+    amount_cents: parsed.amountCents,
+    status: parsed.status,
+    expense_date: expenseDate,
+    notes: parsed.notes ?? null,
+    client_id: parsed.clientId ?? null,
+    project_id: parsed.projectId ?? null,
+    recurrence: parsed.recurrence,
+    next_due_date: parsed.recurrence === "NONE" ? null : expenseDate,
+  };
+}
+
 export async function recordExpense(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "expense:create")))
     redirect("/billing?tab=expenses");
   const parsed = expenseSchema.parse({
-    vendor: str(formData, "vendor"),
+    vendor: str(formData, "vendor") || str(formData, "newVendor"),
     category: str(formData, "category"),
+    expenseType: str(formData, "expenseType") || "GENERAL",
     amountCents: randsToCents(formData.get("amountRands")),
     status: str(formData, "status") || "PENDING",
     expenseDate: str(formData, "expenseDate"),
@@ -1238,27 +1323,10 @@ export async function recordExpense(formData: FormData) {
     recurrence: str(formData, "recurrence"),
     nextDueDate: str(formData, "nextDueDate"),
   });
+  await ensureVendor(parsed.vendor, parsed.category);
   const { data, error } = await getSupabaseAdmin()
     .from("expenses")
-    .insert({
-      vendor: parsed.vendor,
-      category: parsed.category,
-      amount_cents: parsed.amountCents,
-      status: parsed.status,
-      expense_date:
-        parsed.expenseDate?.toISOString().slice(0, 10) ??
-        new Date().toISOString().slice(0, 10),
-      notes: parsed.notes ?? null,
-      client_id: parsed.clientId ?? null,
-      project_id: parsed.projectId ?? null,
-      created_by: user.id,
-      recurrence: parsed.recurrence,
-      next_due_date:
-        parsed.recurrence === "NONE"
-          ? null
-          : (parsed.expenseDate?.toISOString().slice(0, 10) ??
-            new Date().toISOString().slice(0, 10)),
-    })
+    .insert({ ...expensePayload(parsed), created_by: user.id })
     .select("id,vendor")
     .single();
   if (error) throw error;
@@ -1278,6 +1346,65 @@ export async function recordExpense(formData: FormData) {
     projectId: parsed.projectId ?? null,
     actorId: user.id,
     message: `${data.vendor} expense recorded`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing?tab=expenses");
+}
+
+
+export async function updateExpense(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  const id = str(formData, "id");
+  const parsed = expenseSchema.parse({
+    vendor: str(formData, "vendor") || str(formData, "newVendor"),
+    category: str(formData, "category"),
+    expenseType: str(formData, "expenseType") || "GENERAL",
+    amountCents: randsToCents(formData.get("amountRands")),
+    status: str(formData, "status") || "PENDING",
+    expenseDate: str(formData, "expenseDate"),
+    notes: str(formData, "notes"),
+    clientId: str(formData, "clientId"),
+    projectId: str(formData, "projectId"),
+    recurrence: str(formData, "recurrence"),
+  });
+  await ensureVendor(parsed.vendor, parsed.category);
+  const { error } = await getSupabaseAdmin()
+    .from("expenses")
+    .update(expensePayload(parsed))
+    .eq("id", id);
+  if (error) throw error;
+  await logActivity({
+    action: "EXPENSE_UPDATED",
+    entityType: "Expense",
+    entityId: id,
+    clientId: parsed.clientId ?? null,
+    projectId: parsed.projectId ?? null,
+    actorId: user.id,
+    message: `${parsed.vendor} expense updated`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing?tab=expenses");
+}
+
+export async function deleteExpense(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  const id = str(formData, "id");
+  const { data: expense, error: fetchError } = await getSupabaseAdmin()
+    .from("expenses")
+    .select("id,vendor,client_id,project_id")
+    .eq("id", id)
+    .single();
+  if (fetchError) throw fetchError;
+  const { error } = await getSupabaseAdmin().from("expenses").delete().eq("id", id);
+  if (error) throw error;
+  await logActivity({
+    action: "EXPENSE_REMOVED",
+    entityType: "Expense",
+    entityId: id,
+    clientId: expense.client_id,
+    projectId: expense.project_id,
+    actorId: user.id,
+    message: `${expense.vendor} expense removed`,
   });
   revalidatePath("/billing");
   redirect("/billing?tab=expenses");
