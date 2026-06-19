@@ -30,6 +30,7 @@ import {
   upsertSupportTicket,
   updateOwnLoginDetails,
   upsertTask,
+  upsertVendor,
   upsertUser,
 } from "@/lib/actions";
 import {
@@ -176,6 +177,7 @@ function AttachmentButtonFields({
               className={inputClass}
               name="file"
               type="file"
+              multiple
               accept="application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
             />
           </Field>
@@ -794,6 +796,39 @@ export function PaymentForm({ invoices }: { invoices: InvoiceOption[] }) {
   );
 }
 
+
+export function VendorForm() {
+  return (
+    <form action={upsertVendor} className="grid gap-4 md:grid-cols-2">
+      <SubmissionInput scope="upsert-vendor" />
+      <Field label="Vendor name">
+        <input className={inputClass} name="name" required />
+      </Field>
+      <Field label="Category">
+        <input className={inputClass} name="category" placeholder="Software / Contractor" />
+      </Field>
+      <Field label="Contact name">
+        <input className={inputClass} name="contactName" />
+      </Field>
+      <Field label="Email">
+        <input className={inputClass} name="email" type="email" />
+      </Field>
+      <Field label="Phone">
+        <input className={inputClass} name="phone" />
+      </Field>
+      <Field label="Website">
+        <input className={inputClass} name="website" type="url" placeholder="https://..." />
+      </Field>
+      <Field label="Notes">
+        <textarea className={inputClass} name="notes" />
+      </Field>
+      <div className="md:col-span-2">
+        <SubmitButton pendingLabel="Saving vendor…">Add vendor</SubmitButton>
+      </div>
+    </form>
+  );
+}
+
 export function ExpenseForm({
   clients,
   projects,
@@ -801,6 +836,7 @@ export function ExpenseForm({
   clients: ClientOption[];
   projects: ProjectOption[];
 }) {
+  const [recurrence, setRecurrence] = useState("NONE");
   return (
     <form action={recordExpense} className="grid gap-4 md:grid-cols-2">
       <SubmissionInput scope="record-expense" />
@@ -832,18 +868,28 @@ export function ExpenseForm({
           <option value="REJECTED">Rejected</option>
         </select>
       </Field>
-      <Field label="Expense date">
-        <input className={inputClass} name="expenseDate" type="date" />
-      </Field>
-      <Field label="Recurrence">
-        <select className={inputClass} name="recurrence" defaultValue="NONE">
-          <option value="NONE">One-time</option>
+      <Field label="Expense type">
+        <select
+          className={inputClass}
+          name="recurrence"
+          value={recurrence}
+          onChange={(event) => setRecurrence(event.target.value)}
+        >
+          <option value="NONE">One-time expense</option>
+          <option value="WEEKLY">Weekly recurring</option>
           <option value="MONTHLY">Monthly recurring</option>
+          <option value="QUARTERLY">Quarterly recurring</option>
+          <option value="ANNUAL">Annual recurring</option>
         </select>
       </Field>
-      <Field label="Next due date">
-        <input className={inputClass} name="nextDueDate" type="date" />
+      <Field label={recurrence === "NONE" ? "Expense date" : "First due date"}>
+        <input className={inputClass} name="expenseDate" type="date" />
       </Field>
+      {recurrence !== "NONE" ? (
+        <Field label="Next due date">
+          <input className={inputClass} name="nextDueDate" type="date" />
+        </Field>
+      ) : null}
       <Field label="Client">
         <select className={inputClass} name="clientId">
           <option value="">No client</option>
@@ -1577,6 +1623,7 @@ export function FileRecordForm({
           className={inputClass}
           name="file"
           type="file"
+          multiple
           accept="application/pdf,image/jpeg,image/png,image/webp,text/plain,text/csv,application/msword,application/vnd.openxmlformats-officedocument.wordprocessingml.document,application/vnd.ms-excel,application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"
         />
       </Field>
@@ -1605,7 +1652,7 @@ export function FileRecordForm({
         MB. Use the external link fields only for files already hosted
         elsewhere.
       </p>
-      <SubmitButton pendingLabel="Saving file…">Upload file</SubmitButton>
+      <SubmitButton pendingLabel="Saving file…">Upload file(s)</SubmitButton>
     </form>
   );
 }

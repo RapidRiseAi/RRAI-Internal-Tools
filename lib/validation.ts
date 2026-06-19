@@ -138,6 +138,16 @@ export const paymentSchema = z.object({
   reference: optionalText,
 });
 
+export const vendorSchema = z.object({
+  name: z.string().trim().min(2),
+  category: optionalText,
+  contactName: optionalText,
+  email: optionalEmail,
+  phone: optionalText,
+  website: optionalText,
+  notes: optionalText,
+});
+
 export const expenseSchema = z.object({
   vendor: z.string().trim().min(2),
   category: z.string().trim().min(2),
@@ -147,7 +157,7 @@ export const expenseSchema = z.object({
   notes: optionalText,
   clientId: optionalUuid,
   projectId: optionalUuid,
-  recurrence: z.enum(["NONE", "MONTHLY"]).default("NONE"),
+  recurrence: z.enum(["NONE", "WEEKLY", "MONTHLY", "QUARTERLY", "ANNUAL"]).default("NONE"),
   nextDueDate: optionalDate,
 });
 

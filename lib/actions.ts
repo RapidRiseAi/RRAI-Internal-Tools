@@ -50,6 +50,7 @@ import {
   taskStatusSchema,
   uploadFileSchema,
   userSchema,
+  vendorSchema,
 } from "./validation";
 
 function str(formData: FormData, key: string) {
@@ -192,8 +193,8 @@ async function attachOptionalFile(
     actorId?: string;
   },
 ) {
-  const uploadedFile = formData.get("file");
-  const hasUpload = uploadedFile instanceof File && uploadedFile.size > 0;
+  const uploadedFiles = formData.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
+  const hasUpload = uploadedFiles.length > 0;
   const url = str(formData, "url");
   if (!hasUpload && !url) return;
 
@@ -203,32 +204,70 @@ async function attachOptionalFile(
   let mimeType = str(formData, "mimeType") || null;
 
   if (hasUpload) {
-    const upload = uploadFileSchema.parse({
-      filename: filename || uploadedFile.name,
-      mimeType: uploadedFile.type,
-      size: uploadedFile.size,
-      entityType: target.entityType,
-      entityId: target.entityId,
-      clientId: target.clientId ?? "",
-      leadId: target.leadId ?? "",
-      projectId: target.projectId ?? "",
-      knowledgeBaseItemId: target.knowledgeBaseItemId ?? "",
-    });
-    filename = upload.filename;
-    mimeType = upload.mimeType;
-    const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
-    const { error: uploadError } = await supabase.storage
-      .from(internalFilesBucket)
-      .upload(storagePath, uploadedFile, {
-        contentType: mimeType,
-        upsert: false,
+    const uploadedRecords = await Promise.all(
+      uploadedFiles.map(async (file) => {
+        const upload = uploadFileSchema.parse({
+          filename:
+            uploadedFiles.length === 1 && filename ? filename : file.name,
+          mimeType: file.type,
+          size: file.size,
+          entityType: target.entityType,
+          entityId: target.entityId,
+          clientId: target.clientId ?? "",
+          leadId: target.leadId ?? "",
+          projectId: target.projectId ?? "",
+          knowledgeBaseItemId: target.knowledgeBaseItemId ?? "",
+        });
+        const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
+        const { error: uploadError } = await supabase.storage
+          .from(internalFilesBucket)
+          .upload(storagePath, file, {
+            contentType: upload.mimeType,
+            upsert: false,
+          });
+        if (uploadError) throw uploadError;
+        const { data: signed, error: signedError } = await supabase.storage
+          .from(internalFilesBucket)
+          .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+        if (signedError) throw signedError;
+        return {
+          filename: upload.filename,
+          url: signed.signedUrl,
+          mimeType: upload.mimeType,
+        };
+      }),
+    );
+    const { error: filesError } = await supabase.from("files").insert(
+      uploadedRecords.map((record) => ({
+        filename: record.filename,
+        url: record.url,
+        mime_type: record.mimeType ?? null,
+        entity_type: target.entityType,
+        entity_id: target.entityId,
+        client_id: target.clientId ?? null,
+        lead_id: target.leadId ?? null,
+        project_id: target.projectId ?? null,
+        knowledge_base_item_id: target.knowledgeBaseItemId ?? null,
+      })),
+    );
+    if (filesError) throw filesError;
+    if (target.activityMessage || uploadedRecords.length) {
+      await logActivity({
+        action: "FILE_UPLOADED",
+        entityType: target.entityType,
+        entityId: target.entityId,
+        clientId: target.clientId ?? null,
+        leadId: target.leadId ?? null,
+        projectId: target.projectId ?? null,
+        actorId: target.actorId,
+        message:
+          uploadedRecords.length === 1
+            ? (target.activityMessage ?? `${uploadedRecords[0].filename} uploaded`)
+            : `${uploadedRecords.length} files uploaded`,
       });
-    if (uploadError) throw uploadError;
-    const { data: signed, error: signedError } = await supabase.storage
-      .from(internalFilesBucket)
-      .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
-    if (signedError) throw signedError;
-    fileUrl = signed.signedUrl;
+    }
+    return;
+
   } else {
     const parsed = fileRecordSchema.parse({
       filename:
@@ -805,9 +844,10 @@ export async function upsertQuote(
           .single();
     if (result.error) throw result.error;
     await supabase.from("quote_items").delete().eq("quote_id", result.data.id);
-    await supabase
+    const { error: lineItemsError } = await supabase
       .from("quote_items")
       .insert(lineItems.map((item) => ({ ...item, quote_id: result.data.id })));
+    if (lineItemsError) throw lineItemsError;
     await logActivity({
       action: id ? "QUOTE_UPDATED" : "QUOTE_CREATED",
       entityType: "Quote",
@@ -1083,6 +1123,44 @@ export async function recordPayment(formData: FormData) {
   redirect("/billing");
 }
 
+export async function upsertVendor(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "vendor:create")))
+    redirect("/billing?tab=vendors");
+  const parsed = vendorSchema.parse({
+    name: str(formData, "name"),
+    category: str(formData, "category"),
+    contactName: str(formData, "contactName"),
+    email: str(formData, "email"),
+    phone: str(formData, "phone"),
+    website: str(formData, "website"),
+    notes: str(formData, "notes"),
+  });
+  const { data, error } = await getSupabaseAdmin()
+    .from("vendors")
+    .insert({
+      name: parsed.name,
+      category: parsed.category ?? null,
+      contact_name: parsed.contactName ?? null,
+      email: parsed.email ?? null,
+      phone: parsed.phone ?? null,
+      website: parsed.website ?? null,
+      notes: parsed.notes ?? null,
+    })
+    .select("id,name")
+    .single();
+  if (error) throw error;
+  await logActivity({
+    action: "VENDOR_CREATED",
+    entityType: "Vendor",
+    entityId: data.id,
+    actorId: user.id,
+    message: `${data.name} vendor created`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing?tab=vendors");
+}
+
 export async function recordExpense(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "expense:create")))
@@ -1115,11 +1193,11 @@ export async function recordExpense(formData: FormData) {
       created_by: user.id,
       recurrence: parsed.recurrence,
       next_due_date:
-        parsed.nextDueDate?.toISOString().slice(0, 10) ??
-        (parsed.recurrence === "MONTHLY"
-          ? (parsed.expenseDate?.toISOString().slice(0, 10) ??
-            new Date().toISOString().slice(0, 10))
-          : null),
+        parsed.recurrence === "NONE"
+          ? null
+          : (parsed.nextDueDate?.toISOString().slice(0, 10) ??
+            parsed.expenseDate?.toISOString().slice(0, 10) ??
+            new Date().toISOString().slice(0, 10)),
     })
     .select("id,vendor")
     .single();
@@ -1441,6 +1519,16 @@ function filePermission(entityType: string) {
   return permissions.clientsWrite;
 }
 
+
+function fileTypedIds(parsed: { entityType: string; entityId: string; clientId?: string; leadId?: string; projectId?: string; knowledgeBaseItemId?: string }) {
+  return {
+    lead_id: parsed.leadId ?? (parsed.entityType === "Lead" ? parsed.entityId : null),
+    client_id: parsed.clientId ?? (parsed.entityType === "Client" ? parsed.entityId : null),
+    project_id: parsed.projectId ?? (parsed.entityType === "Project" ? parsed.entityId : null),
+    knowledge_base_item_id: parsed.knowledgeBaseItemId ?? (parsed.entityType === "KnowledgeBase" ? parsed.entityId : null),
+  };
+}
+
 function safeStorageName(filename: string) {
   const cleaned = filename
     .normalize("NFKD")
@@ -1461,8 +1549,8 @@ export async function addFileRecord(
     if (!(await reserveSubmission(user.id, formData, "file-record:create")))
       return;
 
-    const uploadedFile = formData.get("file");
-    const hasUpload = uploadedFile instanceof File && uploadedFile.size > 0;
+    const uploadedFiles = formData.getAll("file").filter((file): file is File => file instanceof File && file.size > 0);
+    const hasUpload = uploadedFiles.length > 0;
     const supabase = getSupabaseAdmin();
     let parsed: {
       filename: string;
@@ -1477,30 +1565,63 @@ export async function addFileRecord(
     };
 
     if (hasUpload) {
-      const upload = uploadFileSchema.parse({
-        filename: str(formData, "filename") || uploadedFile.name,
-        mimeType: uploadedFile.type,
-        size: uploadedFile.size,
-        entityType,
-        entityId: str(formData, "entityId"),
-        clientId: str(formData, "clientId"),
-        leadId: str(formData, "leadId"),
-        projectId: str(formData, "projectId"),
-        knowledgeBaseItemId: str(formData, "knowledgeBaseItemId"),
+      const records = await Promise.all(
+        uploadedFiles.map(async (file) => {
+          const upload = uploadFileSchema.parse({
+            filename:
+              uploadedFiles.length === 1 && str(formData, "filename")
+                ? str(formData, "filename")
+                : file.name,
+            mimeType: file.type,
+            size: file.size,
+            entityType,
+            entityId: str(formData, "entityId"),
+            clientId: str(formData, "clientId"),
+            leadId: str(formData, "leadId"),
+            projectId: str(formData, "projectId"),
+            knowledgeBaseItemId: str(formData, "knowledgeBaseItemId"),
+          });
+          const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
+          const { error: uploadError } = await supabase.storage
+            .from(internalFilesBucket)
+            .upload(storagePath, file, {
+              contentType: upload.mimeType,
+              upsert: false,
+            });
+          if (uploadError) throw uploadError;
+          const { data: signed, error: signedError } = await supabase.storage
+            .from(internalFilesBucket)
+            .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
+          if (signedError) throw signedError;
+          return { ...upload, url: signed.signedUrl };
+        }),
+      );
+      parsed = records[0];
+      const rows = records.map((record) => {
+        const typedIds = fileTypedIds(record);
+        return {
+          filename: record.filename,
+          url: record.url,
+          mime_type: record.mimeType ?? null,
+          entity_type: record.entityType,
+          entity_id: record.entityId,
+          ...typedIds,
+        };
       });
-      const storagePath = `${upload.entityType.toLowerCase()}/${upload.entityId}/${crypto.randomUUID()}-${safeStorageName(upload.filename)}`;
-      const { error: uploadError } = await supabase.storage
-        .from(internalFilesBucket)
-        .upload(storagePath, uploadedFile, {
-          contentType: upload.mimeType,
-          upsert: false,
-        });
-      if (uploadError) throw uploadError;
-      const { data: signed, error: signedError } = await supabase.storage
-        .from(internalFilesBucket)
-        .createSignedUrl(storagePath, 60 * 60 * 24 * 365 * 10);
-      if (signedError) throw signedError;
-      parsed = { ...upload, url: signed.signedUrl };
+      const { error } = await supabase.from("files").insert(rows);
+      if (error) throw error;
+      await logActivity({
+        action: "FILE_UPLOADED",
+        entityType: parsed.entityType,
+        entityId: parsed.entityId,
+        clientId: fileTypedIds(parsed).client_id,
+        leadId: fileTypedIds(parsed).lead_id,
+        projectId: fileTypedIds(parsed).project_id,
+        actorId: user.id,
+        message: `${records.length} file${records.length === 1 ? "" : "s"} uploaded`,
+      });
+      revalidatePath(path(formData, "/dashboard"));
+      return;
     } else {
       parsed = fileRecordSchema.parse({
         filename:
@@ -1520,20 +1641,7 @@ export async function addFileRecord(
       });
     }
 
-    const typedIds = {
-      lead_id:
-        parsed.leadId ??
-        (parsed.entityType === "Lead" ? parsed.entityId : null),
-      client_id:
-        parsed.clientId ??
-        (parsed.entityType === "Client" ? parsed.entityId : null),
-      project_id:
-        parsed.projectId ??
-        (parsed.entityType === "Project" ? parsed.entityId : null),
-      knowledge_base_item_id:
-        parsed.knowledgeBaseItemId ??
-        (parsed.entityType === "KnowledgeBase" ? parsed.entityId : null),
-    };
+    const typedIds = fileTypedIds(parsed);
     const { error } = await supabase.from("files").insert({
       filename: parsed.filename,
       url: parsed.url,
