@@ -12,6 +12,7 @@ import {
 import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
 import { labelize, permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
+import { syncTaskToGoogleCalendar } from "./google";
 import {
   actionFormData,
   type ActionResult,
@@ -817,6 +818,7 @@ export async function upsertTask(formData: FormData) {
     );
     if (linkError) throw linkError;
   }
+  await syncTaskToGoogleCalendar(result.data.id);
   await logActivity({
     action:
       parsed.status === "DONE"

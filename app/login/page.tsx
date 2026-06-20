@@ -4,7 +4,7 @@ import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
 import { LoginTransition } from "@/components/login-transition";
 import { SubmitButton } from "@/components/submit-button";
-import { Card, inputClass } from "@/components/ui";
+import { Card, inputClass, LinkButton } from "@/components/ui";
 import { loginAction } from "@/lib/actions";
 
 export default function LoginPage() {
@@ -50,7 +50,9 @@ export default function LoginPage() {
               {state?.error ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{state.error}</p> : null}
               <SubmitButton forcePending={loginSucceeded} pendingLabel={loginSucceeded ? "Opening dashboard…" : "Verifying credentials…"}>Sign in</SubmitButton>
               <LoginTransition active={loginSucceeded} />
-              <p className="text-xs leading-5 text-slate-500">The button stays in verification mode until Rapid Rise OS receives the login result. The dashboard transition only starts after a successful sign-in.</p>
+              <div className="relative my-1 text-center text-xs uppercase tracking-[0.2em] text-slate-500">or</div>
+              <LinkButton href="/api/auth/google/start?mode=login" variant="ghost">Sign in with Google</LinkButton>
+              <p className="text-xs leading-5 text-slate-500">The button stays in verification mode until Rapid Rise OS receives the login result. Google sign-in only works for active employee emails already approved in Rapid Rise OS.</p>
             </form>
             {pending && !loginSucceeded ? <p className="mt-4 rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/10 px-4 py-3 text-xs font-semibold text-rapid-cyan">Checking credentials securely…</p> : null}
           </section>
