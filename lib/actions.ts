@@ -2339,6 +2339,7 @@ export async function bookEvent(formData: FormData) {
     actorId: user.id,
     activityMessage: `File attached to booked event ${parsed.title}`,
   });
+  await syncTaskToGoogleCalendar(task.id);
   await logActivity({
     action: "EVENT_BOOKED",
     entityType: parsed.entityType,
@@ -2471,7 +2472,7 @@ export async function updateTaskStatus(formData: FormData) {
       dayOfWeek: data.recurrence_day_of_week,
       dayOfMonth: data.recurrence_day_of_month,
     });
-    const { error: recurrenceError } = await getSupabaseAdmin().from("tasks").insert({
+    const { data: recurrenceTask, error: recurrenceError } = await getSupabaseAdmin().from("tasks").insert({
       title: data.title,
       description: data.description,
       type: data.type,
@@ -2488,9 +2489,11 @@ export async function updateTaskStatus(formData: FormData) {
       recurrence_day_of_month: data.recurrence_day_of_month,
       recurrence_next_due_at: followingDueAt?.toISOString() ?? null,
       recurrence_parent_task_id: data.id,
-    });
+    }).select("id").single();
     if (recurrenceError) throw recurrenceError;
+    if (recurrenceTask?.id) await syncTaskToGoogleCalendar(recurrenceTask.id as string);
   }
+  await syncTaskToGoogleCalendar(data.id);
   if (outcome || scrapReason) {
     await logActivity({
       action: parsed.status === "SCRAPPED" ? "TASK_SCRAPPED" : "TASK_OUTCOME_LOGGED",

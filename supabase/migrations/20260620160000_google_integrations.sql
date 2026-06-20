@@ -28,3 +28,9 @@ alter table public.google_connections enable row level security;
 
 drop trigger if exists set_google_connections_updated_at on public.google_connections;
 create trigger set_google_connections_updated_at before update on public.google_connections for each row execute function public.set_updated_at();
+ALTER TABLE public.tasks
+  ADD COLUMN IF NOT EXISTS google_calendar_user_id uuid REFERENCES public.users(id) ON DELETE SET NULL;
+
+CREATE INDEX IF NOT EXISTS tasks_google_calendar_user_id_idx
+  ON public.tasks(google_calendar_user_id)
+  WHERE google_calendar_user_id IS NOT NULL;
