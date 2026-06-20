@@ -167,7 +167,7 @@ Rapid Rise OS is a Supabase-backed internal operating system for Rapid Rise AI. 
 - `/tasks` requires `tasks:read`, loads tasks, users, projects, and clients.
 - `/tasks/[id]` requires `tasks:read`, loads one task, users, clients, projects, and files linked by `entity_id`.
 - Task detail actions include update task, complete/scrap/block task, and upload task files or links.
-- `/calendar` requires `tasks:read`, loads tasks/users/clients/projects, calculates the displayed week, and shows tasks by due date/hour.
+- `/calendar` requires `tasks:read`, loads tasks, clients, projects, invoices, retainers, and expenses, calculates the displayed week, and shows all operational calendar items by due date/hour. It includes normal tasks, materialized recurring tasks, projected weekly/monthly recurring task occurrences, project deadlines, unpaid invoice due dates, active retainer billing dates, and unpaid expense due dates.
 
 ### 4.8 Billing, retainers, and PDFs
 
@@ -208,42 +208,42 @@ Rapid Rise OS is a Supabase-backed internal operating system for Rapid Rise AI. 
 
 ### 5.2 Form-to-action map
 
-| Form/component | Server action(s) | Primary records |
-| --- | --- | --- |
-| `LeadForm` | `upsertLead` | `leads`, `activity_logs` |
-| `ClientForm` | `upsertClient` | `clients`, `activity_logs` |
-| `TaskForm` | `upsertTask` | `tasks`, optional `files`, `activity_logs` |
-| `AccountLoginForm` | `updateOwnLoginDetails` | `users`, session continuity |
-| `RolePermissionForm` | `updateRolePermissions` | `roles` |
-| `UserForm` | `upsertUser` | `users`, payroll `expenses` |
-| `QuoteForm` | `upsertQuote` | `quotes`, `quote_items`, `activity_logs` |
-| `AcceptQuoteButton` | `acceptQuote` | clients/projects/invoices/retainers/activity, depending on branch |
-| `ProjectForm` | `upsertProject` | `projects`, `project_checklists`, `activity_logs` |
-| `PaymentForm` | `recordPayment` | `payments`, `invoices`, `activity_logs` |
-| `VendorForm` | `upsertVendor` | `vendors`, `activity_logs` |
-| `ExpenseForm` | `recordExpense`, `updateExpense` | `expenses`, `vendors`, optional `files`, `activity_logs` |
-| `DeleteExpenseForm` | `deleteExpense` | removes `expenses`, logs activity |
-| `RetainerForm` | `upsertRetainer` | `retainers`, `activity_logs` |
-| `SupportTicketForm` | `upsertSupportTicket` | `support_tickets`, `activity_logs` |
-| `AffiliateForm` | `upsertAffiliate` | `affiliates`, `activity_logs` |
-| `ReferralCommissionForms` | `createReferral`, `createCommission` | `referrals`, `commissions`, `activity_logs` |
-| `CampaignForm` | `upsertCampaign` | `campaigns`, `activity_logs` |
-| `ContentItemForm` | `upsertContentItem` | `content_items`, `activity_logs` |
-| `KnowledgeBaseForm` | `upsertKnowledgeBaseItem` | `knowledge_base_items`, `activity_logs` |
-| `ActivityWorkflowForm` | `upsertActivityWorkflow` | `activity_logs`, optional `files` |
-| `NoteForm` | `addNote` | `notes`, `activity_logs` |
-| `FileRecordForm` | `addFileRecord` | `files`, `activity_logs` |
-| `ChecklistTemplateForm` | `createChecklistTemplate` | `checklist_templates` |
-| `ChecklistTemplateEditForm` | `createChecklistTemplate` | `checklist_templates` |
-| `ChecklistItemEditForm` | `createChecklistItem` | `checklist_items` |
-| `ServiceForm` | `upsertService` | `services` |
-| `AssignLinkedTaskForm` | `assignLinkedTask` | `activity_logs`, `tasks` link context |
-| `InteractionEventForm` | `logInteractionEvent` | `activity_logs` |
-| `BookEventForm` | `bookEvent` | `tasks` calendar/event records, activity |
-| `LeadCallForm` | `logLeadCall` | `activity_logs`, lead follow-up state |
-| `PayrollRunForm` | `createPayrollRun` | `payroll_runs` |
-| `PayrollItemForm` | `addPayrollItem` | `payroll_items`, payroll `expenses` |
-| `DocumentTemplateForm` | `createDocumentTemplate` | `document_templates` |
+| Form/component              | Server action(s)                     | Primary records                                                   |
+| --------------------------- | ------------------------------------ | ----------------------------------------------------------------- |
+| `LeadForm`                  | `upsertLead`                         | `leads`, `activity_logs`                                          |
+| `ClientForm`                | `upsertClient`                       | `clients`, `activity_logs`                                        |
+| `TaskForm`                  | `upsertTask`                         | `tasks`, optional `files`, `activity_logs`                        |
+| `AccountLoginForm`          | `updateOwnLoginDetails`              | `users`, session continuity                                       |
+| `RolePermissionForm`        | `updateRolePermissions`              | `roles`                                                           |
+| `UserForm`                  | `upsertUser`                         | `users`, payroll `expenses`                                       |
+| `QuoteForm`                 | `upsertQuote`                        | `quotes`, `quote_items`, `activity_logs`                          |
+| `AcceptQuoteButton`         | `acceptQuote`                        | clients/projects/invoices/retainers/activity, depending on branch |
+| `ProjectForm`               | `upsertProject`                      | `projects`, `project_checklists`, `activity_logs`                 |
+| `PaymentForm`               | `recordPayment`                      | `payments`, `invoices`, `activity_logs`                           |
+| `VendorForm`                | `upsertVendor`                       | `vendors`, `activity_logs`                                        |
+| `ExpenseForm`               | `recordExpense`, `updateExpense`     | `expenses`, `vendors`, optional `files`, `activity_logs`          |
+| `DeleteExpenseForm`         | `deleteExpense`                      | removes `expenses`, logs activity                                 |
+| `RetainerForm`              | `upsertRetainer`                     | `retainers`, `activity_logs`                                      |
+| `SupportTicketForm`         | `upsertSupportTicket`                | `support_tickets`, `activity_logs`                                |
+| `AffiliateForm`             | `upsertAffiliate`                    | `affiliates`, `activity_logs`                                     |
+| `ReferralCommissionForms`   | `createReferral`, `createCommission` | `referrals`, `commissions`, `activity_logs`                       |
+| `CampaignForm`              | `upsertCampaign`                     | `campaigns`, `activity_logs`                                      |
+| `ContentItemForm`           | `upsertContentItem`                  | `content_items`, `activity_logs`                                  |
+| `KnowledgeBaseForm`         | `upsertKnowledgeBaseItem`            | `knowledge_base_items`, `activity_logs`                           |
+| `ActivityWorkflowForm`      | `upsertActivityWorkflow`             | `activity_logs`, optional `files`                                 |
+| `NoteForm`                  | `addNote`                            | `notes`, `activity_logs`                                          |
+| `FileRecordForm`            | `addFileRecord`                      | `files`, `activity_logs`                                          |
+| `ChecklistTemplateForm`     | `createChecklistTemplate`            | `checklist_templates`                                             |
+| `ChecklistTemplateEditForm` | `createChecklistTemplate`            | `checklist_templates`                                             |
+| `ChecklistItemEditForm`     | `createChecklistItem`                | `checklist_items`                                                 |
+| `ServiceForm`               | `upsertService`                      | `services`                                                        |
+| `AssignLinkedTaskForm`      | `assignLinkedTask`                   | `activity_logs`, `tasks` link context                             |
+| `InteractionEventForm`      | `logInteractionEvent`                | `activity_logs`                                                   |
+| `BookEventForm`             | `bookEvent`                          | `tasks` calendar/event records, activity                          |
+| `LeadCallForm`              | `logLeadCall`                        | `activity_logs`, lead follow-up state                             |
+| `PayrollRunForm`            | `createPayrollRun`                   | `payroll_runs`                                                    |
+| `PayrollItemForm`           | `addPayrollItem`                     | `payroll_items`, payroll `expenses`                               |
+| `DocumentTemplateForm`      | `createDocumentTemplate`             | `document_templates`                                              |
 
 ## 6. Server actions and branches
 
@@ -276,13 +276,14 @@ Rapid Rise OS is a Supabase-backed internal operating system for Rapid Rise AI. 
   - New task: reserves `task:create`, inserts task.
   - Existing task: updates task.
   - If status is `DONE`, sets/completes completion fields and logs `TASK_COMPLETED`; otherwise logs create/update.
+  - Recurrence branch: supports `NONE`, `WEEKLY`, and `MONTHLY`, stores interval/day metadata, calculates `recurrence_next_due_at`, and uses the due date or first recurrence date as the scheduled task date.
   - Optional uploaded files and supporting links are saved to `files` with `entity_type = Task`.
 - `updateTaskStatus(formData)` requires `tasks:write`. Branches:
-  - `DONE`: requires outcome notes, sets `completed_at`, logs completion.
+  - `DONE`: requires outcome notes, sets `completed_at`, logs completion, and automatically creates the next weekly/monthly task occurrence with the same core fields, assignee, client, and project.
   - `SCRAPPED`: stores scrap reason/outcome, logs cancellation.
   - `BLOCKED` or other statuses: updates status and logs status change.
 - `bookEvent(formData)` creates a task-like scheduled calendar/work item and logs it.
-- Calendar display is read-only; updates happen through task actions.
+- Calendar display is read-only; updates happen through task, project, billing, retainer, and expense actions.
 
 ### 6.5 Quotes
 
@@ -435,6 +436,8 @@ Rapid Rise OS is a Supabase-backed internal operating system for Rapid Rise AI. 
 - Invoice statuses: `DRAFT`, `SENT`, `PART_PAID`, `PAID`, `OVERDUE`, `REFUNDED`, `CANCELLED`.
 - Payment statuses: `PENDING`, `PAID`, `FAILED`, `REFUNDED`, `CANCELLED`.
 - Retainer statuses: `ACTIVE`, `PAUSED`, `CANCELLED`, `OVERDUE`, `TRIAL`, `UPGRADE_PENDING`.
+- Task types include sales, discovery, quote, design, development, integration, testing, client revision, support, admin, billing, content, and `OTHER`.
+- Task recurrence: `NONE`, `WEEKLY`, `MONTHLY`.
 - Expense statuses: `PENDING`, `APPROVED`, `PAID`, `REJECTED`.
 - Expense recurrence: `NONE`, `WEEKLY`, `MONTHLY`, `QUARTERLY`, `ANNUAL`.
 - Expense type examples currently offered in the UI: `SUBSCRIPTION`, `PAYROLL`, `SOFTWARE`, `CONTRACTOR`, `HOSTING`, `MARKETING`, `OFFICE`, `GENERAL`.
@@ -478,10 +481,11 @@ Rapid Rise OS is a Supabase-backed internal operating system for Rapid Rise AI. 
 ### 9.3 Task execution workflow
 
 1. Task is created with title, type, priority, due date/time, client/project links, assignee, instructions, expected outcome, attachments, and links.
-2. Task appears in Tasks and Calendar if due date/time exists.
+2. Task appears in Tasks and Calendar if due date/time exists; weekly/monthly recurring tasks also project upcoming occurrences into the calendar even before the next task record is materialized.
 3. Assignee opens task detail.
 4. Assignee can upload/add links, update task data, complete, scrap, or block task.
 5. Completion/scrap/block events create activity logs.
+6. Completing a recurring task creates the next occurrence and keeps the calendar populated across future weeks.
 
 ### 9.4 Expense and monthly-cost workflow
 
