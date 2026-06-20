@@ -12,7 +12,7 @@ import {
 import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
 import { labelize, permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
-import { syncAssignedTasksToGoogleCalendar, syncTaskToGoogleCalendar } from "./google";
+import { summarizeGoogleCalendarSyncErrors, syncAssignedTasksToGoogleCalendar, syncTaskToGoogleCalendar } from "./google";
 import {
   actionFormData,
   type ActionResult,
@@ -838,7 +838,7 @@ export async function upsertTask(formData: FormData) {
   redirect(path(formData, "/tasks"));
 }
 
-export async function syncMyGoogleCalendar() {
+export async function syncMyGoogleCalendar(formData?: FormData) {
   const user = await requireUser();
   const result = await syncAssignedTasksToGoogleCalendar(user.id);
   revalidatePath("/settings");
@@ -851,8 +851,11 @@ export async function syncMyGoogleCalendar() {
     skipped: String(result.skipped),
     failed: String(result.failed),
   });
-  if (result.errors[0]) params.set("message", result.errors[0]);
-  redirect(`/settings?${params.toString()}`);
+  const message = summarizeGoogleCalendarSyncErrors(result.errors);
+  if (message) params.set("message", message);
+  const returnTo = formData?.get("returnTo");
+  const destination = typeof returnTo === "string" && returnTo.startsWith("/") && !returnTo.startsWith("//") ? returnTo : "/settings";
+  redirect(`${destination}?${params.toString()}`);
 }
 
 export async function upsertUser(

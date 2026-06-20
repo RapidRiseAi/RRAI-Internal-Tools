@@ -1,16 +1,25 @@
 import { AppShell } from "@/components/app-shell";
 import { TaskForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
-import { updateTaskStatus } from "@/lib/actions";
-import { Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
+import { syncMyGoogleCalendar, updateTaskStatus } from "@/lib/actions";
+import { Button, Card, EmptyState, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listTasks, listUsers } from "@/lib/data";
 import { dateShort } from "@/lib/format";
 import type { Project } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 export const dynamic = "force-dynamic";
-export default async function TasksPage() {
+export default async function TasksPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   await requirePagePermission(permissions.tasksRead);
+  const params = (await searchParams) ?? {};
+  const googleSync = typeof params.googleSync === "string" ? params.googleSync : null;
+  const googleSyncMessage = typeof params.message === "string" ? params.message : null;
+  const syncCounts = {
+    attempted: typeof params.attempted === "string" ? params.attempted : "0",
+    synced: typeof params.synced === "string" ? params.synced : "0",
+    skipped: typeof params.skipped === "string" ? params.skipped : "0",
+    failed: typeof params.failed === "string" ? params.failed : "0",
+  };
   const [tasks, users, projects, clients] = await Promise.all([
     listTasks(),
     listUsers(),
@@ -30,15 +39,33 @@ export default async function TasksPage() {
         title="Tasks"
         description="A clean workload overview. Add tasks from the button and use compact row actions only when status or owner needs to change."
         actions={
-          <ModalPanel title="Create task" triggerLabel="Add task">
-            <TaskForm
-              users={userOptions}
-              clients={clients}
-              projects={projectOptions}
-            />
-          </ModalPanel>
+          <>
+            <LinkButton href="/api/auth/google/start?mode=connect&returnTo=/tasks" variant="ghost">Connect Google</LinkButton>
+            <form action={syncMyGoogleCalendar}>
+              <input type="hidden" name="returnTo" value="/tasks" />
+              <Button type="submit">Sync Google Calendar</Button>
+            </form>
+            <ModalPanel title="Create task" triggerLabel="Add task">
+              <TaskForm
+                users={userOptions}
+                clients={clients}
+                projects={projectOptions}
+              />
+            </ModalPanel>
+          </>
         }
       />
+      {googleSync ? (
+        <Card className={googleSync === "success" ? "mb-6 border-emerald-400/30 bg-emerald-400/10" : "mb-6 border-red-400/30 bg-red-400/10"}>
+          <p className="text-sm font-semibold text-white">
+            {googleSync === "success" ? "Google Calendar sync completed." : "Google Calendar sync had errors."}
+          </p>
+          <p className="mt-1 text-sm text-slate-300">
+            Attempted {syncCounts.attempted}, synced {syncCounts.synced}, skipped {syncCounts.skipped}, failed {syncCounts.failed}.
+            {googleSyncMessage ? ` ${googleSyncMessage}` : ""}
+          </p>
+        </Card>
+      ) : null}
       <div className="grid gap-6">
         <div className="grid gap-4 md:grid-cols-5">
           {[
