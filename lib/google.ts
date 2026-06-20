@@ -11,6 +11,48 @@ export function googleScopes() {
   return scopes;
 }
 
+
+const appTimeZone = process.env.APP_TIME_ZONE || process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/New_York";
+
+const googleColorByPriority: Record<string, string> = {
+  LOW: "10",
+  MEDIUM: "5",
+  HIGH: "6",
+  URGENT: "11",
+};
+
+const inactiveTaskStatuses = new Set(["DONE", "SCRAPPED"]);
+
+function zonedDateTimeForGoogle(date: Date) {
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: appTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    second: "2-digit",
+    hour12: false,
+  }).formatToParts(date);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  return `${byType.year}-${byType.month}-${byType.day}T${byType.hour}:${byType.minute}:${byType.second}`;
+}
+
+function taskCalendarDescription(task: { description?: string | null; id?: string; type?: string; priority?: string; status?: string }, files: { filename: string; url: string }[]) {
+  const detailLines = [
+    task.description?.trim() || "Rapid Rise OS task",
+    "",
+    `Status: ${task.status ?? "TO_DO"}`,
+    `Priority: ${task.priority ?? "MEDIUM"}`,
+    `Type: ${task.type ?? "ADMIN_TASK"}`,
+    task.id ? `Task ID: ${task.id}` : null,
+  ].filter(Boolean);
+  if (files.length) {
+    detailLines.push("", "Links / files:", ...files.map((file) => `- ${file.filename}: ${file.url}`));
+  }
+  return detailLines.join("\n");
+}
+
 function baseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
 }
@@ -190,7 +232,7 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
     if (!hasGoogleConfig()) return syncResult("skipped", taskId, "Google OAuth is not configured.");
     const { data: task, error: taskError } = await getSupabaseAdmin()
       .from("tasks")
-      .select("id,title,description,due_date,assigned_to,google_calendar_event_id,google_calendar_user_id")
+      .select("id,title,description,type,status,priority,due_date,duration_minutes,assigned_to,google_calendar_event_id,google_calendar_user_id")
       .eq("id", taskId)
       .maybeSingle();
     if (taskError) {
@@ -213,7 +255,7 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
       if (deleteResult.status === "failed") return syncResult("failed", taskId, deleteResult.message, existingEventId);
     }
 
-    if (!assignedUserId || !task.due_date) {
+    if (inactiveTaskStatuses.has(task.status as string) || !assignedUserId || !task.due_date) {
       if (existingEventId && existingUserId) {
         const deleteResult = await deleteGoogleCalendarEvent(existingUserId, existingEventId);
         if (deleteResult.status === "failed") return syncResult("failed", taskId, deleteResult.message, existingEventId);
@@ -231,18 +273,29 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
         console.error("Unable to clear Google Calendar task fields", { taskId, error: clearError });
         return syncResult("failed", taskId, `Unable to clear Google Calendar fields: ${clearError.message}`);
       }
-      return syncResult("skipped", taskId, !assignedUserId ? "Task has no assignee." : "Task has no due date.");
+      return syncResult("skipped", taskId, inactiveTaskStatuses.has(task.status as string) ? "Task is ended." : !assignedUserId ? "Task has no assignee." : "Task has no due date.");
     }
 
     const accessToken = await accessTokenForUser(assignedUserId);
     if (!accessToken) return syncResult("skipped", taskId, `Assigned user ${assignedUserId} has no connected Google Calendar account or valid refresh token.`);
+    const { data: files, error: filesError } = await getSupabaseAdmin()
+      .from("files")
+      .select("filename,url")
+      .eq("entity_type", "Task")
+      .eq("entity_id", taskId);
+    if (filesError) {
+      console.error("Unable to load task files for Google Calendar sync", { taskId, error: filesError });
+      return syncResult("failed", taskId, `Unable to load task links/files: ${filesError.message}`, existingEventId);
+    }
     const start = new Date(task.due_date as string);
-    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const durationMinutes = Math.max(5, Number(task.duration_minutes ?? 60));
+    const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
     const body = {
       summary: task.title,
-      description: task.description ?? "Rapid Rise OS task",
-      start: { dateTime: start.toISOString() },
-      end: { dateTime: end.toISOString() },
+      description: taskCalendarDescription(task, files ?? []),
+      start: { dateTime: zonedDateTimeForGoogle(start), timeZone: appTimeZone },
+      end: { dateTime: zonedDateTimeForGoogle(end), timeZone: appTimeZone },
+      colorId: googleColorByPriority[String(task.priority ?? "MEDIUM")] ?? googleColorByPriority.MEDIUM,
       extendedProperties: { private: { rapidRiseTaskId: task.id } },
     };
     const eventId = existingUserId === assignedUserId ? existingEventId : null;

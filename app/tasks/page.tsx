@@ -37,7 +37,7 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
       <PageHeader
         eyebrow="Workload"
         title="Tasks"
-        description="A clean workload overview. Add tasks from the button and use compact row actions only when status or owner needs to change."
+        description="A clean workload overview. Add tasks from the button, open task details, edit assignments, or end tasks from each row."
         actions={
           <>
             <LinkButton href="/api/auth/google/start?mode=connect&returnTo=/tasks" variant="ghost">Connect Google</LinkButton>
@@ -133,52 +133,23 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
                         {task.recurrence === "NONE" ? "—" : `${task.recurrence.toLowerCase()}${task.recurrence_next_due_at ? ` · next ${dateShort(task.recurrence_next_due_at)}` : ""}`}
                       </td>
                       <td className="py-2">
-                        <ModalPanel
-                          title={`Update ${task.title}`}
-                          triggerLabel="Update"
-                          variant="ghost"
-                        >
-                          <div className="grid gap-4 md:grid-cols-2">
-                            <form
-                              action={updateTaskStatus}
-                              className="grid gap-3"
-                            >
-                              <input type="hidden" name="id" value={task.id} />
-                              <input
-                                type="hidden"
-                                name="redirectTo"
-                                value="/tasks"
-                              />
-                              <label className="grid gap-2 text-sm text-slate-300">
-                                Status
-                                <select
-                                  className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm"
-                                  name="status"
-                                  defaultValue={task.status}
-                                >
-                                  <option value="TO_DO">To Do</option>
-                                  <option value="IN_PROGRESS">
-                                    In Progress
-                                  </option>
-                                  <option value="WAITING_FOR_CLIENT">
-                                    Waiting Client
-                                  </option>
-                                  <option value="BLOCKED">Blocked</option>
-                                  <option value="DONE">Done</option><option value="SCRAPPED">Scrapped</option>
-                                </select>
-                              </label>
-                              <button className="rounded-lg border border-white/10 px-3 py-2 text-sm text-rapid-cyan">
-                                Save status
-                              </button>
-                            </form>
-                            <form
-                              action={updateTaskStatus}
-                              className="grid gap-3"
-                            >
+                        <div className="flex flex-wrap gap-2">
+                          <LinkButton href={`/tasks/${task.id}`} variant="ghost">Open</LinkButton>
+                          <ModalPanel title={`Edit ${task.title}`} triggerLabel="Edit" variant="ghost">
+                            <TaskForm
+                              users={userOptions}
+                              clients={clients}
+                              projects={projectOptions}
+                              redirectTo="/tasks"
+                              task={task}
+                            />
+                          </ModalPanel>
+                          <ModalPanel title={`End ${task.title}`} triggerLabel="End" variant="ghost">
+                            <form action={updateTaskStatus} className="grid gap-3">
                               <input type="hidden" name="id" value={task.id} />
                               <input type="hidden" name="redirectTo" value="/tasks" />
                               <label className="grid gap-2 text-sm text-slate-300">
-                                Close task as
+                                End task as
                                 <select className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="status" defaultValue="DONE">
                                   <option value="DONE">Complete</option>
                                   <option value="SCRAPPED">Scrap</option>
@@ -194,11 +165,11 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
                                 <textarea className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="scrapReason" />
                               </label>
                               <button className="rounded-lg border border-white/10 px-3 py-2 text-sm text-rapid-cyan">
-                                Save outcome
+                                End task
                               </button>
                             </form>
-                          </div>
-                        </ModalPanel>
+                          </ModalPanel>
+                        </div>
                       </td>
                     </tr>
                   ))}

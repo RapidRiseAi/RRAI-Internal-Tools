@@ -74,6 +74,7 @@ export const taskSchema = z.object({
   status: z.enum(taskStatuses),
   priority: z.enum(priorities),
   dueDate: optionalDate,
+  durationMinutes: z.coerce.number().int().min(5).max(1440).default(60),
   clientId: optionalUuid,
   projectId: optionalUuid,
   assignedToId: optionalUuid,
@@ -354,6 +355,7 @@ export const linkedTaskSchema = z.object({
   title: z.string().trim().min(2),
   description: optionalText,
   dueDate: optionalDate,
+  durationMinutes: z.coerce.number().int().min(5).max(1440).default(60),
   assignedToId: optionalUuid,
 });
 export const leadCallSchema = z.object({

@@ -131,6 +131,29 @@ function nextRecurringDate(dateValue: string | null | undefined, recurrence: str
   return date.toISOString().slice(0, 10);
 }
 
+const appTimeZone = process.env.APP_TIME_ZONE || process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/New_York";
+
+function parseAppDateTime(value: string) {
+  if (!value) return value;
+  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
+  if (!match) return value;
+  const [, year, month, day, hour, minute] = match.map(Number);
+  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute));
+  const parts = new Intl.DateTimeFormat("en-CA", {
+    timeZone: appTimeZone,
+    year: "numeric",
+    month: "2-digit",
+    day: "2-digit",
+    hour: "2-digit",
+    minute: "2-digit",
+    hour12: false,
+  }).formatToParts(utcGuess);
+  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
+  const zonedAsUtc = Date.UTC(Number(byType.year), Number(byType.month) - 1, Number(byType.day), Number(byType.hour), Number(byType.minute));
+  const desiredAsUtc = Date.UTC(year, month - 1, day, hour, minute);
+  return new Date(utcGuess.getTime() + desiredAsUtc - zonedAsUtc).toISOString();
+}
+
 function parseTaskLinks(formData: FormData) {
   const urls = formData.getAll("taskLinkUrl").map((value) => String(value).trim());
   const labels = formData.getAll("taskLinkLabel").map((value) => String(value).trim());
@@ -738,7 +761,8 @@ export async function upsertTask(formData: FormData) {
     type: str(formData, "type"),
     status: str(formData, "status"),
     priority: str(formData, "priority"),
-    dueDate: str(formData, "dueDate"),
+    dueDate: parseAppDateTime(str(formData, "dueDate")),
+    durationMinutes: str(formData, "durationMinutes") || "60",
     clientId: str(formData, "clientId"),
     projectId: str(formData, "projectId"),
     assignedToId: str(formData, "assignedToId"),
@@ -772,6 +796,7 @@ export async function upsertTask(formData: FormData) {
     status: parsed.status,
     priority: parsed.priority,
     due_date: taskDueDate?.toISOString() ?? null,
+    duration_minutes: parsed.durationMinutes,
     recurrence: parsed.recurrence,
     recurrence_interval: parsed.recurrence === "NONE" ? 1 : parsed.recurrenceInterval,
     recurrence_day_of_week: parsed.recurrence === "WEEKLY" ? parsed.recurrenceDayOfWeek ?? taskDueDate?.getUTCDay() ?? null : null,
@@ -2162,7 +2187,8 @@ export async function assignLinkedTask(formData: FormData) {
     clientId: str(formData, "clientId"),
     title: str(formData, "title"),
     description: str(formData, "description"),
-    dueDate: str(formData, "dueDate"),
+    dueDate: parseAppDateTime(str(formData, "dueDate")),
+    durationMinutes: str(formData, "durationMinutes") || "60",
     assignedToId: str(formData, "assignedToId"),
   });
   const entityId =
@@ -2177,6 +2203,7 @@ export async function assignLinkedTask(formData: FormData) {
       status: "TO_DO",
       priority: "HIGH",
       due_date: parsed.dueDate?.toISOString() ?? null,
+      duration_minutes: parsed.durationMinutes,
       assigned_to: parsed.assignedToId ?? null,
       client_id: parsed.clientId ?? null,
       created_by: user.id,
@@ -2474,7 +2501,7 @@ export async function updateTaskStatus(formData: FormData) {
         : null,
     })
     .eq("id", parsed.id)
-    .select("id,title,description,type,priority,due_date,client_id,project_id,assigned_to,created_by,recurrence,recurrence_interval,recurrence_day_of_week,recurrence_day_of_month")
+    .select("id,title,description,type,priority,due_date,duration_minutes,client_id,project_id,assigned_to,created_by,recurrence,recurrence_interval,recurrence_day_of_week,recurrence_day_of_month")
     .single();
   if (error) throw error;
   if (parsed.status === "DONE" && previousTask.status !== "DONE" && data.recurrence !== "NONE") {
@@ -2499,6 +2526,7 @@ export async function updateTaskStatus(formData: FormData) {
       status: "TO_DO",
       priority: data.priority,
       due_date: nextDueAt?.toISOString() ?? null,
+      duration_minutes: data.duration_minutes ?? 60,
       client_id: data.client_id,
       project_id: data.project_id,
       assigned_to: data.assigned_to,

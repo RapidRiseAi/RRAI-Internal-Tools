@@ -83,6 +83,7 @@ export type Task = {
   status: string;
   priority: string;
   due_date: string | null;
+  duration_minutes: number;
   client_id: string | null;
   project_id: string | null;
   assigned_to: string | null;

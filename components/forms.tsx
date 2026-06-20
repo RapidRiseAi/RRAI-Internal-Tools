@@ -466,6 +466,12 @@ export function TaskForm({
       <Field label="Due date/time">
         <input className={inputClass} type="datetime-local" name="dueDate" defaultValue={dateTimeInput(task?.due_date)} />
       </Field>
+      <Field label="Duration">
+        <div className="grid grid-cols-[1fr_auto] gap-2">
+          <input className={inputClass} type="number" min="5" max="1440" step="5" name="durationMinutes" defaultValue={task?.duration_minutes ?? 60} />
+          <div className="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">minutes</div>
+        </div>
+      </Field>
       <Field label="Recurring task">
         <select className={inputClass} name="recurrence" value={recurrence} onChange={(event) => setRecurrence(event.target.value as typeof taskRecurrences[number])}>
           {taskRecurrences.map((value) => (
