@@ -12,7 +12,7 @@ import {
 import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
 import { labelize, permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
-import { syncTaskToGoogleCalendar } from "./google";
+import { syncAssignedTasksToGoogleCalendar, syncTaskToGoogleCalendar } from "./google";
 import {
   actionFormData,
   type ActionResult,
@@ -836,6 +836,23 @@ export async function upsertTask(formData: FormData) {
   });
   revalidatePath("/tasks");
   redirect(path(formData, "/tasks"));
+}
+
+export async function syncMyGoogleCalendar() {
+  const user = await requireUser();
+  const result = await syncAssignedTasksToGoogleCalendar(user.id);
+  revalidatePath("/settings");
+  revalidatePath("/calendar");
+  revalidatePath("/tasks");
+  const params = new URLSearchParams({
+    googleSync: result.failed > 0 ? "failed" : "success",
+    attempted: String(result.attempted),
+    synced: String(result.synced),
+    skipped: String(result.skipped),
+    failed: String(result.failed),
+  });
+  if (result.errors[0]) params.set("message", result.errors[0]);
+  redirect(`/settings?${params.toString()}`);
 }
 
 export async function upsertUser(

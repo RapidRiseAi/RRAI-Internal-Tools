@@ -21,10 +21,12 @@ export async function GET(request: Request) {
     const userId = mode === "connect" ? currentUser?.id : matchedUser?.id;
     if (!userId) return NextResponse.redirect(new URL("/login?google=no-user", request.url));
     await upsertGoogleConnection({ userId: userId as string, googleUser, tokens });
-    await syncAssignedTasksToGoogleCalendar(userId as string);
+    const syncResult = await syncAssignedTasksToGoogleCalendar(userId as string);
+    if (syncResult.failed > 0) console.error("Google Calendar post-connect sync had failures", { userId, syncResult });
     if (mode === "login") await createSession(userId as string);
     return NextResponse.redirect(new URL(mode === "connect" ? "/settings?google=connected" : "/dashboard", request.url));
-  } catch {
+  } catch (error) {
+    console.error("Google OAuth callback failed", { error });
     return NextResponse.redirect(new URL("/login?google=failed", request.url));
   }
 }

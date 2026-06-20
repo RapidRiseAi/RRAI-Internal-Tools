@@ -91,87 +91,149 @@ async function refreshAccessToken(connection: { user_id: string; refresh_token: 
       grant_type: "refresh_token",
     }),
   });
-  if (!response.ok) return null;
+  if (!response.ok) {
+    const error = await googleErrorMessage(response);
+    console.error("Google access token refresh failed", { userId: connection.user_id, error });
+    return null;
+  }
   const tokens = await response.json() as TokenResponse;
-  await getSupabaseAdmin().from("google_connections").update({
+  const { error: updateError } = await getSupabaseAdmin().from("google_connections").update({
     access_token: tokens.access_token,
     token_expires_at: new Date(Date.now() + tokens.expires_in * 1000).toISOString(),
     updated_at: new Date().toISOString(),
   }).eq("user_id", connection.user_id);
+  if (updateError) console.error("Unable to save refreshed Google access token", { userId: connection.user_id, error: updateError });
   return tokens.access_token;
 }
 
 export async function accessTokenForUser(userId: string) {
-  const { data } = await getSupabaseAdmin().from("google_connections").select("user_id,access_token,refresh_token,token_expires_at,calendar_connected").eq("user_id", userId).maybeSingle();
+  const { data, error } = await getSupabaseAdmin().from("google_connections").select("user_id,access_token,refresh_token,token_expires_at,calendar_connected").eq("user_id", userId).maybeSingle();
+  if (error) {
+    console.error("Unable to load Google connection", { userId, error });
+    return null;
+  }
   if (!data?.calendar_connected) return null;
   if (data.token_expires_at && new Date(data.token_expires_at).getTime() > Date.now() + 60000) return data.access_token as string;
   return refreshAccessToken(data as { user_id: string; refresh_token: string | null });
 }
 
+export type GoogleCalendarSyncStatus = "synced" | "skipped" | "failed";
+
+export type GoogleCalendarSyncResult = {
+  status: GoogleCalendarSyncStatus;
+  taskId: string;
+  message: string;
+  eventId?: string | null;
+};
+
+export type GoogleCalendarBatchSyncResult = {
+  attempted: number;
+  synced: number;
+  skipped: number;
+  failed: number;
+  errors: string[];
+};
+
+function syncResult(status: GoogleCalendarSyncStatus, taskId: string, message: string, eventId?: string | null): GoogleCalendarSyncResult {
+  return { status, taskId, message, eventId };
+}
+
+async function googleErrorMessage(response: Response) {
+  const text = await response.text().catch(() => "");
+  if (!text) return `${response.status} ${response.statusText}`.trim();
+  try {
+    const parsed = JSON.parse(text) as { error?: { message?: string }; error_description?: string };
+    return parsed.error?.message ?? parsed.error_description ?? text;
+  } catch {
+    return text;
+  }
+}
+
 async function deleteGoogleCalendarEvent(userId: string, eventId: string) {
   const accessToken = await accessTokenForUser(userId);
-  if (!accessToken) return;
-  await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
+  if (!accessToken) return syncResult("failed", "unknown", `Cannot delete Google Calendar event ${eventId}: no valid Google Calendar token for user ${userId}.`, eventId);
+  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events/${eventId}`, {
     method: "DELETE",
     headers: { authorization: `Bearer ${accessToken}` },
   });
+  if (response.ok || response.status === 404 || response.status === 410) return syncResult("synced", "unknown", `Deleted Google Calendar event ${eventId}.`, eventId);
+  const error = await googleErrorMessage(response);
+  console.error("Google Calendar event delete failed", { userId, eventId, status: response.status, error });
+  return syncResult("failed", "unknown", `Google Calendar delete failed for event ${eventId}: ${error}`, eventId);
 }
 
-export async function syncTaskToGoogleCalendar(taskId: string) {
-  if (!hasGoogleConfig()) return;
-  const { data: task } = await getSupabaseAdmin()
-    .from("tasks")
-    .select("id,title,description,due_date,assigned_to,google_calendar_event_id,google_calendar_user_id")
-    .eq("id", taskId)
-    .maybeSingle();
-  if (!task) return;
-
-  const existingEventId = task.google_calendar_event_id as string | null;
-  const existingUserId = task.google_calendar_user_id as string | null;
-  const assignedUserId = task.assigned_to as string | null;
-
-  if (existingEventId && existingUserId && existingUserId !== assignedUserId) {
-    await deleteGoogleCalendarEvent(existingUserId, existingEventId);
-  }
-
-  if (!assignedUserId || !task.due_date) {
-    if (existingEventId && existingUserId) await deleteGoogleCalendarEvent(existingUserId, existingEventId);
-    await getSupabaseAdmin()
+export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCalendarSyncResult> {
+  try {
+    if (!hasGoogleConfig()) return syncResult("skipped", taskId, "Google OAuth is not configured.");
+    const { data: task, error: taskError } = await getSupabaseAdmin()
       .from("tasks")
-      .update({ google_calendar_event_id: null, google_calendar_event_url: null, google_calendar_user_id: null, google_calendar_synced_at: null })
-      .eq("id", taskId);
-    return;
-  }
+      .select("id,title,description,due_date,assigned_to,google_calendar_event_id,google_calendar_user_id")
+      .eq("id", taskId)
+      .maybeSingle();
+    if (taskError) {
+      console.error("Unable to load task for Google Calendar sync", { taskId, error: taskError });
+      return syncResult("failed", taskId, `Unable to load task: ${taskError.message}`);
+    }
+    if (!task) return syncResult("skipped", taskId, "Task was not found.");
 
-  const accessToken = await accessTokenForUser(assignedUserId);
-  if (!accessToken) return;
-  const start = new Date(task.due_date as string);
-  const end = new Date(start.getTime() + 60 * 60 * 1000);
-  const body = {
-    summary: task.title,
-    description: task.description ?? "Rapid Rise OS task",
-    start: { dateTime: start.toISOString() },
-    end: { dateTime: end.toISOString() },
-    extendedProperties: { private: { rapidRiseTaskId: task.id } },
-  };
-  const eventId = existingUserId === assignedUserId ? existingEventId : null;
-  const eventUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events${eventId ? `/${eventId}` : ""}`;
-  let response = await fetch(eventUrl, {
-    method: eventId ? "PATCH" : "POST",
-    headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  if (response.status === 404 && eventId) {
-    response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
-      method: "POST",
+    const existingEventId = task.google_calendar_event_id as string | null;
+    const existingUserId = task.google_calendar_user_id as string | null;
+    const assignedUserId = task.assigned_to as string | null;
+
+    if (existingEventId && existingUserId && existingUserId !== assignedUserId) {
+      const deleteResult = await deleteGoogleCalendarEvent(existingUserId, existingEventId);
+      if (deleteResult.status === "failed") return syncResult("failed", taskId, deleteResult.message, existingEventId);
+    }
+
+    if (!assignedUserId || !task.due_date) {
+      if (existingEventId && existingUserId) {
+        const deleteResult = await deleteGoogleCalendarEvent(existingUserId, existingEventId);
+        if (deleteResult.status === "failed") return syncResult("failed", taskId, deleteResult.message, existingEventId);
+      }
+      const { error: clearError } = await getSupabaseAdmin()
+        .from("tasks")
+        .update({ google_calendar_event_id: null, google_calendar_event_url: null, google_calendar_user_id: null, google_calendar_synced_at: null })
+        .eq("id", taskId);
+      if (clearError) {
+        console.error("Unable to clear Google Calendar task fields", { taskId, error: clearError });
+        return syncResult("failed", taskId, `Unable to clear Google Calendar fields: ${clearError.message}`);
+      }
+      return syncResult("skipped", taskId, !assignedUserId ? "Task has no assignee." : "Task has no due date.");
+    }
+
+    const accessToken = await accessTokenForUser(assignedUserId);
+    if (!accessToken) return syncResult("skipped", taskId, `Assigned user ${assignedUserId} has no connected Google Calendar account or valid refresh token.`);
+    const start = new Date(task.due_date as string);
+    const end = new Date(start.getTime() + 60 * 60 * 1000);
+    const body = {
+      summary: task.title,
+      description: task.description ?? "Rapid Rise OS task",
+      start: { dateTime: start.toISOString() },
+      end: { dateTime: end.toISOString() },
+      extendedProperties: { private: { rapidRiseTaskId: task.id } },
+    };
+    const eventId = existingUserId === assignedUserId ? existingEventId : null;
+    const eventUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events${eventId ? `/${eventId}` : ""}`;
+    let response = await fetch(eventUrl, {
+      method: eventId ? "PATCH" : "POST",
       headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
       body: JSON.stringify(body),
     });
-  }
-  if (!response.ok) return;
-  const event = await response.json() as { id?: string; htmlLink?: string };
-  if (event.id) {
-    await getSupabaseAdmin()
+    if (response.status === 404 && eventId) {
+      response = await fetch("https://www.googleapis.com/calendar/v3/calendars/primary/events", {
+        method: "POST",
+        headers: { authorization: `Bearer ${accessToken}`, "content-type": "application/json" },
+        body: JSON.stringify(body),
+      });
+    }
+    if (!response.ok) {
+      const error = await googleErrorMessage(response);
+      console.error("Google Calendar event sync failed", { taskId, assignedUserId, eventId, status: response.status, error });
+      return syncResult("failed", taskId, `Google Calendar API failed: ${error}`, eventId);
+    }
+    const event = await response.json() as { id?: string; htmlLink?: string };
+    if (!event.id) return syncResult("failed", taskId, "Google Calendar API response did not include an event ID.");
+    const { error: updateError } = await getSupabaseAdmin()
       .from("tasks")
       .update({
         google_calendar_event_id: event.id,
@@ -180,18 +242,45 @@ export async function syncTaskToGoogleCalendar(taskId: string) {
         google_calendar_synced_at: new Date().toISOString(),
       })
       .eq("id", taskId);
+    if (updateError) {
+      console.error("Unable to save Google Calendar sync fields", { taskId, eventId: event.id, error: updateError });
+      return syncResult("failed", taskId, `Unable to save Google Calendar fields: ${updateError.message}`, event.id);
+    }
+    return syncResult("synced", taskId, eventId ? "Updated Google Calendar event." : "Created Google Calendar event.", event.id);
+  } catch (error) {
+    console.error("Unexpected Google Calendar task sync failure", { taskId, error });
+    return syncResult("failed", taskId, error instanceof Error ? error.message : "Unexpected Google Calendar sync failure.");
   }
 }
 
-export async function syncAssignedTasksToGoogleCalendar(userId: string) {
-  if (!hasGoogleConfig()) return;
-  const { data: tasks } = await getSupabaseAdmin()
+export async function syncAssignedTasksToGoogleCalendar(userId: string): Promise<GoogleCalendarBatchSyncResult> {
+  const result: GoogleCalendarBatchSyncResult = { attempted: 0, synced: 0, skipped: 0, failed: 0, errors: [] };
+  if (!hasGoogleConfig()) {
+    result.skipped = 1;
+    result.errors.push("Google OAuth is not configured.");
+    return result;
+  }
+  const { data: tasks, error } = await getSupabaseAdmin()
     .from("tasks")
     .select("id")
     .eq("assigned_to", userId)
     .not("due_date", "is", null)
     .neq("status", "SCRAPPED");
-  for (const task of tasks ?? []) {
-    await syncTaskToGoogleCalendar(task.id as string);
+  if (error) {
+    console.error("Unable to load assigned tasks for Google Calendar sync", { userId, error });
+    result.failed = 1;
+    result.errors.push(`Unable to load assigned tasks: ${error.message}`);
+    return result;
   }
+  for (const task of tasks ?? []) {
+    result.attempted += 1;
+    const taskResult = await syncTaskToGoogleCalendar(task.id as string);
+    if (taskResult.status === "synced") result.synced += 1;
+    if (taskResult.status === "skipped") result.skipped += 1;
+    if (taskResult.status === "failed") {
+      result.failed += 1;
+      result.errors.push(taskResult.message);
+    }
+  }
+  return result;
 }
