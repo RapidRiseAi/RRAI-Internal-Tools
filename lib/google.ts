@@ -19,7 +19,7 @@ export function hasGoogleConfig() {
   return Boolean(process.env.GOOGLE_CLIENT_ID && process.env.GOOGLE_CLIENT_SECRET);
 }
 
-export function googleOAuthUrl(mode: "login" | "connect") {
+export function googleOAuthUrl(mode: "login" | "connect", returnTo?: string) {
   const params = new URLSearchParams({
     client_id: process.env.GOOGLE_CLIENT_ID || "",
     redirect_uri: `${baseUrl()}/api/auth/google/callback`,
@@ -27,7 +27,7 @@ export function googleOAuthUrl(mode: "login" | "connect") {
     scope: googleScopes().join(" "),
     access_type: "offline",
     prompt: "consent",
-    state: mode,
+    state: returnTo ? `${mode}:${returnTo}` : mode,
   });
   return `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
 }
@@ -138,6 +138,29 @@ function syncResult(status: GoogleCalendarSyncStatus, taskId: string, message: s
   return { status, taskId, message, eventId };
 }
 
+const googleCalendarTaskColumns = [
+  "tasks.google_calendar_event_id",
+  "tasks.google_calendar_event_url",
+  "tasks.google_calendar_synced_at",
+  "tasks.google_calendar_user_id",
+];
+
+function isMissingGoogleCalendarTaskColumn(error: { message?: string; code?: string; details?: string | null } | null | undefined) {
+  const haystack = `${error?.message ?? ""} ${error?.details ?? ""}`.toLowerCase();
+  return error?.code === "42703" || googleCalendarTaskColumns.some((column) => haystack.includes(column) || haystack.includes(column.replace("tasks.", "")));
+}
+
+function missingGoogleCalendarTaskColumnsMessage() {
+  return `Google Calendar task sync columns are missing from the database. Apply the latest Supabase migrations, including the forward-only Google Calendar repair migration, to ensure ${googleCalendarTaskColumns.join(", ")} exist.`;
+}
+
+export function summarizeGoogleCalendarSyncErrors(errors: string[]) {
+  const uniqueErrors = Array.from(new Set(errors.filter(Boolean)));
+  if (uniqueErrors.length === 0) return null;
+  if (uniqueErrors.length === 1) return uniqueErrors[0];
+  return `${uniqueErrors.length} unique errors: ${uniqueErrors.slice(0, 3).join(" | ")}${uniqueErrors.length > 3 ? " | …" : ""}`;
+}
+
 async function googleErrorMessage(response: Response) {
   const text = await response.text().catch(() => "");
   if (!text) return `${response.status} ${response.statusText}`.trim();
@@ -171,6 +194,11 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
       .eq("id", taskId)
       .maybeSingle();
     if (taskError) {
+      if (isMissingGoogleCalendarTaskColumn(taskError)) {
+        const message = missingGoogleCalendarTaskColumnsMessage();
+        console.error(message, { taskId, error: taskError });
+        return syncResult("failed", taskId, message);
+      }
       console.error("Unable to load task for Google Calendar sync", { taskId, error: taskError });
       return syncResult("failed", taskId, `Unable to load task: ${taskError.message}`);
     }
@@ -195,6 +223,11 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
         .update({ google_calendar_event_id: null, google_calendar_event_url: null, google_calendar_user_id: null, google_calendar_synced_at: null })
         .eq("id", taskId);
       if (clearError) {
+        if (isMissingGoogleCalendarTaskColumn(clearError)) {
+          const message = missingGoogleCalendarTaskColumnsMessage();
+          console.error(message, { taskId, error: clearError });
+          return syncResult("failed", taskId, message);
+        }
         console.error("Unable to clear Google Calendar task fields", { taskId, error: clearError });
         return syncResult("failed", taskId, `Unable to clear Google Calendar fields: ${clearError.message}`);
       }
@@ -243,6 +276,11 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
       })
       .eq("id", taskId);
     if (updateError) {
+      if (isMissingGoogleCalendarTaskColumn(updateError)) {
+        const message = missingGoogleCalendarTaskColumnsMessage();
+        console.error(message, { taskId, eventId: event.id, error: updateError });
+        return syncResult("failed", taskId, message, event.id);
+      }
       console.error("Unable to save Google Calendar sync fields", { taskId, eventId: event.id, error: updateError });
       return syncResult("failed", taskId, `Unable to save Google Calendar fields: ${updateError.message}`, event.id);
     }

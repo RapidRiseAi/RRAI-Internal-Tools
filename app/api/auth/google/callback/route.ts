@@ -6,7 +6,10 @@ import { getSupabaseAdmin } from "@/lib/supabase";
 export async function GET(request: Request) {
   const url = new URL(request.url);
   const code = url.searchParams.get("code");
-  const mode = url.searchParams.get("state") === "connect" ? "connect" : "login";
+  const state = url.searchParams.get("state") ?? "login";
+  const [stateMode, stateReturnTo] = state.split(":", 2);
+  const mode = stateMode === "connect" ? "connect" : "login";
+  const returnTo = stateReturnTo?.startsWith("/") && !stateReturnTo.startsWith("//") ? stateReturnTo : "/tasks";
   if (!code) return NextResponse.redirect(new URL("/login?google=missing-code", request.url));
   try {
     const tokens = await exchangeGoogleCode(code);
@@ -24,7 +27,7 @@ export async function GET(request: Request) {
     const syncResult = await syncAssignedTasksToGoogleCalendar(userId as string);
     if (syncResult.failed > 0) console.error("Google Calendar post-connect sync had failures", { userId, syncResult });
     if (mode === "login") await createSession(userId as string);
-    return NextResponse.redirect(new URL(mode === "connect" ? "/settings?google=connected" : "/dashboard", request.url));
+    return NextResponse.redirect(new URL(mode === "connect" ? `${returnTo}?google=connected` : "/dashboard", request.url));
   } catch (error) {
     console.error("Google OAuth callback failed", { error });
     return NextResponse.redirect(new URL("/login?google=failed", request.url));

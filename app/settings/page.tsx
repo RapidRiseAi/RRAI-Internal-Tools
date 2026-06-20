@@ -72,8 +72,9 @@ export default async function SettingsPage({ searchParams }: { searchParams?: Pr
                 </p>
               )}
             </ModalPanel>
-            <LinkButton href="/api/auth/google/start?mode=connect" variant="ghost">Connect Google</LinkButton>
+            <LinkButton href="/api/auth/google/start?mode=connect&returnTo=/settings" variant="ghost">Connect Google</LinkButton>
             <form action={syncMyGoogleCalendar}>
+              <input type="hidden" name="returnTo" value="/settings" />
               <Button type="submit">Sync Google Calendar</Button>
             </form>
             <ModalPanel
