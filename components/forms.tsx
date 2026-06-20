@@ -17,6 +17,7 @@ import {
   logInteractionEvent,
   logLeadCall,
   recordPayment,
+  deleteExpense,
   recordExpense,
   upsertActivityWorkflow,
   upsertAffiliate,
@@ -30,6 +31,7 @@ import {
   upsertRetainer,
   upsertService,
   upsertSupportTicket,
+  updateExpense,
   updateOwnLoginDetails,
   updateRolePermissions,
   upsertTask,
@@ -72,6 +74,8 @@ import type {
   Task,
   User,
   DocumentTemplate,
+  Expense,
+  Vendor,
 } from "@/lib/types";
 import { ModalPanel } from "./modal-panel";
 import { Card, Field, inputClass } from "./ui";
@@ -877,24 +881,65 @@ export function VendorForm() {
 export function ExpenseForm({
   clients,
   projects,
+  vendors = [],
+  expense,
 }: {
   clients: ClientOption[];
   projects: ProjectOption[];
+  vendors?: Vendor[];
+  expense?: Expense;
 }) {
-  const [recurrence, setRecurrence] = useState("NONE");
+  const [recurrence, setRecurrence] = useState(expense?.recurrence ?? "NONE");
+  const [vendorMode, setVendorMode] = useState(expense ? "OTHER" : vendors[0]?.name ?? "OTHER");
+  const isOtherVendor = vendorMode === "OTHER";
+  const action = expense?.id ? updateExpense : recordExpense;
   return (
-    <form action={recordExpense} className="grid gap-4 md:grid-cols-2">
-      <SubmissionInput scope="record-expense" />
+    <form action={action} className="grid gap-4 md:grid-cols-2">
+      <SubmissionInput scope={expense?.id ? "update-expense" : "record-expense"} />
+      {expense?.id ? <input type="hidden" name="id" value={expense.id} /> : null}
       <Field label="Vendor">
-        <input className={inputClass} name="vendor" required />
+        <select className={inputClass} value={vendorMode} onChange={(event) => setVendorMode(event.target.value)}>
+          {vendors.map((vendor) => (
+            <option key={vendor.id} value={vendor.name}>
+              {vendor.name}
+            </option>
+          ))}
+          <option value="OTHER">Other / add new vendor</option>
+        </select>
+        <input
+          type="hidden"
+          name="vendor"
+          value={isOtherVendor ? "" : vendorMode}
+        />
+        {isOtherVendor ? (
+          <input
+            className={inputClass}
+            name="newVendor"
+            placeholder="Type new vendor name"
+            defaultValue={expense?.vendor ?? ""}
+            required
+          />
+        ) : null}
       </Field>
       <Field label="Category">
         <input
           className={inputClass}
           name="category"
-          defaultValue="Software"
+          defaultValue={expense?.category ?? "Software"}
           required
         />
+      </Field>
+      <Field label="Expense type">
+        <select className={inputClass} name="expenseType" defaultValue={expense?.expense_type ?? "SUBSCRIPTION"}>
+          <option value="SUBSCRIPTION">Subscription</option>
+          <option value="PAYROLL">Payroll</option>
+          <option value="SOFTWARE">Software</option>
+          <option value="CONTRACTOR">Contractor</option>
+          <option value="HOSTING">Hosting</option>
+          <option value="MARKETING">Marketing</option>
+          <option value="OFFICE">Office</option>
+          <option value="GENERAL">General</option>
+        </select>
       </Field>
       <Field label="Amount (R)">
         <input
@@ -902,23 +947,24 @@ export function ExpenseForm({
           name="amountRands"
           type="number"
           min="1"
+          defaultValue={expense ? Math.round(expense.amount_cents / 100) : ""}
           required
         />
       </Field>
       <Field label="Status">
-        <select className={inputClass} name="status" defaultValue="PENDING">
+        <select className={inputClass} name="status" defaultValue={expense?.status ?? "PENDING"}>
           <option value="PENDING">Pending</option>
           <option value="APPROVED">Approved</option>
           <option value="PAID">Paid</option>
           <option value="REJECTED">Rejected</option>
         </select>
       </Field>
-      <Field label="Expense type">
+      <Field label="Recurrence">
         <select
           className={inputClass}
           name="recurrence"
           value={recurrence}
-          onChange={(event) => setRecurrence(event.target.value)}
+          onChange={(event) => setRecurrence(event.target.value as typeof recurrence)}
         >
           <option value="NONE">One-time expense</option>
           <option value="WEEKLY">Weekly recurring</option>
@@ -928,11 +974,11 @@ export function ExpenseForm({
         </select>
       </Field>
       <Field label={recurrence === "NONE" ? "Expense date" : "First due date"}>
-        <input className={inputClass} name="expenseDate" type="date" />
+        <input className={inputClass} name="expenseDate" type="date" defaultValue={dateInput(expense?.expense_date)} />
       </Field>
 
       <Field label="Client">
-        <select className={inputClass} name="clientId">
+        <select className={inputClass} name="clientId" defaultValue={expense?.client_id ?? ""}>
           <option value="">No client</option>
           {clients.map((client) => (
             <option key={client.id} value={client.id}>
@@ -942,7 +988,7 @@ export function ExpenseForm({
         </select>
       </Field>
       <Field label="Project">
-        <select className={inputClass} name="projectId">
+        <select className={inputClass} name="projectId" defaultValue={expense?.project_id ?? ""}>
           <option value="">No project</option>
           {projects.map((project) => (
             <option key={project.id} value={project.id}>
@@ -960,7 +1006,7 @@ export function ExpenseForm({
       />
       <div className="md:col-span-2">
         <SubmitButton pendingLabel="Recording expense…">
-          Record expense
+          {expense?.id ? "Update expense" : "Record expense"}
         </SubmitButton>
       </div>
     </form>
@@ -2244,6 +2290,18 @@ export function DocumentTemplateForm({ template }: { template?: DocumentTemplate
       <Field label="Template content"><textarea className={`${inputClass} min-h-32`} name="content" defaultValue={template?.content ?? ""} placeholder="Use placeholders like {{client_name}}, {{quote_title}}, {{amount}}" required /></Field>
       <label className="flex items-center gap-3 text-sm text-slate-300"><input name="isDefault" type="checkbox" defaultChecked={template?.is_default ?? false} /> Make default</label>
       <SubmitButton>{template?.id ? "Save document template" : "Add document template"}</SubmitButton>
+    </form>
+  );
+}
+
+
+export function DeleteExpenseForm({ expense }: { expense: Expense }) {
+  return (
+    <form action={deleteExpense}>
+      <input type="hidden" name="id" value={expense.id} />
+      <button className="rounded-lg border border-red-400/30 px-3 py-1 text-xs font-semibold text-red-200 hover:bg-red-400/10">
+        Remove
+      </button>
     </form>
   );
 }
