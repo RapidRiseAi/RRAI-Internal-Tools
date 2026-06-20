@@ -2,13 +2,14 @@ import "server-only";
 
 import { getSupabaseAdmin } from "./supabase";
 
-export const googleScopes = [
-  "openid",
-  "email",
-  "profile",
-  "https://www.googleapis.com/auth/calendar.events",
-  "https://www.googleapis.com/auth/drive.metadata.readonly",
-];
+const calendarEventsScope = "https://www.googleapis.com/auth/calendar.events";
+const driveMetadataScope = "https://www.googleapis.com/auth/drive.metadata.readonly";
+
+export function googleScopes() {
+  const scopes = ["openid", "email", "profile", calendarEventsScope];
+  if (process.env.GOOGLE_ENABLE_DRIVE_SCOPE === "true") scopes.push(driveMetadataScope);
+  return scopes;
+}
 
 function baseUrl() {
   return process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
@@ -23,7 +24,7 @@ export function googleOAuthUrl(mode: "login" | "connect") {
     client_id: process.env.GOOGLE_CLIENT_ID || "",
     redirect_uri: `${baseUrl()}/api/auth/google/callback`,
     response_type: "code",
-    scope: googleScopes.join(" "),
+    scope: googleScopes().join(" "),
     access_type: "offline",
     prompt: "consent",
     state: mode,
@@ -60,6 +61,7 @@ export async function getGoogleUser(accessToken: string) {
 
 export async function upsertGoogleConnection(input: { userId: string; googleUser: GoogleUser; tokens: TokenResponse }) {
   const expiresAt = new Date(Date.now() + input.tokens.expires_in * 1000).toISOString();
+  const grantedScopes = input.tokens.scope ? input.tokens.scope.split(" ") : googleScopes();
   const payload = {
     user_id: input.userId,
     google_sub: input.googleUser.sub,
@@ -68,9 +70,9 @@ export async function upsertGoogleConnection(input: { userId: string; googleUser
     access_token: input.tokens.access_token,
     ...(input.tokens.refresh_token ? { refresh_token: input.tokens.refresh_token } : {}),
     token_expires_at: expiresAt,
-    scopes: input.tokens.scope ? input.tokens.scope.split(" ") : googleScopes,
-    calendar_connected: true,
-    drive_connected: true,
+    scopes: grantedScopes,
+    calendar_connected: grantedScopes.includes(calendarEventsScope),
+    drive_connected: grantedScopes.includes(driveMetadataScope),
     updated_at: new Date().toISOString(),
   };
   const { error } = await getSupabaseAdmin().from("google_connections").upsert(payload, { onConflict: "user_id" });
