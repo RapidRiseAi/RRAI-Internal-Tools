@@ -8,6 +8,7 @@ import {
   VendorForm,
 } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
+import { RecordResourceLink } from "@/components/record-resource-link";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listPayments } from "@/lib/data";
 import { markExpensePaid } from "@/lib/actions";
@@ -132,29 +133,14 @@ export default async function Billing() {
             <h2 className="mb-4 text-lg font-semibold">Invoices</h2>
             <div className="grid gap-3">
               {invoices.map((invoice) => (
-                <div
+                <RecordResourceLink
                   key={invoice.id}
-                  className="flex items-center justify-between rounded-xl bg-white/[0.04] p-3"
-                >
-                  <div>
-                    <p className="font-semibold text-white">
-                      {invoice.invoice_number}
-                    </p>
-                    <p className="text-sm text-slate-400">
-                      Due {dateShort(invoice.due_date)}
-                    </p>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <a
-                      className="rounded-lg border border-white/10 px-3 py-1 text-xs text-rapid-cyan"
-                      href={`/billing/${invoice.id}/pdf`}
-                    >
-                      PDF
-                    </a>
-                    <p>{money(invoice.amount_cents)}</p>
-                    <StatusBadge value={invoice.status} />
-                  </div>
-                </div>
+                  title={invoice.invoice_number}
+                  eyebrow="Invoice"
+                  meta={<span>Due {dateShort(invoice.due_date)} · {money(invoice.amount_cents)} · {invoice.status}</span>}
+                  href={`/billing/${invoice.id}/pdf`}
+                  actionLabel="Open PDF"
+                />
               ))}
             </div>
           </Card>

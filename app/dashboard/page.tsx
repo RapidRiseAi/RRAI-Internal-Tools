@@ -1,4 +1,5 @@
 import { AppShell } from "@/components/app-shell";
+import { RecordResourceLink } from "@/components/record-resource-link";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
@@ -40,7 +41,7 @@ export default async function DashboardPage() {
       <PageHeader eyebrow="Command center" title="Today at Rapid Rise AI" description="Live Supabase-backed priorities across sales, delivery, finance, support and referrals." actions={<a href="/reports" className="rounded-xl border border-white/10 bg-white/5 px-4 py-2 text-sm font-semibold text-slate-200 hover:bg-white/10">Open reports</a>} />
       <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">{cards.map(([label, value]) => <Card key={label}><p className="text-sm text-slate-400">{label}</p><p className="mt-3 text-3xl font-bold text-white">{value}</p></Card>)}</div>
       <div className="mt-6 grid gap-6 xl:grid-cols-[1.4fr_0.8fr]">
-        <Card><h2 className="text-lg font-semibold">Recent activity</h2><div className="mt-4 grid gap-3">{activity.map((item) => <div key={item.id} className="rounded-xl border border-white/10 bg-slate-950/50 p-3"><StatusBadge value={item.action} /><p className="mt-2 text-sm text-slate-200">{item.message}</p><p className="text-xs text-slate-500">{dateShort(item.created_at)}</p></div>)}</div></Card>
+        <Card><h2 className="text-lg font-semibold">Recent activity</h2><div className="mt-4 grid gap-3">{activity.map((item) => <RecordResourceLink key={item.id} title={item.message} eyebrow={item.action} meta={dateShort(item.created_at)} className="border border-white/10 bg-slate-950/50"><div className="grid gap-3 text-sm text-slate-300"><StatusBadge value={item.action} /><p className="whitespace-pre-wrap">{item.message}</p><p className="text-xs text-slate-500">{dateShort(item.created_at)}</p></div></RecordResourceLink>)}</div></Card>
         <Card><h2 className="text-lg font-semibold">Vercel + Supabase deployment</h2><ul className="mt-4 grid gap-3 text-sm text-slate-300"><li>Uses Supabase service role only in server actions/server components.</li><li>Public anon key is reserved for future client-side features.</li><li>Database tables are defined in versioned Supabase SQL migrations.</li><li>Every major record has status, timestamps and activity history hooks.</li></ul></Card>
       </div>
     </AppShell>
