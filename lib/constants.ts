@@ -54,6 +54,7 @@ export const projectStatuses = ["NOT_STARTED", "WAITING_FOR_CLIENT_INFO", "PLANN
 export const taskStatuses = ["TO_DO", "IN_PROGRESS", "WAITING_FOR_CLIENT", "WAITING_INTERNALLY", "BLOCKED", "REVIEW_NEEDED", "DONE", "SCRAPPED"] as const;
 export const taskTypes = ["SALES_FOLLOW_UP", "DISCOVERY_CALL", "QUOTE_PREPARATION", "DESIGN_TASK", "DEVELOPMENT_TASK", "INTEGRATION_TASK", "TESTING_TASK", "CLIENT_REVISION", "SUPPORT_TASK", "ADMIN_TASK", "BILLING_TASK", "CONTENT_TASK"] as const;
 export const priorities = ["LOW", "MEDIUM", "HIGH", "URGENT"] as const;
+export const taskRecurrences = ["NONE", "WEEKLY", "MONTHLY"] as const;
 export const invoiceStatuses = ["DRAFT", "SENT", "PART_PAID", "PAID", "OVERDUE", "REFUNDED", "CANCELLED"] as const;
 export const paymentStatuses = ["PENDING", "PAID", "FAILED", "REFUNDED", "CANCELLED"] as const;
 export const retainerStatuses = ["ACTIVE", "PAUSED", "CANCELLED", "OVERDUE", "TRIAL", "UPGRADE_PENDING"] as const;

@@ -693,6 +693,39 @@ export async function upsertClient(
   });
 }
 
+function clampDayOfMonth(year: number, month: number, day: number) {
+  return Math.min(day, new Date(Date.UTC(year, month + 1, 0)).getUTCDate());
+}
+
+function nextRecurringDueDate({
+  baseDate,
+  recurrence,
+  interval,
+  dayOfWeek,
+  dayOfMonth,
+}: {
+  baseDate?: Date;
+  recurrence: "NONE" | "WEEKLY" | "MONTHLY";
+  interval: number;
+  dayOfWeek?: number | null;
+  dayOfMonth?: number | null;
+}) {
+  if (recurrence === "NONE") return null;
+  const base = baseDate ? new Date(baseDate) : new Date();
+  if (recurrence === "WEEKLY") {
+    const targetDay = dayOfWeek ?? base.getUTCDay();
+    const candidate = new Date(base);
+    const daysAhead = (targetDay - candidate.getUTCDay() + 7) % 7 || interval * 7;
+    candidate.setUTCDate(candidate.getUTCDate() + daysAhead);
+    return candidate;
+  }
+  const targetDay = dayOfMonth ?? base.getUTCDate();
+  const candidate = new Date(base);
+  candidate.setUTCMonth(candidate.getUTCMonth() + interval, 1);
+  candidate.setUTCDate(clampDayOfMonth(candidate.getUTCFullYear(), candidate.getUTCMonth(), targetDay));
+  return candidate;
+}
+
 export async function upsertTask(formData: FormData) {
   const user = await requirePermission(permissions.tasksWrite);
   const id = str(formData, "id") || undefined;
@@ -708,11 +741,23 @@ export async function upsertTask(formData: FormData) {
     clientId: str(formData, "clientId"),
     projectId: str(formData, "projectId"),
     assignedToId: str(formData, "assignedToId"),
+    recurrence: str(formData, "recurrence") || "NONE",
+    recurrenceInterval: str(formData, "recurrenceInterval") || "1",
+    recurrenceDayOfWeek: str(formData, "recurrenceDayOfWeek") || undefined,
+    recurrenceDayOfMonth: str(formData, "recurrenceDayOfMonth") || undefined,
   });
   const instructions = str(formData, "instructions").trim();
   const expectedOutcome = str(formData, "expectedOutcome").trim();
   const scheduledAt = str(formData, "scheduledAt").trim();
   const taskLinks = parseTaskLinks(formData);
+  const recurrenceNextDueAt = nextRecurringDueDate({
+    baseDate: parsed.dueDate,
+    recurrence: parsed.recurrence,
+    interval: parsed.recurrenceInterval,
+    dayOfWeek: parsed.recurrenceDayOfWeek,
+    dayOfMonth: parsed.recurrenceDayOfMonth,
+  });
+  const taskDueDate = parsed.dueDate ?? recurrenceNextDueAt;
   const descriptionParts = [
     parsed.description,
     instructions ? `Instructions:\n${instructions}` : null,
@@ -725,7 +770,12 @@ export async function upsertTask(formData: FormData) {
     type: parsed.type,
     status: parsed.status,
     priority: parsed.priority,
-    due_date: parsed.dueDate?.toISOString() ?? null,
+    due_date: taskDueDate?.toISOString() ?? null,
+    recurrence: parsed.recurrence,
+    recurrence_interval: parsed.recurrence === "NONE" ? 1 : parsed.recurrenceInterval,
+    recurrence_day_of_week: parsed.recurrence === "WEEKLY" ? parsed.recurrenceDayOfWeek ?? taskDueDate?.getUTCDay() ?? null : null,
+    recurrence_day_of_month: parsed.recurrence === "MONTHLY" ? parsed.recurrenceDayOfMonth ?? taskDueDate?.getUTCDate() ?? null : null,
+    recurrence_next_due_at: parsed.recurrence === "NONE" ? null : recurrenceNextDueAt?.toISOString() ?? null,
     client_id: parsed.clientId ?? null,
     project_id: parsed.projectId ?? null,
     assigned_to: parsed.assignedToId ?? null,
@@ -2385,6 +2435,12 @@ export async function updateTaskStatus(formData: FormData) {
   });
   const outcome = str(formData, "outcome").trim();
   const scrapReason = str(formData, "scrapReason").trim();
+  const { data: previousTask, error: previousTaskError } = await getSupabaseAdmin()
+    .from("tasks")
+    .select("status")
+    .eq("id", parsed.id)
+    .single();
+  if (previousTaskError) throw previousTaskError;
   const { data, error } = await getSupabaseAdmin()
     .from("tasks")
     .update({
@@ -2395,9 +2451,44 @@ export async function updateTaskStatus(formData: FormData) {
         : null,
     })
     .eq("id", parsed.id)
-    .select("id,title,client_id,project_id")
+    .select("id,title,description,type,priority,due_date,client_id,project_id,assigned_to,created_by,recurrence,recurrence_interval,recurrence_day_of_week,recurrence_day_of_month")
     .single();
   if (error) throw error;
+  if (parsed.status === "DONE" && previousTask.status !== "DONE" && data.recurrence !== "NONE") {
+    const nextDueAt = nextRecurringDueDate({
+      baseDate: data.due_date ? new Date(data.due_date) : new Date(),
+      recurrence: data.recurrence,
+      interval: data.recurrence_interval,
+      dayOfWeek: data.recurrence_day_of_week,
+      dayOfMonth: data.recurrence_day_of_month,
+    });
+    const followingDueAt = nextRecurringDueDate({
+      baseDate: nextDueAt ?? new Date(),
+      recurrence: data.recurrence,
+      interval: data.recurrence_interval,
+      dayOfWeek: data.recurrence_day_of_week,
+      dayOfMonth: data.recurrence_day_of_month,
+    });
+    const { error: recurrenceError } = await getSupabaseAdmin().from("tasks").insert({
+      title: data.title,
+      description: data.description,
+      type: data.type,
+      status: "TO_DO",
+      priority: data.priority,
+      due_date: nextDueAt?.toISOString() ?? null,
+      client_id: data.client_id,
+      project_id: data.project_id,
+      assigned_to: data.assigned_to,
+      created_by: data.created_by ?? user.id,
+      recurrence: data.recurrence,
+      recurrence_interval: data.recurrence_interval,
+      recurrence_day_of_week: data.recurrence_day_of_week,
+      recurrence_day_of_month: data.recurrence_day_of_month,
+      recurrence_next_due_at: followingDueAt?.toISOString() ?? null,
+      recurrence_parent_task_id: data.id,
+    });
+    if (recurrenceError) throw recurrenceError;
+  }
   if (outcome || scrapReason) {
     await logActivity({
       action: parsed.status === "SCRAPPED" ? "TASK_SCRAPPED" : "TASK_OUTCOME_LOGGED",

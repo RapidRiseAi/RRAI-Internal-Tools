@@ -76,6 +76,7 @@ export default async function TasksPage() {
                     <th>Priority</th>
                     <th>Assignee</th>
                     <th>Due</th>
+                    <th>Recurrence</th>
                     <th>Actions</th>
                   </tr>
                 </thead>
@@ -100,6 +101,9 @@ export default async function TasksPage() {
                       </td>
                       <td className="text-slate-300">
                         {dateShort(task.due_date)}
+                      </td>
+                      <td className="text-slate-300">
+                        {task.recurrence === "NONE" ? "—" : `${task.recurrence.toLowerCase()}${task.recurrence_next_due_at ? ` · next ${dateShort(task.recurrence_next_due_at)}` : ""}`}
                       </td>
                       <td className="py-2">
                         <ModalPanel

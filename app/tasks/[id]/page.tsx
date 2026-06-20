@@ -109,6 +109,8 @@ export default async function TaskDetail({ params }: { params: Promise<{ id: str
             <p>Created: {dateShort(task.created_at)}</p>
             <p>Updated: {dateShort(task.updated_at)}</p>
             <p>Completed: {dateShort(task.completed_at)}</p>
+            <p>Recurrence: {task.recurrence === "NONE" ? "None" : task.recurrence}</p>
+            {task.recurrence !== "NONE" ? <p>Next occurrence: {dateShort(task.recurrence_next_due_at)}</p> : null}
           </div>
         </Card>
       </div>

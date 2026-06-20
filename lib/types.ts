@@ -88,6 +88,12 @@ export type Task = {
   assigned_to: string | null;
   created_by: string | null;
   completed_at: string | null;
+  recurrence: "NONE" | "WEEKLY" | "MONTHLY";
+  recurrence_interval: number;
+  recurrence_day_of_week: number | null;
+  recurrence_day_of_month: number | null;
+  recurrence_next_due_at: string | null;
+  recurrence_parent_task_id: string | null;
   created_at: string;
   updated_at: string;
   assignee?: Pick<User, "id" | "name"> | null;

@@ -17,6 +17,7 @@ import {
   retainerStatuses,
   taskStatuses,
   taskTypes,
+  taskRecurrences,
   ticketCategories,
   ticketStatuses,
 } from "./constants";
@@ -76,6 +77,10 @@ export const taskSchema = z.object({
   clientId: optionalUuid,
   projectId: optionalUuid,
   assignedToId: optionalUuid,
+  recurrence: z.enum(taskRecurrences).default("NONE"),
+  recurrenceInterval: z.coerce.number().int().min(1).max(52).default(1),
+  recurrenceDayOfWeek: z.coerce.number().int().min(0).max(6).optional(),
+  recurrenceDayOfMonth: z.coerce.number().int().min(1).max(31).optional(),
 });
 
 export const userSchema = z.object({
