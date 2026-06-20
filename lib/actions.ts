@@ -13,6 +13,7 @@ import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
 import { labelize, permissions } from "./constants";
 import { getSupabaseAdmin } from "./supabase";
 import { summarizeGoogleCalendarSyncErrors, syncAssignedTasksToGoogleCalendar, syncTaskToGoogleCalendar } from "./google";
+import { parseZonedDateTime } from "./timezone";
 import {
   actionFormData,
   type ActionResult,
@@ -131,27 +132,8 @@ function nextRecurringDate(dateValue: string | null | undefined, recurrence: str
   return date.toISOString().slice(0, 10);
 }
 
-const appTimeZone = process.env.APP_TIME_ZONE || process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/New_York";
-
-function parseAppDateTime(value: string) {
-  if (!value) return value;
-  const match = /^(\d{4})-(\d{2})-(\d{2})T(\d{2}):(\d{2})/.exec(value);
-  if (!match) return value;
-  const [, year, month, day, hour, minute] = match.map(Number);
-  const utcGuess = new Date(Date.UTC(year, month - 1, day, hour, minute));
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: appTimeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    hour12: false,
-  }).formatToParts(utcGuess);
-  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  const zonedAsUtc = Date.UTC(Number(byType.year), Number(byType.month) - 1, Number(byType.day), Number(byType.hour), Number(byType.minute));
-  const desiredAsUtc = Date.UTC(year, month - 1, day, hour, minute);
-  return new Date(utcGuess.getTime() + desiredAsUtc - zonedAsUtc).toISOString();
+function parseAppDateTime(value: string, timeZone?: string) {
+  return parseZonedDateTime(value, timeZone)?.toISOString();
 }
 
 function parseTaskLinks(formData: FormData) {
@@ -761,7 +743,7 @@ export async function upsertTask(formData: FormData) {
     type: str(formData, "type"),
     status: str(formData, "status"),
     priority: str(formData, "priority"),
-    dueDate: parseAppDateTime(str(formData, "dueDate")),
+    dueDate: parseAppDateTime(str(formData, "dueDate"), str(formData, "dueDateTimeZone")),
     durationMinutes: str(formData, "durationMinutes") || "60",
     clientId: str(formData, "clientId"),
     projectId: str(formData, "projectId"),
@@ -2187,7 +2169,7 @@ export async function assignLinkedTask(formData: FormData) {
     clientId: str(formData, "clientId"),
     title: str(formData, "title"),
     description: str(formData, "description"),
-    dueDate: parseAppDateTime(str(formData, "dueDate")),
+    dueDate: parseAppDateTime(str(formData, "dueDate"), str(formData, "dueDateTimeZone")),
     durationMinutes: str(formData, "durationMinutes") || "60",
     assignedToId: str(formData, "assignedToId"),
   });

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin } from "./supabase";
+import { appTimeZone, formatDateTimeForGoogle, normalizeTimeZone } from "./timezone";
 
 const calendarEventsScope = "https://www.googleapis.com/auth/calendar.events";
 const driveMetadataScope = "https://www.googleapis.com/auth/drive.metadata.readonly";
@@ -12,8 +13,6 @@ export function googleScopes() {
 }
 
 
-const appTimeZone = process.env.APP_TIME_ZONE || process.env.NEXT_PUBLIC_APP_TIME_ZONE || "America/New_York";
-
 const googleColorByPriority: Record<string, string> = {
   LOW: "10",
   MEDIUM: "5",
@@ -23,22 +22,31 @@ const googleColorByPriority: Record<string, string> = {
 
 const inactiveTaskStatuses = new Set(["DONE", "SCRAPPED"]);
 
-function zonedDateTimeForGoogle(date: Date) {
-  const parts = new Intl.DateTimeFormat("en-CA", {
-    timeZone: appTimeZone,
-    year: "numeric",
-    month: "2-digit",
-    day: "2-digit",
-    hour: "2-digit",
-    minute: "2-digit",
-    second: "2-digit",
-    hour12: false,
-  }).formatToParts(date);
-  const byType = Object.fromEntries(parts.map((part) => [part.type, part.value]));
-  return `${byType.year}-${byType.month}-${byType.day}T${byType.hour}:${byType.minute}:${byType.second}`;
+export function taskGoogleCalendarPayload(task: {
+  id?: string;
+  title?: string | null;
+  description?: string | null;
+  type?: string | null;
+  status?: string | null;
+  priority?: string | null;
+  due_date: string;
+  duration_minutes?: number | null;
+}, files: { filename: string; url: string }[] = [], timeZone = appTimeZone()) {
+  const zone = normalizeTimeZone(timeZone);
+  const start = new Date(task.due_date);
+  const durationMinutes = Math.max(5, Number(task.duration_minutes ?? 60));
+  const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
+  return {
+    summary: task.title,
+    description: taskCalendarDescription(task, files),
+    start: { dateTime: formatDateTimeForGoogle(start, zone), timeZone: zone },
+    end: { dateTime: formatDateTimeForGoogle(end, zone), timeZone: zone },
+    colorId: googleColorByPriority[String(task.priority ?? "MEDIUM")] ?? googleColorByPriority.MEDIUM,
+    extendedProperties: { private: { rapidRiseTaskId: task.id } },
+  };
 }
 
-function taskCalendarDescription(task: { description?: string | null; id?: string; type?: string; priority?: string; status?: string }, files: { filename: string; url: string }[]) {
+function taskCalendarDescription(task: { description?: string | null; id?: string; type?: string | null; priority?: string | null; status?: string | null }, files: { filename: string; url: string }[]) {
   const detailLines = [
     task.description?.trim() || "Rapid Rise OS task",
     "",
@@ -287,17 +295,7 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
       console.error("Unable to load task files for Google Calendar sync", { taskId, error: filesError });
       return syncResult("failed", taskId, `Unable to load task links/files: ${filesError.message}`, existingEventId);
     }
-    const start = new Date(task.due_date as string);
-    const durationMinutes = Math.max(5, Number(task.duration_minutes ?? 60));
-    const end = new Date(start.getTime() + durationMinutes * 60 * 1000);
-    const body = {
-      summary: task.title,
-      description: taskCalendarDescription(task, files ?? []),
-      start: { dateTime: zonedDateTimeForGoogle(start), timeZone: appTimeZone },
-      end: { dateTime: zonedDateTimeForGoogle(end), timeZone: appTimeZone },
-      colorId: googleColorByPriority[String(task.priority ?? "MEDIUM")] ?? googleColorByPriority.MEDIUM,
-      extendedProperties: { private: { rapidRiseTaskId: task.id } },
-    };
+    const body = taskGoogleCalendarPayload({ ...(task as typeof task & { due_date: string }), due_date: task.due_date as string }, files ?? []);
     const eventId = existingUserId === assignedUserId ? existingEventId : null;
     const eventUrl = `https://www.googleapis.com/calendar/v3/calendars/primary/events${eventId ? `/${eventId}` : ""}`;
     let response = await fetch(eventUrl, {
