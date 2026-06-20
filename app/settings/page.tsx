@@ -10,7 +10,7 @@ import {
   UserForm,
 } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
-import { Card, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
+import { Card, Button, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 import {
@@ -22,9 +22,19 @@ import {
   listServices,
   listUsers,
 } from "@/lib/data";
+import { syncMyGoogleCalendar } from "@/lib/actions";
 export const dynamic = "force-dynamic";
-export default async function SettingsPage() {
+export default async function SettingsPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   const currentUser = await requirePagePermission(permissions.settingsManage);
+  const params = (await searchParams) ?? {};
+  const googleSync = typeof params.googleSync === "string" ? params.googleSync : null;
+  const googleSyncMessage = typeof params.message === "string" ? params.message : null;
+  const syncCounts = {
+    attempted: typeof params.attempted === "string" ? params.attempted : "0",
+    synced: typeof params.synced === "string" ? params.synced : "0",
+    skipped: typeof params.skipped === "string" ? params.skipped : "0",
+    failed: typeof params.failed === "string" ? params.failed : "0",
+  };
   const [
     users,
     roles,
@@ -63,6 +73,9 @@ export default async function SettingsPage() {
               )}
             </ModalPanel>
             <LinkButton href="/api/auth/google/start?mode=connect" variant="ghost">Connect Google</LinkButton>
+            <form action={syncMyGoogleCalendar}>
+              <Button type="submit">Sync Google Calendar</Button>
+            </form>
             <ModalPanel
               title="Add employee"
               triggerLabel="Add employee"
@@ -80,6 +93,17 @@ export default async function SettingsPage() {
           </>
         }
       />
+      {googleSync ? (
+        <Card className={googleSync === "success" ? "border-emerald-400/30 bg-emerald-400/10" : "border-red-400/30 bg-red-400/10"}>
+          <p className="text-sm font-semibold text-white">
+            {googleSync === "success" ? "Google Calendar sync completed." : "Google Calendar sync had errors."}
+          </p>
+          <p className="mt-1 text-sm text-slate-300">
+            Attempted {syncCounts.attempted}, synced {syncCounts.synced}, skipped {syncCounts.skipped}, failed {syncCounts.failed}.
+            {googleSyncMessage ? ` ${googleSyncMessage}` : ""}
+          </p>
+        </Card>
+      ) : null}
       <div className="grid gap-6">
         <div className="grid gap-4 md:grid-cols-4">
           {[
