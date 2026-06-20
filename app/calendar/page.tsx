@@ -2,10 +2,11 @@ import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listTasks } from "@/lib/data";
-import { dateTimeShort, money } from "@/lib/format";
+import { money } from "@/lib/format";
 import type { Expense, Invoice, Project, Retainer, Task } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
+import { appTimeZone, dateKeyInTimeZone, formatDateTimeLocal, hourInTimeZone } from "@/lib/timezone";
 
 export const dynamic = "force-dynamic";
 
@@ -45,19 +46,27 @@ function isoDate(date: Date) {
   return date.toISOString().slice(0, 10);
 }
 
+const calendarTimeZone = appTimeZone();
+
 function sameDay(dateValue: string | null, date: Date) {
   if (!dateValue) return false;
-  const scheduled = new Date(dateValue);
-  return (
-    scheduled.getFullYear() === date.getFullYear() &&
-    scheduled.getMonth() === date.getMonth() &&
-    scheduled.getDate() === date.getDate()
-  );
+  return dateKeyInTimeZone(dateValue, calendarTimeZone) === isoDate(date);
 }
 
 function hourOf(dateValue: string | null) {
-  if (!dateValue) return 9;
-  return new Date(dateValue).getHours();
+  return hourInTimeZone(dateValue, calendarTimeZone);
+}
+
+function calendarDateTimeShort(dateValue: string) {
+  const local = formatDateTimeLocal(dateValue, calendarTimeZone);
+  if (!local) return "—";
+  return new Intl.DateTimeFormat("en-US", {
+    month: "short",
+    day: "numeric",
+    year: "numeric",
+    hour: "numeric",
+    minute: "2-digit",
+  }).format(new Date(`${local}:00`));
 }
 
 function addRecurringInterval(date: Date, task: Task) {
@@ -415,7 +424,7 @@ export default async function CalendarPage({
                           {task.assigneeName ?? task.kind}
                         </span>
                         <span className="rounded-full bg-white/8 px-2.5 py-1 text-slate-200">
-                          {dateTimeShort(task.date)}
+                          {calendarDateTimeShort(task.date)}
                         </span>
                         {client ? (
                           <Link

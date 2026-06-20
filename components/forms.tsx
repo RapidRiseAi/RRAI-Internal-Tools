@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useMemo, useRef, useState } from "react";
+import { useActionState, useEffect, useMemo, useRef, useState } from "react";
 import {
   acceptQuote,
   addPayrollItem,
@@ -81,6 +81,7 @@ import type {
 import { ModalPanel } from "./modal-panel";
 import { Card, Field, inputClass } from "./ui";
 import { rands } from "@/lib/format";
+import { defaultAppTimeZone, formatDateTimeLocal } from "@/lib/timezone";
 import { SubmitButton } from "./submit-button";
 export { InvoiceForm } from "./invoice-form";
 export { QuoteForm } from "./quote-form";
@@ -109,11 +110,27 @@ function dateInput(value?: string | null) {
   return value ? value.slice(0, 10) : "";
 }
 
-function dateTimeInput(value?: string | null) {
-  if (!value) return "";
-  const date = new Date(value);
-  const timezoneOffsetMs = date.getTimezoneOffset() * 60 * 1000;
-  return new Date(date.getTime() - timezoneOffsetMs).toISOString().slice(0, 16);
+function dateTimeInput(value?: string | null, timeZone = defaultAppTimeZone) {
+  return formatDateTimeLocal(value, timeZone);
+}
+
+function useBrowserTimeZone() {
+  const [timeZone, setTimeZone] = useState(defaultAppTimeZone);
+  useEffect(() => {
+    const browserTimeZone = Intl.DateTimeFormat().resolvedOptions().timeZone;
+    if (browserTimeZone) setTimeZone(browserTimeZone);
+  }, []);
+  return timeZone;
+}
+
+function TaskDueDateInput({ defaultValue }: { defaultValue?: string | null }) {
+  const timeZone = useBrowserTimeZone();
+  return (
+    <>
+      <input type="hidden" name="dueDateTimeZone" value={timeZone} />
+      <input key={timeZone} className={inputClass} type="datetime-local" name="dueDate" defaultValue={dateTimeInput(defaultValue, timeZone)} />
+    </>
+  );
 }
 
 function Options({ values }: { values: readonly string[] }) {
@@ -464,7 +481,7 @@ export function TaskForm({
         </select>
       </Field>
       <Field label="Due date/time">
-        <input className={inputClass} type="datetime-local" name="dueDate" defaultValue={dateTimeInput(task?.due_date)} />
+        <TaskDueDateInput defaultValue={task?.due_date} />
       </Field>
       <Field label="Duration">
         <div className="grid grid-cols-[1fr_auto] gap-2">
@@ -1936,7 +1953,7 @@ export function AssignLinkedTaskForm({
         <input className={inputClass} name="title" required />
       </Field>
       <Field label="Due date/time">
-        <input className={inputClass} name="dueDate" type="datetime-local" />
+        <TaskDueDateInput />
       </Field>
       <Field label="Assign to">
         <select className={inputClass} name="assignedToId">
