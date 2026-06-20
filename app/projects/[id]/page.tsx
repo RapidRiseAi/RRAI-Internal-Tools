@@ -7,7 +7,9 @@ import {
   ProjectForm,
   TaskForm,
 } from "@/components/forms";
+import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
+import { RecordResourceLink } from "@/components/record-resource-link";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, PageHeader, StatusBadge, inputClass } from "@/components/ui";
 import { updateProjectChecklist } from "@/lib/actions";
@@ -166,12 +168,9 @@ export default async function ProjectDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {notes.map((note) => (
-                <p
-                  key={note.id}
-                  className="rounded-xl bg-white/[0.04] p-3 text-sm text-slate-300"
-                >
-                  {note.body}
-                </p>
+                <RecordResourceLink key={note.id} title={note.body.slice(0, 80) || "Note"} eyebrow="Note" meta={dateShort(note.created_at)}>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-slate-300">{note.body}</p>
+                </RecordResourceLink>
               ))}
             </div>
           </Card>
@@ -184,13 +183,7 @@ export default async function ProjectDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
-                <a
-                  key={file.id}
-                  href={file.url}
-                  className="rounded-xl bg-white/[0.04] p-3 text-sm text-rapid-cyan"
-                >
-                  {file.filename}
-                </a>
+                <FileResourceLink key={file.id} file={file} />
               ))}
             </div>
           </Card>

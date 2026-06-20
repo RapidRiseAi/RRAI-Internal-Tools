@@ -85,7 +85,7 @@ export async function GET(
   return new NextResponse(pdf, {
     headers: {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="${invoice.invoice_number}.pdf"`,
+      "content-disposition": `inline; filename="${invoice.invoice_number}.pdf"`,
     },
   });
 }

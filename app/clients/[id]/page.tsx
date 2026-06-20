@@ -11,7 +11,9 @@ import {
   QuoteForm,
   SupportTicketForm,
 } from "@/components/forms";
+import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
+import { RecordResourceLink } from "@/components/record-resource-link";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
   genericList,
@@ -177,13 +179,13 @@ export default async function ClientDetail({
             <h2 className="text-lg font-semibold">Recent invoices</h2>
             <div className="mt-4 grid gap-2">
               {clientInvoices.slice(0, 5).map((invoice) => (
-                <div
+                <RecordResourceLink
                   key={invoice.id}
-                  className="flex items-center justify-between rounded-xl bg-white/[0.04] p-3 text-sm"
-                >
-                  <span>{invoice.invoice_number}</span>
-                  <span>{money(invoice.amount_cents)}</span>
-                </div>
+                  title={invoice.invoice_number}
+                  meta={<span>{money(invoice.amount_cents)} · {invoice.status}</span>}
+                  href={`/billing/${invoice.id}/pdf`}
+                  actionLabel="Open PDF"
+                />
               ))}
             </div>
           </Card>
@@ -238,12 +240,14 @@ export default async function ClientDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {notes.slice(0, 5).map((note) => (
-                <p
+                <RecordResourceLink
                   key={note.id}
-                  className="rounded-xl bg-white/[0.04] p-3 text-sm text-slate-300"
+                  title={note.body.slice(0, 80) || "Note"}
+                  eyebrow="Note"
+                  meta={dateShort(note.created_at)}
                 >
-                  {note.body}
-                </p>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-slate-300">{note.body}</p>
+                </RecordResourceLink>
               ))}
             </div>
           </Card>
@@ -256,13 +260,7 @@ export default async function ClientDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
-                <a
-                  key={file.id}
-                  href={file.url}
-                  className="rounded-xl bg-white/[0.04] p-3 text-sm text-rapid-cyan"
-                >
-                  {file.filename}
-                </a>
+                <FileResourceLink key={file.id} file={file} />
               ))}
             </div>
           </Card>
@@ -272,15 +270,18 @@ export default async function ClientDetail({
               {activity
                 .filter((item) => item.client_id === client.id)
                 .map((item) => (
-                  <div key={item.id} className="rounded-xl bg-white/[0.04] p-3">
-                    <StatusBadge value={item.action} />
-                    <p className="mt-2 text-sm text-slate-300">
-                      {item.message}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {dateShort(item.created_at)}
-                    </p>
-                  </div>
+                  <RecordResourceLink
+                    key={item.id}
+                    title={item.message}
+                    eyebrow={item.action}
+                    meta={dateShort(item.created_at)}
+                  >
+                    <div className="grid gap-3 text-sm text-slate-300">
+                      <StatusBadge value={item.action} />
+                      <p className="whitespace-pre-wrap">{item.message}</p>
+                      <p className="text-xs text-slate-500">{dateShort(item.created_at)}</p>
+                    </div>
+                  </RecordResourceLink>
                 ))}
             </div>
           </Card>

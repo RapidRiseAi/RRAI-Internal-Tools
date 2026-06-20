@@ -72,7 +72,7 @@ export async function GET(
   return new NextResponse(pdf, {
     headers: {
       "content-type": "application/pdf",
-      "content-disposition": `attachment; filename="${quote.quote_number}.pdf"`,
+      "content-disposition": `inline; filename="${quote.quote_number}.pdf"`,
     },
   });
 }

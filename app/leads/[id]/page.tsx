@@ -1,8 +1,10 @@
 import { randomUUID } from "crypto";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { FileResourceLink } from "@/components/file-resource-link";
 import { ActivityWorkflowForm, FileRecordForm, LeadForm, NoteForm, QuoteForm, TaskForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
+import { RecordResourceLink } from "@/components/record-resource-link";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { archiveLead, convertLeadToClient } from "@/lib/actions";
@@ -148,12 +150,9 @@ export default async function LeadDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {notes.slice(0, 5).map((note) => (
-                <p
-                  key={note.id}
-                  className="rounded-xl bg-white/[0.04] p-3 text-sm text-slate-300"
-                >
-                  {note.body}
-                </p>
+                <RecordResourceLink key={note.id} title={note.body.slice(0, 80) || "Note"} eyebrow="Note" meta={dateShort(note.created_at)}>
+                  <p className="whitespace-pre-wrap text-sm leading-6 text-slate-300">{note.body}</p>
+                </RecordResourceLink>
               ))}
             </div>
           </Card>
@@ -166,14 +165,7 @@ export default async function LeadDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
-                <a
-                  key={file.id}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-rapid-cyan hover:border-rapid-cyan/40"
-                  href={file.url}
-                  target="_blank"
-                >
-                  {file.filename}
-                </a>
+                <FileResourceLink key={file.id} file={file} className="border border-white/10 hover:border-rapid-cyan/40" />
               ))}
             </div>
           </Card>
@@ -183,15 +175,13 @@ export default async function LeadDetail({
               {activity
                 .filter((item) => item.lead_id === lead.id)
                 .map((item) => (
-                  <div key={item.id} className="rounded-xl bg-white/[0.04] p-3">
-                    <StatusBadge value={item.action} />
-                    <p className="mt-2 text-sm text-slate-300">
-                      {item.message}
-                    </p>
-                    <p className="text-xs text-slate-500">
-                      {dateShort(item.created_at)}
-                    </p>
-                  </div>
+                  <RecordResourceLink key={item.id} title={item.message} eyebrow={item.action} meta={dateShort(item.created_at)}>
+                    <div className="grid gap-3 text-sm text-slate-300">
+                      <StatusBadge value={item.action} />
+                      <p className="whitespace-pre-wrap">{item.message}</p>
+                      <p className="text-xs text-slate-500">{dateShort(item.created_at)}</p>
+                    </div>
+                  </RecordResourceLink>
                 ))}
             </div>
           </Card>

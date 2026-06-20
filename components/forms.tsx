@@ -56,6 +56,7 @@ import {
   retainerStatuses,
   taskStatuses,
   taskTypes,
+  taskRecurrences,
   ticketCategories,
   ticketStatuses,
 } from "@/lib/constants";
@@ -436,6 +437,7 @@ export function TaskForm({
   task?: Task;
 }) {
   const [linkRows, setLinkRows] = useState([0]);
+  const [recurrence, setRecurrence] = useState(task?.recurrence ?? "NONE");
   return (
     <form action={upsertTask} className="grid gap-4 md:grid-cols-3">
       <SubmissionInput scope="upsert-task" />
@@ -464,6 +466,39 @@ export function TaskForm({
       <Field label="Due date/time">
         <input className={inputClass} type="datetime-local" name="dueDate" defaultValue={dateTimeInput(task?.due_date)} />
       </Field>
+      <Field label="Recurring task">
+        <select className={inputClass} name="recurrence" value={recurrence} onChange={(event) => setRecurrence(event.target.value as typeof taskRecurrences[number])}>
+          {taskRecurrences.map((value) => (
+            <option key={value} value={value}>{labelize(value)}</option>
+          ))}
+        </select>
+      </Field>
+      {recurrence !== "NONE" ? (
+        <>
+          <Field label="Repeat every">
+            <div className="grid grid-cols-[0.8fr_1fr] gap-2">
+              <input className={inputClass} type="number" min="1" max="52" name="recurrenceInterval" defaultValue={task?.recurrence_interval ?? 1} />
+              <div className="rounded-xl border border-white/10 bg-slate-950/70 px-3 py-2 text-sm text-slate-300">{recurrence === "WEEKLY" ? "week(s)" : "month(s)"}</div>
+            </div>
+          </Field>
+          {recurrence === "WEEKLY" ? (
+            <Field label="Day of week">
+              <select className={inputClass} name="recurrenceDayOfWeek" defaultValue={task?.recurrence_day_of_week ?? 5}>
+                {["Sunday", "Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday"].map((day, index) => (
+                  <option key={day} value={index}>{day}</option>
+                ))}
+              </select>
+            </Field>
+          ) : (
+            <Field label="Day of month">
+              <input className={inputClass} type="number" min="1" max="31" name="recurrenceDayOfMonth" defaultValue={task?.recurrence_day_of_month ?? 1} />
+            </Field>
+          )}
+          <p className="md:col-span-3 rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/10 p-3 text-sm text-rapid-cyan">
+            When this task is completed, the next occurrence will be created automatically with the same core fields, assignee, client and project.
+          </p>
+        </>
+      ) : null}
       <Field label="Assignee">
         <select className={inputClass} name="assignedToId" defaultValue={task?.assigned_to ?? ""}>
           <option value="">Unassigned</option>
