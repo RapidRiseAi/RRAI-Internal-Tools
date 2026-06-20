@@ -1,6 +1,6 @@
 import { NextResponse } from "next/server";
 import { createSession, getCurrentUser } from "@/lib/auth";
-import { exchangeGoogleCode, getGoogleUser, upsertGoogleConnection } from "@/lib/google";
+import { exchangeGoogleCode, getGoogleUser, syncAssignedTasksToGoogleCalendar, upsertGoogleConnection } from "@/lib/google";
 import { getSupabaseAdmin } from "@/lib/supabase";
 
 export async function GET(request: Request) {
@@ -21,6 +21,7 @@ export async function GET(request: Request) {
     const userId = mode === "connect" ? currentUser?.id : matchedUser?.id;
     if (!userId) return NextResponse.redirect(new URL("/login?google=no-user", request.url));
     await upsertGoogleConnection({ userId: userId as string, googleUser, tokens });
+    await syncAssignedTasksToGoogleCalendar(userId as string);
     if (mode === "login") await createSession(userId as string);
     return NextResponse.redirect(new URL(mode === "connect" ? "/settings?google=connected" : "/dashboard", request.url));
   } catch {
