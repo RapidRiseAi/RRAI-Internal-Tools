@@ -1,15 +1,36 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
-import { genericList, listClients, listTasks, listUsers } from "@/lib/data";
-import { dateTimeShort } from "@/lib/format";
-import type { Project } from "@/lib/types";
+import { genericList, listClients, listTasks } from "@/lib/data";
+import { dateTimeShort, money } from "@/lib/format";
+import type { Expense, Invoice, Project, Retainer, Task } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
 const hours = Array.from({ length: 24 }, (_, index) => index);
+const inactiveTaskStatuses = new Set(["SCRAPPED"]);
+
+type CalendarItem = {
+  id: string;
+  title: string;
+  date: string;
+  kind:
+    | "Task"
+    | "Recurring task"
+    | "Project deadline"
+    | "Invoice due"
+    | "Retainer due"
+    | "Expense due";
+  priority: string;
+  description: string | null;
+  href?: string;
+  assigneeName?: string;
+  clientId?: string | null;
+  projectId?: string | null;
+  amountCents?: number;
+};
 
 function startOfWeek(date: Date) {
   const copy = new Date(date);
@@ -27,14 +48,88 @@ function isoDate(date: Date) {
 function sameDay(dateValue: string | null, date: Date) {
   if (!dateValue) return false;
   const scheduled = new Date(dateValue);
-  return scheduled.getFullYear() === date.getFullYear() &&
+  return (
+    scheduled.getFullYear() === date.getFullYear() &&
     scheduled.getMonth() === date.getMonth() &&
-    scheduled.getDate() === date.getDate();
+    scheduled.getDate() === date.getDate()
+  );
 }
 
 function hourOf(dateValue: string | null) {
   if (!dateValue) return 9;
   return new Date(dateValue).getHours();
+}
+
+function addRecurringInterval(date: Date, task: Task) {
+  const next = new Date(date);
+  const interval = Math.max(task.recurrence_interval || 1, 1);
+  if (task.recurrence === "WEEKLY") {
+    next.setDate(next.getDate() + interval * 7);
+    return next;
+  }
+  const dayOfMonth = task.recurrence_day_of_month ?? next.getDate();
+  next.setDate(1);
+  next.setMonth(next.getMonth() + interval);
+  next.setDate(
+    Math.min(
+      dayOfMonth,
+      new Date(next.getFullYear(), next.getMonth() + 1, 0).getDate(),
+    ),
+  );
+  return next;
+}
+
+function hasActualOccurrence(
+  tasks: Task[],
+  parentId: string,
+  occurrenceDate: Date,
+) {
+  return tasks.some(
+    (task) =>
+      task.recurrence_parent_task_id === parentId &&
+      sameDay(task.due_date, occurrenceDate),
+  );
+}
+
+function recurringOccurrencesForWeek(
+  task: Task,
+  tasks: Task[],
+  weekStart: Date,
+  weekEnd: Date,
+): CalendarItem[] {
+  if (task.recurrence === "NONE" || inactiveTaskStatuses.has(task.status))
+    return [];
+  const firstDate = task.due_date ?? task.recurrence_next_due_at;
+  if (!firstDate) return [];
+  const occurrences: CalendarItem[] = [];
+  let cursor = new Date(firstDate);
+  let guard = 0;
+  while (cursor < weekStart && guard < 370) {
+    cursor = addRecurringInterval(cursor, task);
+    guard += 1;
+  }
+  while (cursor <= weekEnd && guard < 740) {
+    const isBaseTaskDate = task.due_date
+      ? sameDay(task.due_date, cursor)
+      : false;
+    if (!isBaseTaskDate && !hasActualOccurrence(tasks, task.id, cursor)) {
+      occurrences.push({
+        id: `${task.id}-${cursor.toISOString()}`,
+        title: task.title,
+        date: cursor.toISOString(),
+        kind: "Recurring task",
+        priority: task.priority,
+        description: task.description,
+        href: `/tasks/${task.id}`,
+        assigneeName: task.assignee?.name ?? "Unassigned",
+        clientId: task.client_id,
+        projectId: task.project_id,
+      });
+    }
+    cursor = addRecurringInterval(cursor, task);
+    guard += 1;
+  }
+  return occurrences;
 }
 
 export default async function CalendarPage({
@@ -54,22 +149,117 @@ export default async function CalendarPage({
     return day;
   });
 
-  const [tasks, users, clients, projects] = await Promise.all([
-    listTasks(),
-    listUsers(),
-    listClients(),
-    genericList<Project>("projects"),
-  ]);
-  const scheduledTasks = tasks.filter(
-    (task) => task.due_date && task.status !== "DONE",
+  const weekEnd = new Date(days[6]);
+  weekEnd.setHours(23, 59, 59, 999);
+
+  const [tasks, clients, projects, invoices, retainers, expenses] =
+    await Promise.all([
+      listTasks(),
+      listClients(),
+      genericList<Project>("projects"),
+      genericList<Invoice>("invoices"),
+      genericList<Retainer>("retainers"),
+      genericList<Expense>("expenses"),
+    ]);
+  const taskItems: CalendarItem[] = tasks
+    .filter((task) => task.due_date && !inactiveTaskStatuses.has(task.status))
+    .map((task) => ({
+      id: task.id,
+      title: task.title,
+      date: task.due_date!,
+      kind: task.recurrence === "NONE" ? "Task" : "Recurring task",
+      priority: task.priority,
+      description: task.description,
+      href: `/tasks/${task.id}`,
+      assigneeName: task.assignee?.name ?? "Unassigned",
+      clientId: task.client_id,
+      projectId: task.project_id,
+    }));
+  const recurringItems = tasks.flatMap((task) =>
+    recurringOccurrencesForWeek(task, tasks, weekStart, weekEnd),
   );
+  const projectItems: CalendarItem[] = projects
+    .filter((project) => project.deadline && project.status !== "COMPLETED")
+    .map((project) => ({
+      id: `project-${project.id}`,
+      title: project.name,
+      date: project.deadline!,
+      kind: "Project deadline",
+      priority: project.priority,
+      description: project.blocker ? `Blocker: ${project.blocker}` : null,
+      href: `/projects/${project.id}`,
+      projectId: project.id,
+      clientId: project.client_id,
+    }));
+  const invoiceItems: CalendarItem[] = invoices
+    .filter(
+      (invoice) =>
+        invoice.due_date &&
+        !["PAID", "CANCELLED", "REFUNDED"].includes(invoice.status),
+    )
+    .map((invoice) => ({
+      id: `invoice-${invoice.id}`,
+      title: `Invoice ${invoice.invoice_number}`,
+      date: invoice.due_date!,
+      kind: "Invoice due",
+      priority: invoice.status === "OVERDUE" ? "URGENT" : "HIGH",
+      description: `${invoice.status} • ${money(invoice.amount_cents)}`,
+      href: `/billing`,
+      clientId: invoice.client_id,
+      amountCents: invoice.amount_cents,
+    }));
+  const retainerItems: CalendarItem[] = retainers
+    .filter(
+      (retainer) =>
+        retainer.next_billing_date &&
+        ["ACTIVE", "OVERDUE", "TRIAL", "UPGRADE_PENDING"].includes(
+          retainer.status,
+        ),
+    )
+    .map((retainer) => ({
+      id: `retainer-${retainer.id}`,
+      title: `${retainer.type} retainer`,
+      date: retainer.next_billing_date!,
+      kind: "Retainer due",
+      priority: retainer.status === "OVERDUE" ? "URGENT" : "MEDIUM",
+      description: `${retainer.status} • ${money(retainer.monthly_amount_cents)}`,
+      href: `/retainers`,
+      clientId: retainer.client_id,
+      amountCents: retainer.monthly_amount_cents,
+    }));
+  const expenseItems: CalendarItem[] = expenses
+    .filter(
+      (expense) =>
+        (expense.next_due_date ?? expense.expense_date) &&
+        expense.status !== "PAID",
+    )
+    .map((expense) => ({
+      id: `expense-${expense.id}`,
+      title: expense.vendor,
+      date: (expense.next_due_date ?? expense.expense_date)!,
+      kind: "Expense due",
+      priority: expense.status === "REJECTED" ? "LOW" : "MEDIUM",
+      description: `${expense.category} • ${expense.expense_type} • ${money(expense.amount_cents)}`,
+      href: `/billing`,
+      clientId: expense.client_id,
+      projectId: expense.project_id,
+      amountCents: expense.amount_cents,
+    }));
+  const scheduledTasks = [
+    ...taskItems,
+    ...recurringItems,
+    ...projectItems,
+    ...invoiceItems,
+    ...retainerItems,
+    ...expenseItems,
+  ];
   const selectedDay =
     days.find((day) => isoDate(day) === params.date) ??
     days.find((day) => sameDay(new Date().toISOString(), day)) ??
     days[0];
-  const selectedTasks = scheduledTasks.filter((task) =>
-    sameDay(task.due_date, selectedDay),
-  );
+  const selectedTasks = scheduledTasks
+    .filter((task) => sameDay(task.date, selectedDay))
+    .sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
   const previous = new Date(weekStart);
   previous.setDate(previous.getDate() - 7);
   const next = new Date(weekStart);
@@ -105,10 +295,10 @@ export default async function CalendarPage({
             <div className="p-3">Time</div>
             {days.map((day) => {
               const dayTasks = scheduledTasks.filter((task) =>
-                sameDay(task.due_date, day),
+                sameDay(task.date, day),
               );
               const owners = new Set(
-                dayTasks.map((task) => task.assigned_to).filter(Boolean),
+                dayTasks.map((task) => task.assigneeName).filter(Boolean),
               );
               return (
                 <Link
@@ -139,8 +329,7 @@ export default async function CalendarPage({
                 {days.map((day) => {
                   const hourTasks = scheduledTasks.filter(
                     (task) =>
-                      sameDay(task.due_date, day) &&
-                      hourOf(task.due_date) === hour,
+                      sameDay(task.date, day) && hourOf(task.date) === hour,
                   );
                   return (
                     <Link
@@ -157,7 +346,7 @@ export default async function CalendarPage({
                             {task.title}
                           </span>
                           <span className="mt-1 block text-slate-300">
-                            {task.assignee?.name ?? "Unassigned"}
+                            {task.assigneeName ?? task.kind}
                           </span>
                         </span>
                       ))}
@@ -194,13 +383,10 @@ export default async function CalendarPage({
               {selectedTasks.length ? (
                 selectedTasks.map((task) => {
                   const client = clients.find(
-                    (item) => item.id === task.client_id,
+                    (item) => item.id === task.clientId,
                   );
                   const project = projects.find(
-                    (item) => item.id === task.project_id,
-                  );
-                  const assignee = users.find(
-                    (item) => item.id === task.assigned_to,
+                    (item) => item.id === task.projectId,
                   );
                   return (
                     <div
@@ -210,22 +396,26 @@ export default async function CalendarPage({
                     >
                       <div className="flex items-start justify-between gap-3">
                         <Link
-                          href={`/tasks#${task.id}`}
+                          href={
+                            task.href ??
+                            `/calendar?date=${isoDate(selectedDay)}`
+                          }
                           className="font-semibold text-white hover:text-rapid-cyan"
                         >
                           {task.title}
                         </Link>
                         <StatusBadge value={task.priority} />
+                        <StatusBadge value={task.kind} />
                       </div>
                       <p className="mt-2 text-sm text-slate-400">
                         {task.description ?? "No description yet."}
                       </p>
                       <div className="mt-3 flex flex-wrap gap-2 text-xs">
                         <span className="rounded-full bg-white/8 px-2.5 py-1 text-slate-200">
-                          {assignee?.name ?? "Unassigned"}
+                          {task.assigneeName ?? task.kind}
                         </span>
                         <span className="rounded-full bg-white/8 px-2.5 py-1 text-slate-200">
-                          {dateTimeShort(task.due_date)}
+                          {dateTimeShort(task.date)}
                         </span>
                         {client ? (
                           <Link
