@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
 import { FileRecordForm, TaskForm } from "@/components/forms";
+import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { updateTaskStatus } from "@/lib/actions";
@@ -91,11 +92,11 @@ export default async function TaskDetail({ params }: { params: Promise<{ id: str
             <div className="mt-4 grid gap-4 md:grid-cols-2">
               <div className="grid gap-2">
                 <p className="text-sm font-semibold text-white">Files</p>
-                {taskFiles.map((file) => <a key={file.id} href={file.url} target="_blank" className="rounded-xl bg-white/[0.04] p-3 text-sm text-rapid-cyan">{file.filename}</a>)}
+                {taskFiles.map((file) => <FileResourceLink key={file.id} file={file} />)}
               </div>
               <div className="grid gap-2">
                 <p className="text-sm font-semibold text-white">Links</p>
-                {taskLinks.map((file) => <a key={file.id} href={file.url} target="_blank" className="rounded-xl bg-white/[0.04] p-3 text-sm text-rapid-cyan">{file.filename}</a>)}
+                {taskLinks.map((file) => <FileResourceLink key={file.id} file={file} />)}
               </div>
             </div>
           </Card>

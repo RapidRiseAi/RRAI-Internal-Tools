@@ -7,6 +7,7 @@ import {
   ProjectForm,
   TaskForm,
 } from "@/components/forms";
+import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, PageHeader, StatusBadge, inputClass } from "@/components/ui";
@@ -184,13 +185,7 @@ export default async function ProjectDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
-                <a
-                  key={file.id}
-                  href={file.url}
-                  className="rounded-xl bg-white/[0.04] p-3 text-sm text-rapid-cyan"
-                >
-                  {file.filename}
-                </a>
+                <FileResourceLink key={file.id} file={file} />
               ))}
             </div>
           </Card>

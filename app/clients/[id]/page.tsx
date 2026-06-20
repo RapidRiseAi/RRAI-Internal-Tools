@@ -11,6 +11,7 @@ import {
   QuoteForm,
   SupportTicketForm,
 } from "@/components/forms";
+import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import {
@@ -256,13 +257,7 @@ export default async function ClientDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
-                <a
-                  key={file.id}
-                  href={file.url}
-                  className="rounded-xl bg-white/[0.04] p-3 text-sm text-rapid-cyan"
-                >
-                  {file.filename}
-                </a>
+                <FileResourceLink key={file.id} file={file} />
               ))}
             </div>
           </Card>

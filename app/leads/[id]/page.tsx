@@ -1,6 +1,7 @@
 import { randomUUID } from "crypto";
 import { notFound } from "next/navigation";
 import { AppShell } from "@/components/app-shell";
+import { FileResourceLink } from "@/components/file-resource-link";
 import { ActivityWorkflowForm, FileRecordForm, LeadForm, NoteForm, QuoteForm, TaskForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { SubmitButton } from "@/components/submit-button";
@@ -166,14 +167,7 @@ export default async function LeadDetail({
             </div>
             <div className="mt-4 grid gap-2">
               {files.map((file) => (
-                <a
-                  key={file.id}
-                  className="rounded-xl border border-white/10 bg-white/[0.04] p-3 text-sm text-rapid-cyan hover:border-rapid-cyan/40"
-                  href={file.url}
-                  target="_blank"
-                >
-                  {file.filename}
-                </a>
+                <FileResourceLink key={file.id} file={file} className="border border-white/10 hover:border-rapid-cyan/40" />
               ))}
             </div>
           </Card>
