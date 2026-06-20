@@ -47,7 +47,7 @@ export default async function SettingsPage() {
       <PageHeader
         eyebrow="Admin"
         title="Settings"
-        description="Review system settings and open focused pop-ups to edit employees, login details, documents and reusable SOP checklists. Manage the Services catalogue from its dedicated page."
+        description="Review system settings, employee access, Google account linking, documents and reusable SOP checklists. Manage the Services catalogue from its dedicated page."
         actions={
           <>
             <ModalPanel
@@ -62,6 +62,7 @@ export default async function SettingsPage() {
                 </p>
               )}
             </ModalPanel>
+            <LinkButton href="/api/auth/google/start?mode=connect" variant="ghost">Connect Google</LinkButton>
             <ModalPanel
               title="Add employee"
               triggerLabel="Add employee"
