@@ -72,26 +72,25 @@ function NavRow({ item, active }: { item: NavItem; active: boolean }) {
   );
 }
 
-export function SideNav({ main, admin }: { main: NavItem[]; admin: NavItem[] }) {
+export function SideNav({ home, groups }: { home: NavItem | null; groups: { label: string; items: NavItem[] }[] }) {
   const pathname = usePathname();
   return (
     <>
-      <p className="mt-6 px-3 text-[0.6rem] font-semibold text-slate-500 rr-hud">Operations</p>
-      <nav className="mt-2 grid gap-1">
-        {main.map((item) => (
-          <NavRow key={item.href} item={item} active={isActive(pathname, item.href)} />
-        ))}
-      </nav>
-      {admin.length ? (
-        <>
-          <p className="mt-6 px-3 text-[0.6rem] font-semibold text-slate-500 rr-hud">Admin</p>
+      {home ? (
+        <nav className="mt-6 grid gap-1">
+          <NavRow item={home} active={isActive(pathname, home.href)} />
+        </nav>
+      ) : null}
+      {groups.map((group) => (
+        <div key={group.label}>
+          <p className="mt-6 px-3 text-[0.6rem] font-semibold text-slate-500 rr-hud">{group.label}</p>
           <nav className="mt-2 grid gap-1">
-            {admin.map((item) => (
+            {group.items.map((item) => (
               <NavRow key={item.href} item={item} active={isActive(pathname, item.href)} />
             ))}
           </nav>
-        </>
-      ) : null}
+        </div>
+      ))}
     </>
   );
 }

@@ -8,21 +8,41 @@ import { logoutAction } from "@/lib/actions";
 import { SideNav, type NavIcon } from "./side-nav";
 import { SystemClock } from "./system-clock";
 
-const primaryNav: [string, string, NavIcon, string][] = [
-  ["Dashboard", "/dashboard", "dashboard", permissions.dashboard],
-  ["Leads", "/leads", "leads", permissions.leadsRead],
-  ["Clients", "/clients", "clients", permissions.clientsRead],
-  ["Quotes", "/quotes", "quotes", permissions.quotesRead],
-  ["Projects", "/projects", "projects", permissions.projectsRead],
-  ["Tasks", "/tasks", "tasks", permissions.tasksRead],
-  ["Calendar", "/calendar", "calendar", permissions.tasksRead],
-  ["Finance", "/billing", "finance", permissions.billingRead],
-  ["Payroll", "/payroll", "payroll", permissions.payrollRead],
-  ["Support", "/support", "support", permissions.supportRead],
-  ["Marketing", "/marketing", "marketing", permissions.marketingRead],
-];
+type NavRow = [string, string, NavIcon, string];
 
-const adminNav: [string, string, NavIcon, string][] = [["Settings", "/settings", "settings", permissions.settingsManage]];
+const homeNav: NavRow = ["Dashboard", "/dashboard", "dashboard", permissions.dashboard];
+
+const navGroups: { label: string; items: NavRow[] }[] = [
+  {
+    label: "Pipeline",
+    items: [
+      ["Leads", "/leads", "leads", permissions.leadsRead],
+      ["Quotes", "/quotes", "quotes", permissions.quotesRead],
+      ["Clients", "/clients", "clients", permissions.clientsRead],
+    ],
+  },
+  {
+    label: "Delivery",
+    items: [
+      ["Projects", "/projects", "projects", permissions.projectsRead],
+      ["Tasks", "/tasks", "tasks", permissions.tasksRead],
+      ["Calendar", "/calendar", "calendar", permissions.tasksRead],
+    ],
+  },
+  {
+    label: "Operations",
+    items: [
+      ["Finance", "/billing", "finance", permissions.billingRead],
+      ["Payroll", "/payroll", "payroll", permissions.payrollRead],
+      ["Support", "/support", "support", permissions.supportRead],
+      ["Marketing", "/marketing", "marketing", permissions.marketingRead],
+    ],
+  },
+  {
+    label: "System",
+    items: [["Settings", "/settings", "settings", permissions.settingsManage]],
+  },
+];
 
 export async function AppShell({ children }: { children: ReactNode }) {
   const user = await getCurrentUser();
@@ -30,10 +50,12 @@ export async function AppShell({ children }: { children: ReactNode }) {
 
   const roleName = user.role?.name ?? "No role assigned";
   const userPermissions = permissionsFor(user);
-  const toItems = (rows: [string, string, NavIcon, string][]) =>
-    rows
-      .filter(([, , , permission]) => userPermissions.includes(permission))
-      .map(([label, href, icon]) => ({ label, href, icon }));
+  const allow = ([, , , permission]: NavRow) => userPermissions.includes(permission);
+  const toItem = ([label, href, icon]: NavRow) => ({ label, href, icon });
+  const home = allow(homeNav) ? toItem(homeNav) : null;
+  const groups = navGroups
+    .map((group) => ({ label: group.label, items: group.items.filter(allow).map(toItem) }))
+    .filter((group) => group.items.length > 0);
   const initials = user.name.split(/\s+/).map((part) => part[0]).slice(0, 2).join("").toUpperCase() || "RR";
 
   return (
@@ -60,7 +82,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
           </div>
 
           <div className="-mr-2 grow overflow-y-auto pr-2">
-            <SideNav main={toItems(primaryNav)} admin={toItems(adminNav)} />
+            <SideNav home={home} groups={groups} />
           </div>
 
           <div className="mt-4 flex items-center gap-3 rounded-2xl border border-white/10 bg-white/[0.03] p-3">

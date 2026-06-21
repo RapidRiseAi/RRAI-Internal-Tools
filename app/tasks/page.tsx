@@ -1,14 +1,20 @@
+import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
 import { TaskForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
+import { RecordCockpit, type CockpitRecord } from "@/components/record-cockpit";
 import { syncMyGoogleCalendar, updateTaskStatus } from "@/lib/actions";
-import { Button, Card, EmptyState, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
+import { Button, Card, EmptyState, InfoRow, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listTasks, listUsers } from "@/lib/data";
 import { dateShort } from "@/lib/format";
 import type { Project } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 export const dynamic = "force-dynamic";
+
+const inspectorAction =
+  "rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold transition hover:border-rapid-cyan/40 hover:bg-white/5";
+
 export default async function TasksPage({ searchParams }: { searchParams?: Promise<Record<string, string | string[] | undefined>> }) {
   await requirePagePermission(permissions.tasksRead);
   const params = (await searchParams) ?? {};
@@ -31,6 +37,76 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
     id: project.id,
     name: project.name,
     client_id: project.client_id,
+  }));
+  const records: CockpitRecord[] = tasks.map((task) => ({
+    id: task.id,
+    href: `/tasks/${task.id}`,
+    title: task.title,
+    subtitle: task.assignee?.name ?? "Unassigned",
+    search: `${task.title} ${task.status} ${task.priority} ${task.assignee?.name ?? ""}`,
+    cells: [
+      <StatusBadge key="status" value={task.status} />,
+      <StatusBadge key="priority" value={task.priority} />,
+      dateShort(task.due_date),
+      task.recurrence === "NONE" ? "—" : task.recurrence.toLowerCase(),
+    ],
+    inspector: (
+      <div>
+        <h3 className="text-lg font-semibold text-white">{task.title}</h3>
+        <div className="mt-2 flex flex-wrap gap-2">
+          <StatusBadge value={task.status} />
+          <StatusBadge value={task.priority} />
+        </div>
+        <div className="mt-4">
+          <InfoRow label="Assignee" value={task.assignee?.name ?? "Unassigned"} />
+          <InfoRow label="Due" value={dateShort(task.due_date)} />
+          <InfoRow label="Type" value={task.type} />
+          <InfoRow
+            label="Recurrence"
+            value={task.recurrence === "NONE" ? "None" : `${task.recurrence.toLowerCase()}${task.recurrence_next_due_at ? ` · next ${dateShort(task.recurrence_next_due_at)}` : ""}`}
+          />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link className={`${inspectorAction} text-rapid-cyan`} href={`/tasks/${task.id}`}>
+            Open
+          </Link>
+          <ModalPanel title={`Edit ${task.title}`} triggerLabel="Edit" variant="ghost">
+            <TaskForm
+              users={userOptions}
+              clients={clients}
+              projects={projectOptions}
+              redirectTo="/tasks"
+              task={task}
+            />
+          </ModalPanel>
+          <ModalPanel title={`End ${task.title}`} triggerLabel="End" variant="ghost">
+            <form action={updateTaskStatus} className="grid gap-3">
+              <input type="hidden" name="id" value={task.id} />
+              <input type="hidden" name="redirectTo" value="/tasks" />
+              <label className="grid gap-2 text-sm text-slate-300">
+                End task as
+                <select className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="status" defaultValue="DONE">
+                  <option value="DONE">Complete</option>
+                  <option value="SCRAPPED">Scrap</option>
+                  <option value="BLOCKED">Blocked</option>
+                </select>
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Outcome / what happened
+                <textarea className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="outcome" required />
+              </label>
+              <label className="grid gap-2 text-sm text-slate-300">
+                Scrap / blocker reason
+                <textarea className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="scrapReason" />
+              </label>
+              <button className="rounded-lg border border-white/10 px-3 py-2 text-sm text-rapid-cyan">
+                End task
+              </button>
+            </form>
+          </ModalPanel>
+        </div>
+      </div>
+    ),
   }));
   return (
     <AppShell>
@@ -92,97 +168,19 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
             </Card>
           ))}
         </div>
-        <Card>
-          {tasks.length ? (
-            <div className="overflow-x-auto">
-              <table className="rr-table">
-                <thead className="text-left text-xs uppercase tracking-wider text-slate-400">
-                  <tr>
-                    <th className="p-3">Task</th>
-                    <th>Status</th>
-                    <th>Priority</th>
-                    <th>Assignee</th>
-                    <th>Due</th>
-                    <th>Recurrence</th>
-                    <th>Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {tasks.map((task) => (
-                    <tr
-                      id={task.id}
-                      key={task.id}
-                      className="border-t border-white/10"
-                    >
-                      <td className="p-3 font-semibold text-white">
-                        <a href={`/tasks/${task.id}`} className="text-white hover:text-rapid-cyan">{task.title}</a>
-                      </td>
-                      <td>
-                        <StatusBadge value={task.status} />
-                      </td>
-                      <td>
-                        <StatusBadge value={task.priority} />
-                      </td>
-                      <td className="text-slate-300">
-                        {task.assignee?.name ?? "Unassigned"}
-                      </td>
-                      <td className="text-slate-300">
-                        {dateShort(task.due_date)}
-                      </td>
-                      <td className="text-slate-300">
-                        {task.recurrence === "NONE" ? "—" : `${task.recurrence.toLowerCase()}${task.recurrence_next_due_at ? ` · next ${dateShort(task.recurrence_next_due_at)}` : ""}`}
-                      </td>
-                      <td className="py-2">
-                        <div className="flex flex-wrap gap-2">
-                          <LinkButton href={`/tasks/${task.id}`} variant="ghost">Open</LinkButton>
-                          <ModalPanel title={`Edit ${task.title}`} triggerLabel="Edit" variant="ghost">
-                            <TaskForm
-                              users={userOptions}
-                              clients={clients}
-                              projects={projectOptions}
-                              redirectTo="/tasks"
-                              task={task}
-                            />
-                          </ModalPanel>
-                          <ModalPanel title={`End ${task.title}`} triggerLabel="End" variant="ghost">
-                            <form action={updateTaskStatus} className="grid gap-3">
-                              <input type="hidden" name="id" value={task.id} />
-                              <input type="hidden" name="redirectTo" value="/tasks" />
-                              <label className="grid gap-2 text-sm text-slate-300">
-                                End task as
-                                <select className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="status" defaultValue="DONE">
-                                  <option value="DONE">Complete</option>
-                                  <option value="SCRAPPED">Scrap</option>
-                                  <option value="BLOCKED">Blocked</option>
-                                </select>
-                              </label>
-                              <label className="grid gap-2 text-sm text-slate-300">
-                                Outcome / what happened
-                                <textarea className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="outcome" required />
-                              </label>
-                              <label className="grid gap-2 text-sm text-slate-300">
-                                Scrap / blocker reason
-                                <textarea className="rounded-lg border border-white/10 bg-slate-950/70 px-2 py-2 text-sm" name="scrapReason" />
-                              </label>
-                              <button className="rounded-lg border border-white/10 px-3 py-2 text-sm text-rapid-cyan">
-                                End task
-                              </button>
-                            </form>
-                          </ModalPanel>
-                        </div>
-                      </td>
-                    </tr>
-                  ))}
-                </tbody>
-              </table>
-            </div>
-          ) : (
-            <EmptyState
-              title="No tasks yet"
-              body="Use Add task or book events from clients/leads to populate this workload."
-            />
-          )}
-        </Card>
+        {tasks.length ? (
+          <RecordCockpit
+            columns={["Task", "Status", "Priority", "Due", "Recurrence"]}
+            gridTemplate="minmax(0,1.5fr) auto auto 0.9fr 1fr"
+            records={records}
+            searchPlaceholder="Filter tasks by title, status or assignee…"
+          />
+        ) : (
+          <EmptyState
+            title="No tasks yet"
+            body="Use Add task or book events from clients/leads to populate this workload."
+          />
+        )}
       </div>
     </AppShell>
   );
