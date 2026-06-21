@@ -2,9 +2,10 @@
 
 import { useActionState, useEffect, useState } from "react";
 import { useRouter } from "next/navigation";
+import { Fingerprint, ShieldCheck, Sparkles, type LucideIcon } from "lucide-react";
 import { LoginTransition } from "@/components/login-transition";
 import { SubmitButton } from "@/components/submit-button";
-import { Card, inputClass, LinkButton } from "@/components/ui";
+import { inputClass, LinkButton } from "@/components/ui";
 import { loginAction } from "@/lib/actions";
 
 export default function LoginPage() {
@@ -26,23 +27,35 @@ export default function LoginPage() {
   }, [router, state]);
 
   return (
-    <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#1d4ed833,transparent_34rem)] px-6 py-10">
-      <Card className="w-full max-w-5xl overflow-hidden p-0">
+    <main className="grid min-h-screen place-items-center px-6 py-10">
+      <div className="rr-glass rr-brackets w-full max-w-5xl overflow-hidden rounded-3xl">
+        <span className="rr-bracket tl" /><span className="rr-bracket tr" /><span className="rr-bracket bl" /><span className="rr-bracket br" />
         <div className="grid lg:grid-cols-[1.1fr_0.9fr]">
-          <section className="border-b border-white/10 bg-white/[0.03] p-8 lg:border-b-0 lg:border-r lg:p-10">
-            <p className="text-xs font-bold uppercase tracking-[0.3em] text-rapid-cyan">Rapid Rise AI</p>
-            <h1 className="mt-4 text-4xl font-bold tracking-tight text-white">Sign in to Rapid Rise OS</h1>
+          <section className="rr-scan relative border-b border-white/10 bg-white/[0.02] p-8 lg:border-b-0 lg:border-r lg:p-10">
+            <div className="flex items-center gap-3">
+              <div className="rr-action grid size-11 place-items-center rounded-2xl text-sm font-black text-white">RR</div>
+              <p className="rr-hud text-[0.7rem] font-semibold text-rapid-cyan">Rapid Rise AI</p>
+            </div>
+            <h1 className="mt-7 text-4xl font-bold tracking-tight text-white rr-neon-text">Sign in to Rapid Rise OS</h1>
             <p className="mt-3 max-w-xl text-sm leading-6 text-slate-400">Private command center for leads, clients, quotes, projects, billing, support, retainers and team execution.</p>
             <div className="mt-8 grid gap-3 text-sm text-slate-300">
-              {[
-                "Secure server-side session handling",
-                "Role-based internal access",
-                "Duplicate-safe workflow submissions",
-              ].map((item) => <div key={item} className="rounded-2xl border border-white/10 bg-slate-950/50 p-4">{item}</div>)}
+              {([
+                [ShieldCheck, "Secure server-side session handling"],
+                [Fingerprint, "Role-based internal access"],
+                [Sparkles, "Duplicate-safe workflow submissions"],
+              ] as [LucideIcon, string][]).map(([Icon, item]) => (
+                <div key={item} className="flex items-center gap-3 rounded-2xl border border-white/10 bg-slate-950/40 p-4">
+                  <span className="grid size-8 shrink-0 place-items-center rounded-lg border border-rapid-cyan/25 bg-rapid-cyan/10 text-rapid-cyan">
+                    <Icon className="size-4" />
+                  </span>
+                  {item}
+                </div>
+              ))}
             </div>
           </section>
           <section className="p-8 lg:p-10">
-            <h2 className="text-xl font-semibold text-white">Welcome back</h2>
+            <p className="rr-hud flex items-center gap-2 text-[0.6rem] font-semibold text-rapid-cyan"><span className="rr-dot !size-1.5" /> Secure access</p>
+            <h2 className="mt-3 text-xl font-semibold text-white">Welcome back</h2>
             <p className="mt-2 text-sm text-slate-400">Enter your employee credentials to continue to the dashboard.</p>
             <form action={formAction} className="mt-6 grid gap-4">
               <input className={inputClass} name="email" type="email" placeholder="owner@rapidrise.ai" autoComplete="email" disabled={loginSucceeded} required />
@@ -57,7 +70,7 @@ export default function LoginPage() {
             {pending && !loginSucceeded ? <p className="mt-4 rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/10 px-4 py-3 text-xs font-semibold text-rapid-cyan">Checking credentials securely…</p> : null}
           </section>
         </div>
-      </Card>
+      </div>
     </main>
   );
 }
