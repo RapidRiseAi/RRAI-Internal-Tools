@@ -233,6 +233,39 @@ button, input, select, textarea { font: inherit; }
   mask-image: linear-gradient(180deg, #000, transparent);
 }
 
+/* HUD data grid — applied to <table className="rr-table"> */
+.rr-table {
+  width: 100%;
+  border-collapse: separate;
+  border-spacing: 0;
+  font-size: 0.875rem;
+}
+.rr-table thead th {
+  padding: 0.8rem 1rem;
+  text-align: left;
+  font-family: var(--font-hud);
+  font-size: 0.62rem;
+  font-weight: 600;
+  letter-spacing: 0.16em;
+  text-transform: uppercase;
+  color: rgba(148, 163, 184, 0.85);
+  background: linear-gradient(180deg, rgba(56, 213, 255, 0.07), transparent);
+  border-bottom: 1px solid rgba(56, 213, 255, 0.2);
+  white-space: nowrap;
+}
+.rr-table tbody tr {
+  border-top: 0;
+  transition: background 160ms ease, box-shadow 160ms ease;
+}
+.rr-table tbody td {
+  padding: 0.8rem 1rem;
+  border-top: 1px solid rgba(255, 255, 255, 0.05);
+  vertical-align: middle;
+}
+.rr-table tbody tr:first-child td { border-top: 0; }
+.rr-table tbody tr:hover td { background: rgba(56, 213, 255, 0.045); }
+.rr-table tbody tr:hover td:first-child { box-shadow: inset 2px 0 0 0 var(--rr-cyan); }
+
 /* ============================================================
    Keyframes
    ============================================================ */

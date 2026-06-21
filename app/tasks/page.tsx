@@ -95,7 +95,7 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
         <Card>
           {tasks.length ? (
             <div className="overflow-x-auto">
-              <table className="w-full text-sm">
+              <table className="rr-table">
                 <thead className="text-left text-xs uppercase tracking-wider text-slate-400">
                   <tr>
                     <th className="p-3">Task</th>

@@ -14,7 +14,7 @@ import {
 import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
 import { RecordResourceLink } from "@/components/record-resource-link";
-import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { Card, PageHeader, SectionTitle, StatTile, StatusBadge } from "@/components/ui";
 import {
   genericList,
   getClient,
@@ -133,26 +133,16 @@ export default async function ClientDetail({
       <div className="grid gap-6 xl:grid-cols-[0.9fr_1.1fr]">
         <div className="grid gap-6 content-start">
           <Card>
-            <h2 className="text-lg font-semibold">Account health</h2>
-            <div className="mt-4 grid grid-cols-2 gap-3 text-sm text-slate-300">
-              <p>
-                <StatusBadge value={client.account_status} />
-              </p>
-              <p>MRR: {money(client.mrr_cents)}</p>
-              <p>Projects: {clientProjects.length}</p>
-              <p>Tickets: {clientTickets.length}</p>
-              <p>
-                Retainers:{" "}
-                {
-                  retainers.filter(
-                    (retainer) => retainer.client_id === client.id,
-                  ).length
-                }
-              </p>
-              <p>Invoices: {clientInvoices.length}</p>
-              <p className="col-span-2">
-                Next action: {client.next_action ?? "—"}
-              </p>
+            <SectionTitle actions={<StatusBadge value={client.account_status} />}>Account health</SectionTitle>
+            <div className="mt-4 grid grid-cols-2 gap-3">
+              <StatTile label="MRR" value={money(client.mrr_cents)} />
+              <StatTile label="Projects" value={clientProjects.length} />
+              <StatTile label="Tickets" value={clientTickets.length} />
+              <StatTile label="Retainers" value={retainers.filter((retainer) => retainer.client_id === client.id).length} />
+              <StatTile label="Invoices" value={clientInvoices.length} />
+              <div className="col-span-2">
+                <StatTile label="Next action" value={client.next_action ?? "—"} />
+              </div>
             </div>
           </Card>
           <Card>

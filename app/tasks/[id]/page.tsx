@@ -3,7 +3,7 @@ import { AppShell } from "@/components/app-shell";
 import { FileRecordForm, TaskForm } from "@/components/forms";
 import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
-import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { Card, InfoRow, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
 import { updateTaskStatus } from "@/lib/actions";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
@@ -70,16 +70,13 @@ export default async function TaskDetail({ params }: { params: Promise<{ id: str
       <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
         <div className="grid gap-6">
           <Card>
-            <div className="flex flex-wrap items-center justify-between gap-3">
-              <h2 className="text-lg font-semibold text-white">Instructions & outcome</h2>
-              <StatusBadge value={task.status} />
-            </div>
-            <div className="mt-4 grid gap-3 text-sm text-slate-300">
-              <p>Type: {task.type}</p>
-              <p>Priority: {task.priority}</p>
-              <p>Due: {dateShort(task.due_date)}</p>
-              <p>Assignee: {task.assignee?.name ?? "Unassigned"}</p>
-              <pre className="mt-2 whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/50 p-4 text-slate-200">{task.description ?? "No instructions recorded yet."}</pre>
+            <SectionTitle actions={<StatusBadge value={task.status} />}>Instructions &amp; outcome</SectionTitle>
+            <div className="mt-4">
+              <InfoRow label="Type" value={task.type} />
+              <InfoRow label="Priority" value={task.priority} />
+              <InfoRow label="Due" value={dateShort(task.due_date)} />
+              <InfoRow label="Assignee" value={task.assignee?.name ?? "Unassigned"} />
+              <pre className="mt-3 whitespace-pre-wrap rounded-xl border border-white/10 bg-slate-950/50 p-4 text-sm text-slate-200">{task.description ?? "No instructions recorded yet."}</pre>
             </div>
           </Card>
           <Card>
@@ -102,15 +99,15 @@ export default async function TaskDetail({ params }: { params: Promise<{ id: str
           </Card>
         </div>
         <Card>
-          <h2 className="text-lg font-semibold text-white">Task metadata</h2>
-          <div className="mt-4 grid gap-3 text-sm text-slate-300">
-            <p>Client: {clients.find((client) => client.id === task.client_id)?.company_name ?? "No client"}</p>
-            <p>Project: {projects.find((project) => project.id === task.project_id)?.name ?? "No project"}</p>
-            <p>Created: {dateShort(task.created_at)}</p>
-            <p>Updated: {dateShort(task.updated_at)}</p>
-            <p>Completed: {dateShort(task.completed_at)}</p>
-            <p>Recurrence: {task.recurrence === "NONE" ? "None" : task.recurrence}</p>
-            {task.recurrence !== "NONE" ? <p>Next occurrence: {dateShort(task.recurrence_next_due_at)}</p> : null}
+          <SectionTitle>Task metadata</SectionTitle>
+          <div className="mt-4">
+            <InfoRow label="Client" value={clients.find((client) => client.id === task.client_id)?.company_name ?? "No client"} />
+            <InfoRow label="Project" value={projects.find((project) => project.id === task.project_id)?.name ?? "No project"} />
+            <InfoRow label="Created" value={dateShort(task.created_at)} />
+            <InfoRow label="Updated" value={dateShort(task.updated_at)} />
+            <InfoRow label="Completed" value={dateShort(task.completed_at)} />
+            <InfoRow label="Recurrence" value={task.recurrence === "NONE" ? "None" : task.recurrence} />
+            {task.recurrence !== "NONE" ? <InfoRow label="Next occurrence" value={dateShort(task.recurrence_next_due_at)} /> : null}
           </div>
         </Card>
       </div>

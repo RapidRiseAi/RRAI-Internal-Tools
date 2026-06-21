@@ -25,9 +25,9 @@ export default async function LeadsPage() {
         actions={<LinkButton href="/leads/new">Create lead</LinkButton>}
       />
       {leads.length ? (
-        <div className="overflow-hidden rounded-2xl border border-white/10">
-          <table className="w-full border-collapse bg-white/[0.035] text-sm">
-            <thead className="bg-white/[0.06] text-left text-xs uppercase tracking-wider text-slate-400">
+        <div className="rr-glass overflow-x-auto rounded-2xl">
+          <table className="rr-table">
+            <thead className="text-left text-xs uppercase tracking-wider text-slate-400">
               <tr>
                 <th className="p-4">Company</th>
                 <th>Stage</th>

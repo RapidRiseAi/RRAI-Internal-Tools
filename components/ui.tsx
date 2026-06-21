@@ -46,6 +46,33 @@ export function EmptyState({ title, body, action }: { title: string; body: strin
   );
 }
 
+export function SectionTitle({ children, actions }: { children: ReactNode; actions?: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <h2 className="flex items-center gap-2 text-lg font-semibold text-white"><span className="rr-dot !size-1.5" />{children}</h2>
+      {actions ? <div className="flex shrink-0 gap-2">{actions}</div> : null}
+    </div>
+  );
+}
+
+export function InfoRow({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="flex items-center justify-between gap-4 border-b border-white/5 py-2 last:border-b-0">
+      <span className="rr-hud text-[0.6rem] font-semibold text-slate-500">{label}</span>
+      <span className="text-right text-sm font-medium text-slate-200">{value}</span>
+    </div>
+  );
+}
+
+export function StatTile({ label, value }: { label: string; value: ReactNode }) {
+  return (
+    <div className="rounded-xl border border-white/10 bg-slate-950/40 p-3 transition hover:border-rapid-cyan/30">
+      <p className="rr-hud text-[0.55rem] font-semibold text-slate-500">{label}</p>
+      <p className="mt-1.5 text-base font-semibold text-white">{value}</p>
+    </div>
+  );
+}
+
 export function PageHeader({ title, eyebrow, description, actions }: { title: string; eyebrow?: string; description?: string; actions?: ReactNode }) {
   return (
     <div className="mb-7 flex items-start justify-between gap-4">
