@@ -178,25 +178,30 @@ button, input, select, textarea { font: inherit; }
   animation: ping-ring 2s cubic-bezier(0, 0, 0.2, 1) infinite;
 }
 
-/* Primary action surface — gradient with travelling sheen */
-.rr-action {
-  position: relative;
-  overflow: hidden;
-  background: linear-gradient(120deg, var(--rr-blue), var(--rr-cyan));
-  box-shadow: 0 10px 30px -10px rgba(47, 125, 255, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+/* Primary action surface — gradient with travelling sheen.
+   Lives in the components layer so Tailwind utilities (e.g. a caller's
+   bg-red-400/10 or shadow-none on a destructive/secondary submit) still
+   override it — utilities sit above components in Tailwind's layer order. */
+@layer components {
+  .rr-action {
+    position: relative;
+    overflow: hidden;
+    background: linear-gradient(120deg, var(--rr-blue), var(--rr-cyan));
+    box-shadow: 0 10px 30px -10px rgba(47, 125, 255, 0.7), inset 0 1px 0 rgba(255, 255, 255, 0.25);
+  }
+  .rr-action::after {
+    content: "";
+    position: absolute;
+    top: 0;
+    left: -120%;
+    width: 60%;
+    height: 100%;
+    background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
+    transform: skewX(-18deg);
+    transition: left 600ms ease;
+  }
+  .rr-action:hover::after { left: 140%; }
 }
-.rr-action::after {
-  content: "";
-  position: absolute;
-  top: 0;
-  left: -120%;
-  width: 60%;
-  height: 100%;
-  background: linear-gradient(100deg, transparent, rgba(255, 255, 255, 0.45), transparent);
-  transform: skewX(-18deg);
-  transition: left 600ms ease;
-}
-.rr-action:hover::after { left: 140%; }
 
 /* Animated metric value reveal */
 .rr-metric {
