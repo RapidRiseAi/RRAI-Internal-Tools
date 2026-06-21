@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin, hasSupabaseConfig } from "./supabase";
-import type { ActivityLog, Affiliate, Campaign, ChecklistItem, ChecklistTemplate, Client, Commission, CompanySettings, ContentItem, DocumentTemplate, FileRecord, Invoice, KnowledgeBaseItem, Lead, Note, Package, Payment, Project, ProjectChecklist, Quote, QuoteItem, Referral, Retainer, Role, Service, SupportTicket, Task, User } from "./types";
+import type { ActivityLog, Affiliate, Campaign, ChecklistItem, ChecklistTemplate, Client, Commission, CompanySettings, ContentItem, DocumentTemplate, FileRecord, Invoice, KnowledgeBaseItem, Lead, Note, Notification, Package, Payment, Project, ProjectChecklist, Quote, QuoteItem, Referral, Retainer, Role, Service, SupportTicket, Task, User } from "./types";
 
 export async function tableCount(table: string, filters?: Record<string, string | number | boolean | null>) {
   if (!hasSupabaseConfig()) return 0;
@@ -25,6 +25,8 @@ export async function getTask(id: string) { if (!hasSupabaseConfig()) return nul
 export async function listServices() { if (!hasSupabaseConfig()) return [] as Service[]; const { data } = await getSupabaseAdmin().from("services").select("*").order("name"); return (data ?? []) as Service[]; }
 export async function listPackages() { if (!hasSupabaseConfig()) return [] as Package[]; const { data } = await getSupabaseAdmin().from("packages").select("*").order("name"); return (data ?? []) as Package[]; }
 export async function recentActivity(limit = 8) { if (!hasSupabaseConfig()) return [] as ActivityLog[]; const { data } = await getSupabaseAdmin().from("activity_logs").select("*").order("created_at", { ascending: false }).limit(limit); return (data ?? []) as ActivityLog[]; }
+export async function activityByActor(actorId: string, limit = 8) { if (!hasSupabaseConfig()) return [] as ActivityLog[]; const { data } = await getSupabaseAdmin().from("activity_logs").select("*").eq("actor_id", actorId).order("created_at", { ascending: false }).limit(limit); return (data ?? []) as ActivityLog[]; }
+export async function notificationsForUser(userId: string, limit = 10) { if (!hasSupabaseConfig()) return [] as Notification[]; const { data } = await getSupabaseAdmin().from("notifications").select("*").or(`user_id.eq.${userId},user_id.is.null`).order("created_at", { ascending: false }).limit(limit); return (data ?? []) as Notification[]; }
 export async function genericList<T>(table: string, order = "updated_at") { if (!hasSupabaseConfig()) return [] as T[]; const { data } = await getSupabaseAdmin().from(table).select("*").order(order, { ascending: false }); return (data ?? []) as T[]; }
 export async function getProject(id: string) { if (!hasSupabaseConfig()) return null; const { data } = await getSupabaseAdmin().from("projects").select("*").eq("id", id).maybeSingle(); return data as Project | null; }
 export async function getProjectChecklist(projectId: string) { if (!hasSupabaseConfig()) return [] as ProjectChecklist[]; const { data } = await getSupabaseAdmin().from("project_checklists").select("*").eq("project_id", projectId).order("created_at"); return (data ?? []) as ProjectChecklist[]; }
