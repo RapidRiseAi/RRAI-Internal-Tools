@@ -37,6 +37,7 @@ import {
   linkedTaskSchema,
   invoiceSchema,
   knowledgeBaseSchema,
+  messageSchema,
   leadCallSchema,
   leadSchema,
   noteSchema,
@@ -497,6 +498,65 @@ export async function loginAction(
 export async function logoutAction() {
   await destroySession();
   redirect("/login");
+}
+
+export async function sendMessageAction(formData: FormData) {
+  const user = await requirePermission(permissions.dashboard);
+  const parsed = messageSchema.parse({
+    audience: str(formData, "audience") || "DIRECT",
+    recipientId: str(formData, "recipientId"),
+    broadcastRole: str(formData, "broadcastRole"),
+    body: str(formData, "body"),
+  });
+  const admin = getSupabaseAdmin();
+
+  if (parsed.audience === "BROADCAST") {
+    const { data: message, error } = await admin
+      .from("messages")
+      .insert({ sender_id: user.id, recipient_id: null, audience: "BROADCAST", broadcast_role: parsed.broadcastRole ?? null, body: parsed.body })
+      .select("id")
+      .single();
+    if (error) throw error;
+
+    let targetQuery = admin.from("users").select("id").eq("status", "ACTIVE").neq("id", user.id);
+    if (parsed.broadcastRole) {
+      const { data: role } = await admin.from("roles").select("id").eq("name", parsed.broadcastRole).maybeSingle();
+      if (role?.id) targetQuery = targetQuery.eq("role_id", role.id);
+    }
+    const { data: recipients } = await targetQuery;
+    const rows = (recipients ?? []) as { id: string }[];
+    if (rows.length) {
+      await admin.from("notifications").insert(rows.map((row) => ({ title: `Announcement from ${user.name}`, body: parsed.body.slice(0, 140), user_id: row.id, status: "UNREAD" })));
+    }
+    await logActivity({ action: "MESSAGE_BROADCAST", entityType: "Message", entityId: message.id, actorId: user.id, message: `${user.name} sent a team broadcast` });
+    revalidatePath("/messages");
+    redirect("/messages?to=broadcast");
+  }
+
+  if (!parsed.recipientId) redirect("/messages");
+  const { data: message, error } = await admin
+    .from("messages")
+    .insert({ sender_id: user.id, recipient_id: parsed.recipientId, audience: "DIRECT", body: parsed.body })
+    .select("id")
+    .single();
+  if (error) throw error;
+  await admin.from("notifications").insert({ title: `Message from ${user.name}`, body: parsed.body.slice(0, 140), user_id: parsed.recipientId, status: "UNREAD" });
+  await logActivity({ action: "MESSAGE_SENT", entityType: "Message", entityId: message.id, actorId: user.id, message: `${user.name} sent a direct message` });
+  revalidatePath("/messages");
+  redirect(`/messages?to=${parsed.recipientId}`);
+}
+
+export async function markThreadReadAction(otherId: string) {
+  const user = await requireUser();
+  if (!otherId || otherId === "broadcast") return;
+  await getSupabaseAdmin()
+    .from("messages")
+    .update({ read_at: new Date().toISOString() })
+    .eq("audience", "DIRECT")
+    .eq("recipient_id", user.id)
+    .eq("sender_id", otherId)
+    .is("read_at", null);
+  revalidatePath("/messages");
 }
 
 export async function updateOwnLoginDetails(formData: FormData) {

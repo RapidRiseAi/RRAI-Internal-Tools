@@ -200,6 +200,7 @@ export type Campaign = { id: string; name: string; platform: string; target_indu
 export type ContentItem = { id: string; title: string; status: string; platform: string | null; post_url: string | null; performance_notes: string | null; leads_generated: number; created_at: string; updated_at: string; };
 export type KnowledgeBaseItem = { id: string; title: string; category: string; body: string; visibility: string; created_at: string; updated_at: string; };
 export type Notification = { id: string; title: string; body: string; user_id: string | null; status: string; created_at: string; updated_at: string; };
+export type Message = { id: string; sender_id: string; recipient_id: string | null; audience: "DIRECT" | "BROADCAST"; broadcast_role: string | null; body: string; read_at: string | null; created_at: string; sender?: Pick<User, "id" | "name"> | null; };
 
 export type CompanySettings = { id: boolean; company_name: string; billing_email: string | null; bank_name: string | null; bank_account_name: string | null; bank_account_number: string | null; bank_branch_code: string | null; payment_terms: string | null; quote_footer: string | null; invoice_footer: string | null; updated_at: string; };
 export type DocumentTemplate = { id: string; name: string; type: string; content: string; is_default: boolean; created_at: string; updated_at: string; };

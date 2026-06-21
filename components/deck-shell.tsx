@@ -17,6 +17,7 @@ import {
   LayoutDashboard,
   LogOut,
   Megaphone,
+  MessageSquare,
   PanelLeftClose,
   PanelLeftOpen,
   PlusCircle,
@@ -35,6 +36,7 @@ export type DeckNotification = { id: string; title: string; body: string; status
 const iconMap: Record<string, LucideIcon> = {
   dashboard: Gauge,
   myPanel: LayoutDashboard,
+  messages: MessageSquare,
   leads: Target,
   clients: Building2,
   quotes: FileText,

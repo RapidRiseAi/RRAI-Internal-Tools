@@ -8,6 +8,7 @@ import { DeckShell, type DeckNavItem } from "./deck-shell";
 const primaryNav: [string, string, string, string][] = [
   ["Control Panel", "/dashboard", "dashboard", permissions.dashboard],
   ["My Panel", "/my-panel", "myPanel", permissions.dashboard],
+  ["Messages", "/messages", "messages", permissions.dashboard],
   ["Leads", "/leads", "leads", permissions.leadsRead],
   ["Clients", "/clients", "clients", permissions.clientsRead],
   ["Quotes", "/quotes", "quotes", permissions.quotesRead],

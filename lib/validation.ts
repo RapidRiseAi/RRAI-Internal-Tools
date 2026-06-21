@@ -41,6 +41,13 @@ const optionalDate = z
 const cents = z.coerce.number().int().min(0).default(0);
 const optionalUuid = optionalText;
 
+export const messageSchema = z.object({
+  audience: z.enum(["DIRECT", "BROADCAST"]).default("DIRECT"),
+  recipientId: optionalText,
+  broadcastRole: optionalText,
+  body: z.string().trim().min(1).max(4000),
+});
+
 export const leadSchema = z.object({
   companyName: z.string().trim().min(2),
   contactName: z.string().trim().min(2),
