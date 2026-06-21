@@ -11,7 +11,7 @@ import { FileResourceLink } from "@/components/file-resource-link";
 import { ModalPanel } from "@/components/modal-panel";
 import { RecordResourceLink } from "@/components/record-resource-link";
 import { SubmitButton } from "@/components/submit-button";
-import { Card, PageHeader, StatusBadge, inputClass } from "@/components/ui";
+import { Card, InfoRow, PageHeader, SectionTitle, StatusBadge, inputClass } from "@/components/ui";
 import { updateProjectChecklist } from "@/lib/actions";
 import {
   genericList,
@@ -126,21 +126,16 @@ export default async function ProjectDetail({
         </div>
         <div className="grid gap-6">
           <Card>
-            <h2 className="text-lg font-semibold">Status</h2>
-            <div className="mt-4 grid gap-3 text-sm text-slate-300">
-              <StatusBadge value={project.status} />
-              <p>Progress: {project.progress}%</p>
-              <p>Deadline: {dateShort(project.deadline)}</p>
-              <p>Blocker: {project.blocker ?? "None"}</p>
-              <p>
-                Open tasks:{" "}
-                {
-                  tasks.filter(
-                    (task) =>
-                      task.project_id === project.id && task.status !== "DONE",
-                  ).length
-                }
-              </p>
+            <SectionTitle>Status</SectionTitle>
+            <div className="mt-4">
+              <div className="mb-3"><StatusBadge value={project.status} /></div>
+              <InfoRow label="Progress" value={`${project.progress}%`} />
+              <InfoRow label="Deadline" value={dateShort(project.deadline)} />
+              <InfoRow label="Blocker" value={project.blocker ?? "None"} />
+              <InfoRow
+                label="Open tasks"
+                value={tasks.filter((task) => task.project_id === project.id && task.status !== "DONE").length}
+              />
             </div>
           </Card>
           <Card>

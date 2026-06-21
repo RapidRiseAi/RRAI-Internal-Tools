@@ -1,9 +1,12 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { RecordCockpit, type CockpitRecord } from "@/components/record-cockpit";
 import {
   EmptyState,
+  InfoRow,
   LinkButton,
   PageHeader,
+  StatTile,
   StatusBadge,
 } from "@/components/ui";
 import { listClients } from "@/lib/data";
@@ -11,9 +14,53 @@ import { money } from "@/lib/format";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 export const dynamic = "force-dynamic";
+
+const inspectorAction =
+  "rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold transition hover:border-rapid-cyan/40 hover:bg-white/5";
+
 export default async function ClientsPage() {
   await requirePagePermission(permissions.clientsRead);
   const clients = await listClients();
+  const records: CockpitRecord[] = clients.map((client) => ({
+    id: client.id,
+    href: `/clients/${client.id}`,
+    title: client.company_name,
+    subtitle: client.industry ?? "No industry",
+    search: `${client.company_name} ${client.industry ?? ""} ${client.primary_email ?? ""}`,
+    cells: [
+      <StatusBadge key="status" value={client.account_status} />,
+      money(client.mrr_cents),
+      client.next_action ?? "—",
+    ],
+    inspector: (
+      <div>
+        <h3 className="text-lg font-semibold text-white">{client.company_name}</h3>
+        <p className="text-xs text-slate-500">{client.industry ?? "No industry"}</p>
+        <div className="mt-3">
+          <StatusBadge value={client.account_status} />
+        </div>
+        <div className="mt-4 grid grid-cols-2 gap-2">
+          <StatTile label="MRR" value={money(client.mrr_cents)} />
+          <StatTile label="Status" value={client.account_status} />
+        </div>
+        <div className="mt-3">
+          <InfoRow label="Email" value={client.primary_email ?? "—"} />
+          <InfoRow label="Next action" value={client.next_action ?? "—"} />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link className={`${inspectorAction} text-rapid-cyan`} href={`/clients/${client.id}`}>
+            Open
+          </Link>
+          <Link className={`${inspectorAction} text-slate-200`} href={`/clients/${client.id}#quote`}>
+            Quote
+          </Link>
+          <Link className={`${inspectorAction} text-slate-200`} href={`/clients/${client.id}#project`}>
+            Project
+          </Link>
+        </div>
+      </div>
+    ),
+  }));
   return (
     <AppShell>
       <PageHeader
@@ -23,67 +70,12 @@ export default async function ClientsPage() {
         actions={<LinkButton href="/clients/new">Create client</LinkButton>}
       />
       {clients.length ? (
-        <div className="overflow-hidden rounded-2xl border border-white/10">
-          <table className="w-full bg-white/[0.035] text-sm">
-            <thead className="bg-white/[0.06] text-left text-xs uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="p-4">Client</th>
-                <th>Status</th>
-                <th>MRR</th>
-                <th>Email</th>
-                <th>Next action</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {clients.map((client) => (
-                <tr key={client.id} className="border-t border-white/10">
-                  <td className="p-4">
-                    <Link
-                      href={`/clients/${client.id}`}
-                      className="font-semibold text-white"
-                    >
-                      {client.company_name}
-                    </Link>
-                    <p className="text-xs text-slate-500">
-                      {client.industry ?? "No industry"}
-                    </p>
-                  </td>
-                  <td>
-                    <StatusBadge value={client.account_status} />
-                  </td>
-                  <td>{money(client.mrr_cents)}</td>
-                  <td>{client.primary_email ?? "—"}</td>
-                  <td className="text-slate-400">
-                    {client.next_action ?? "—"}
-                  </td>
-                  <td>
-                    <div className="flex gap-2">
-                      <Link
-                        className="rounded-lg border border-white/10 px-2 py-1 text-xs text-rapid-cyan"
-                        href={`/clients/${client.id}`}
-                      >
-                        Open
-                      </Link>
-                      <Link
-                        className="rounded-lg border border-white/10 px-2 py-1 text-xs text-slate-200"
-                        href={`/clients/${client.id}#quote`}
-                      >
-                        Quote
-                      </Link>
-                      <Link
-                        className="rounded-lg border border-white/10 px-2 py-1 text-xs text-slate-200"
-                        href={`/clients/${client.id}#project`}
-                      >
-                        Project
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <RecordCockpit
+          columns={["Client", "Status", "MRR", "Next action"]}
+          gridTemplate="minmax(0,1.6fr) auto 0.7fr 1.1fr"
+          records={records}
+          searchPlaceholder="Filter clients by name, industry or email…"
+        />
       ) : (
         <EmptyState
           title="No clients yet"

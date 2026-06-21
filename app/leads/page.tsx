@@ -1,7 +1,9 @@
 import Link from "next/link";
 import { AppShell } from "@/components/app-shell";
+import { RecordCockpit, type CockpitRecord } from "@/components/record-cockpit";
 import {
   EmptyState,
+  InfoRow,
   LinkButton,
   PageHeader,
   StatusBadge,
@@ -13,9 +15,49 @@ import { permissions } from "@/lib/constants";
 
 export const dynamic = "force-dynamic";
 
+const inspectorAction =
+  "rounded-lg border border-white/10 px-3 py-1.5 text-xs font-semibold transition hover:border-rapid-cyan/40 hover:bg-white/5";
+
 export default async function LeadsPage() {
   await requirePagePermission(permissions.leadsRead);
   const leads = await listLeads();
+  const records: CockpitRecord[] = leads.map((lead) => ({
+    id: lead.id,
+    href: `/leads/${lead.id}`,
+    title: lead.company_name,
+    subtitle: lead.contact_name,
+    search: `${lead.company_name} ${lead.contact_name} ${lead.service_interest}`,
+    cells: [
+      <StatusBadge key="stage" value={lead.stage} />,
+      lead.score,
+      lead.assignee?.name ?? "Unassigned",
+      dateShort(lead.follow_up_date),
+    ],
+    inspector: (
+      <div>
+        <h3 className="text-lg font-semibold text-white">{lead.company_name}</h3>
+        <p className="text-xs text-slate-500">{lead.contact_name}</p>
+        <div className="mt-3">
+          <StatusBadge value={lead.stage} />
+        </div>
+        <div className="mt-4">
+          <InfoRow label="Score" value={`${lead.score}/100`} />
+          <InfoRow label="Service" value={lead.service_interest} />
+          <InfoRow label="Owner" value={lead.assignee?.name ?? "Unassigned"} />
+          <InfoRow label="Follow-up" value={dateShort(lead.follow_up_date)} />
+          <InfoRow label="Next action" value={lead.next_action ?? "—"} />
+        </div>
+        <div className="mt-4 flex flex-wrap gap-2">
+          <Link className={`${inspectorAction} text-rapid-cyan`} href={`/leads/${lead.id}`}>
+            Open
+          </Link>
+          <Link className={`${inspectorAction} text-slate-200`} href={`/leads/${lead.id}#quote`}>
+            Quote
+          </Link>
+        </div>
+      </div>
+    ),
+  }));
   return (
     <AppShell>
       <PageHeader
@@ -25,68 +67,12 @@ export default async function LeadsPage() {
         actions={<LinkButton href="/leads/new">Create lead</LinkButton>}
       />
       {leads.length ? (
-        <div className="overflow-hidden rounded-2xl border border-white/10">
-          <table className="w-full border-collapse bg-white/[0.035] text-sm">
-            <thead className="bg-white/[0.06] text-left text-xs uppercase tracking-wider text-slate-400">
-              <tr>
-                <th className="p-4">Company</th>
-                <th>Stage</th>
-                <th>Score</th>
-                <th>Service</th>
-                <th>Owner</th>
-                <th>Follow-up</th>
-                <th>Next action</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {leads.map((lead) => (
-                <tr
-                  key={lead.id}
-                  className="border-t border-white/10 hover:bg-white/[0.04]"
-                >
-                  <td className="p-4">
-                    <Link
-                      className="font-semibold text-white"
-                      href={`/leads/${lead.id}`}
-                    >
-                      {lead.company_name}
-                    </Link>
-                    <p className="text-xs text-slate-500">
-                      {lead.contact_name}
-                    </p>
-                  </td>
-                  <td>
-                    <StatusBadge value={lead.stage} />
-                  </td>
-                  <td>{lead.score}</td>
-                  <td>{lead.service_interest}</td>
-                  <td>{lead.assignee?.name ?? "Unassigned"}</td>
-                  <td>{dateShort(lead.follow_up_date)}</td>
-                  <td className="max-w-xs text-slate-400">
-                    {lead.next_action ?? "—"}
-                  </td>
-                  <td>
-                    <div className="flex gap-2">
-                      <Link
-                        className="rounded-lg border border-white/10 px-2 py-1 text-xs text-rapid-cyan"
-                        href={`/leads/${lead.id}`}
-                      >
-                        Open
-                      </Link>
-                      <Link
-                        className="rounded-lg border border-white/10 px-2 py-1 text-xs text-slate-200"
-                        href={`/leads/${lead.id}#quote`}
-                      >
-                        Quote
-                      </Link>
-                    </div>
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        </div>
+        <RecordCockpit
+          columns={["Company", "Stage", "Score", "Owner", "Follow-up"]}
+          gridTemplate="minmax(0,1.5fr) auto 0.5fr 1fr 0.9fr"
+          records={records}
+          searchPlaceholder="Filter leads by company, contact or service…"
+        />
       ) : (
         <EmptyState
           title="No leads yet"

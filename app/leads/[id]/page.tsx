@@ -6,7 +6,7 @@ import { ActivityWorkflowForm, FileRecordForm, LeadForm, NoteForm, QuoteForm, Ta
 import { ModalPanel } from "@/components/modal-panel";
 import { RecordResourceLink } from "@/components/record-resource-link";
 import { SubmitButton } from "@/components/submit-button";
-import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { Card, InfoRow, PageHeader, SectionTitle, StatusBadge } from "@/components/ui";
 import { archiveLead, convertLeadToClient } from "@/lib/actions";
 import {
   getLead,
@@ -96,14 +96,14 @@ export default async function LeadDetail({
       <div className="grid gap-6 xl:grid-cols-[0.85fr_1.15fr]">
         <div className="grid gap-6 content-start">
           <Card>
-            <h2 className="text-lg font-semibold">Overview</h2>
-            <div className="mt-4 grid gap-3 text-sm text-slate-300">
-              <StatusBadge value={lead.stage} />
-              <p>Score: {lead.score}/100</p>
-              <p>Follow-up: {dateShort(lead.follow_up_date)}</p>
-              <p>Owner: {lead.assignee?.name ?? "Unassigned"}</p>
-              <p>Next action: {lead.next_action ?? "—"}</p>
-              <p>Pain points: {lead.pain_points ?? "—"}</p>
+            <SectionTitle>Overview</SectionTitle>
+            <div className="mt-4">
+              <div className="mb-3"><StatusBadge value={lead.stage} /></div>
+              <InfoRow label="Score" value={`${lead.score}/100`} />
+              <InfoRow label="Follow-up" value={dateShort(lead.follow_up_date)} />
+              <InfoRow label="Owner" value={lead.assignee?.name ?? "Unassigned"} />
+              <InfoRow label="Next action" value={lead.next_action ?? "—"} />
+              <InfoRow label="Pain points" value={lead.pain_points ?? "—"} />
             </div>
           </Card>
           <Card>
