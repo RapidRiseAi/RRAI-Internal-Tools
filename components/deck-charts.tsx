@@ -27,7 +27,7 @@ export function RadialRing({
   const gradientId = useId();
 
   return (
-    <div className={clsx("relative grid place-items-center", className)} style={{ width: size, height: size }}>
+    <div className={clsx("relative grid shrink-0 place-items-center", className)} style={{ width: size, height: size }}>
       <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
         <defs>
           <linearGradient id={gradientId} x1="0%" y1="0%" x2="100%" y2="100%">
@@ -56,63 +56,42 @@ export function RadialRing({
 type Series = { name: string; values: number[]; tone: "cyan" | "copper" };
 
 /**
- * Glowing multi-line chart. Y-axis tick labels are passed pre-formatted as strings
- * (no functions cross the server/client boundary); numeric values drive the geometry.
+ * Glowing multi-line chart that fills its container height (for one-screen layouts).
+ * Geometry is normalised to a 0–100 viewBox and stretched with preserveAspectRatio="none";
+ * strokes stay crisp via vectorEffect and a CSS drop-shadow glow. Y tick labels are passed
+ * pre-formatted as strings so no functions cross the server/client boundary.
  */
-export function LineChart({
-  series,
-  labels,
-  yTicks,
-  height = 240,
-}: {
-  series: Series[];
-  labels: string[];
-  yTicks: string[];
-  height?: number;
-}) {
-  const filterId = useId();
+export function LineChart({ series, labels, yTicks }: { series: Series[]; labels: string[]; yTicks: string[] }) {
   const fillId = useId();
-  const width = 100;
-  const padTop = 8;
-  const padBottom = 16;
-  const chartHeight = height - padTop - padBottom;
-  const allValues = series.flatMap((line) => line.values);
-  const max = Math.max(1, ...allValues);
+  const max = Math.max(1, ...series.flatMap((line) => line.values));
   const count = Math.max(...series.map((line) => line.values.length), 1);
-
-  const xFor = (index: number) => (count <= 1 ? 0 : (index / (count - 1)) * width);
-  const yFor = (value: number) => padTop + chartHeight - (value / max) * chartHeight;
+  const xFor = (index: number) => (count <= 1 ? 0 : (index / (count - 1)) * 100);
+  const yFor = (value: number) => 100 - (value / max) * 100;
   const color = (tone: Series["tone"]) => (tone === "cyan" ? "var(--deck-accent-cyan)" : "var(--deck-accent-copper)");
+  const glow = (tone: Series["tone"]) => (tone === "cyan" ? "drop-shadow(0 0 3px rgba(70,232,209,0.6))" : "drop-shadow(0 0 3px rgba(232,154,77,0.55))");
 
   return (
-    <div className="flex gap-3">
-      <div className="flex flex-col justify-between py-1 text-right font-mono text-[0.65rem] text-deck-muted" style={{ height }}>
+    <div className="flex h-full min-h-0 gap-3">
+      <div className="flex shrink-0 flex-col justify-between py-0.5 text-right font-mono text-[0.6rem] text-deck-muted">
         {yTicks.map((tick, index) => (
           <span key={`${tick}-${index}`}>{tick}</span>
         ))}
       </div>
-      <div className="flex-1">
-        <svg viewBox={`0 0 ${width} ${height}`} preserveAspectRatio="none" className="w-full" style={{ height }}>
+      <div className="flex min-h-0 flex-1 flex-col">
+        <svg viewBox="0 0 100 100" preserveAspectRatio="none" className="min-h-0 w-full flex-1">
           <defs>
-            <filter id={filterId} x="-20%" y="-20%" width="140%" height="140%">
-              <feGaussianBlur stdDeviation="1.4" result="blur" />
-              <feMerge>
-                <feMergeNode in="blur" />
-                <feMergeNode in="SourceGraphic" />
-              </feMerge>
-            </filter>
             <linearGradient id={fillId} x1="0" y1="0" x2="0" y2="1">
               <stop offset="0%" stopColor="var(--deck-accent-cyan)" stopOpacity="0.22" />
               <stop offset="100%" stopColor="var(--deck-accent-cyan)" stopOpacity="0" />
             </linearGradient>
           </defs>
           {yTicks.map((_, index) => {
-            const y = padTop + (chartHeight / Math.max(yTicks.length - 1, 1)) * index;
-            return <line key={index} x1="0" y1={y} x2={width} y2={y} stroke="var(--deck-hairline)" strokeWidth="0.4" />;
+            const y = (100 / Math.max(yTicks.length - 1, 1)) * index;
+            return <line key={index} x1="0" y1={y} x2="100" y2={y} stroke="var(--deck-hairline)" strokeWidth="0.4" vectorEffect="non-scaling-stroke" />;
           })}
           {series.map((line, lineIndex) => {
             const points = line.values.map((value, index) => `${xFor(index)},${yFor(value)}`).join(" ");
-            const area = `0,${padTop + chartHeight} ${points} ${xFor(line.values.length - 1)},${padTop + chartHeight}`;
+            const area = `0,100 ${points} ${xFor(line.values.length - 1)},100`;
             return (
               <g key={line.name}>
                 {lineIndex === 0 ? <polygon points={area} fill={`url(#${fillId})`} /> : null}
@@ -120,17 +99,17 @@ export function LineChart({
                   points={points}
                   fill="none"
                   stroke={color(line.tone)}
-                  strokeWidth="1.4"
+                  strokeWidth="2"
                   strokeLinecap="round"
                   strokeLinejoin="round"
                   vectorEffect="non-scaling-stroke"
-                  filter={`url(#${filterId})`}
+                  style={{ filter: glow(line.tone) }}
                 />
               </g>
             );
           })}
         </svg>
-        <div className="mt-1 flex justify-between font-mono text-[0.65rem] text-deck-muted">
+        <div className="mt-1 flex shrink-0 justify-between font-mono text-[0.6rem] text-deck-muted">
           {labels.map((label, index) => (
             <span key={`${label}-${index}`}>{label}</span>
           ))}

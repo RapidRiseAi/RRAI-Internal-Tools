@@ -174,99 +174,96 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   return (
     <AppShell>
-      <div className="mb-6 flex flex-wrap items-end justify-between gap-4">
-        <div>
-          <p className="font-mono text-xs font-semibold uppercase tracking-[0.28em] text-accent-cyan">Command deck</p>
-          <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-deck-text">Business Control Panel</h1>
-          <p className="mt-1 text-sm text-deck-muted">Org-wide telemetry across delivery, pipeline, finance and support — live from Supabase.</p>
+      <div className="flex h-full flex-col gap-3">
+        {/* Title + secondary stat chips */}
+        <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
+          <div>
+            <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-accent-cyan">Command deck</p>
+            <h1 className="font-display text-xl font-bold tracking-tight text-deck-text">Business Control Panel</h1>
+          </div>
+          <div className="hidden items-center gap-2 lg:flex">
+            {secondaryStats.map(([label, value]) => (
+              <div key={label} className="rounded-lg border border-hairline bg-deck-panel/60 px-3 py-1.5">
+                <p className="font-display text-[0.55rem] font-semibold uppercase tracking-[0.12em] text-deck-muted">{label}</p>
+                <p className="font-mono text-sm font-bold text-deck-text">{value}</p>
+              </div>
+            ))}
+          </div>
         </div>
-      </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="Active Projects" value={activeProjects} total={projects.length} ringValue={pct(activeProjects, projects.length)} href="/projects" />
-        <KpiCard label="Open Tasks" value={openTasks} total={tasks.length} ringValue={pct(openTasks, tasks.length)} href="/tasks" />
-        <KpiCard label="Pipeline (open quotes)" value={compactMoney(openQuoteValue)} total={compactMoney(totalQuoteValue)} ringValue={pct(openQuoteValue, totalQuoteValue)} href="/quotes" />
-        <KpiCard label="Revenue · this month" value={compactMoney(revenueThisMonth)} ringValue={pct(paidInvoiceValue, paidInvoiceValue + outstandingValue)} trend={revenueTrend ?? undefined} href="/billing" />
-        <KpiCard label="Expenses · this month" value={compactMoney(expensesThisMonth)} ringValue={pct(recurringExpenseValue, totalExpenseValue)} trend={expenseTrend ?? undefined} href="/billing" />
-      </div>
+        {/* KPI rings */}
+        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <KpiCard dense label="Active Projects" value={activeProjects} total={projects.length} ringValue={pct(activeProjects, projects.length)} href="/projects" />
+          <KpiCard dense label="Open Tasks" value={openTasks} total={tasks.length} ringValue={pct(openTasks, tasks.length)} href="/tasks" />
+          <KpiCard dense label="Pipeline" value={compactMoney(openQuoteValue)} total={compactMoney(totalQuoteValue)} ringValue={pct(openQuoteValue, totalQuoteValue)} href="/quotes" />
+          <KpiCard dense label="Revenue · MTD" value={compactMoney(revenueThisMonth)} ringValue={pct(paidInvoiceValue, paidInvoiceValue + outstandingValue)} trend={revenueTrend ?? undefined} href="/billing" />
+          <KpiCard dense label="Expenses · MTD" value={compactMoney(expensesThisMonth)} ringValue={pct(recurringExpenseValue, totalExpenseValue)} trend={expenseTrend ?? undefined} href="/billing" />
+        </div>
 
-      <div className="mt-4 grid gap-4 md:grid-cols-2 xl:grid-cols-4">
-        {secondaryStats.map(([label, value]) => (
-          <DeckCard key={label} className="p-4">
-            <p className="font-display text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-deck-muted">{label}</p>
-            <p className="mt-2 font-mono text-2xl font-bold text-deck-text">{value}</p>
-          </DeckCard>
-        ))}
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-[1.5fr_1fr]">
-        <DeckCard>
-          <PanelHeader
-            title="Revenue vs Expenses"
-            right={<RangeControl options={[{ value: "8", label: "8 weeks" }, { value: "4", label: "4 weeks" }, { value: "12", label: "12 weeks" }]} />}
-          />
-          <div className="mt-3 flex items-center gap-4 text-xs">
-            <span className="inline-flex items-center gap-1.5 text-deck-muted"><span className="h-0.5 w-4 rounded-full bg-accent-cyan" /> Revenue (payments)</span>
-            <span className="inline-flex items-center gap-1.5 text-deck-muted"><span className="h-0.5 w-4 rounded-full bg-accent-copper" /> Expenses</span>
-          </div>
-          <div className="mt-4">
-            <LineChart
-              series={[
-                { name: "Revenue", values: revenueSeries, tone: "cyan" },
-                { name: "Expenses", values: expenseSeries, tone: "copper" },
-              ]}
-              labels={xLabels}
-              yTicks={yTicks}
-              height={240}
-            />
-          </div>
-        </DeckCard>
-
-        <DeckCard>
-          <PanelHeader title="Lead Pipeline" right={<span className="font-mono text-xs text-deck-muted">{lostLeads} lost</span>} />
-          <p className="mt-1 text-xs text-deck-muted">Leads that reached at least each stage · % of all pipeline leads.</p>
-          <div className="mt-5">
-            {funnelTop > 1 || funnelCounts[0] > 0 ? (
-              <Funnel stages={funnelStages} />
-            ) : (
-              <p className="py-8 text-center text-sm text-deck-muted">No pipeline leads yet.</p>
-            )}
-          </div>
-        </DeckCard>
-      </div>
-
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <ListPanel title="Recent Activity">
-          {activity.length ? activity.map((item) => (
-            <ListRow
-              key={item.id}
-              icon={entityIcon[item.entity_type?.toLowerCase()] ?? Activity}
-              iconTone="cyan"
-              title={item.message}
-              subtitle={item.action.replaceAll("_", " ").toLowerCase()}
-              trailing={<span className="font-mono text-xs text-deck-muted">{dateShort(item.created_at)}</span>}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No activity recorded yet.</div>}
-        </ListPanel>
-
-        <ListPanel title="Upcoming Deadlines" viewAllHref="/calendar" viewAllLabel="Open calendar">
-          {deadlines.length ? deadlines.map((item) => (
-            <ListRow
-              key={item.id}
-              icon={item.icon}
-              iconTone={item.tone}
-              title={item.title}
-              subtitle={item.subtitle}
-              trailing={
-                <div className="flex flex-col items-end gap-1">
-                  <DatePill date={dateShort(item.date)} tone={dueTone(item.date)} />
-                  {item.progress != null ? <div className="w-20"><ProgressBar value={item.progress} /></div> : null}
+        {/* Charts + lists fill the rest of the viewport */}
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1.55fr_1fr]">
+          <div className="grid min-h-0 grid-rows-[1.5fr_1fr] gap-3">
+            <DeckCard className="flex min-h-0 flex-col" padding="p-4">
+              <div className="shrink-0">
+                <PanelHeader
+                  title="Revenue vs Expenses"
+                  right={<RangeControl options={[{ value: "8", label: "8 weeks" }, { value: "4", label: "4 weeks" }, { value: "12", label: "12 weeks" }]} />}
+                />
+                <div className="mt-1.5 flex items-center gap-4 text-xs">
+                  <span className="inline-flex items-center gap-1.5 text-deck-muted"><span className="h-0.5 w-4 rounded-full bg-accent-cyan" /> Revenue</span>
+                  <span className="inline-flex items-center gap-1.5 text-deck-muted"><span className="h-0.5 w-4 rounded-full bg-accent-copper" /> Expenses</span>
                 </div>
-              }
-              href={item.href}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">Nothing due soon.</div>}
-        </ListPanel>
+              </div>
+              <div className="mt-3 min-h-0 flex-1">
+                <LineChart series={[{ name: "Revenue", values: revenueSeries, tone: "cyan" }, { name: "Expenses", values: expenseSeries, tone: "copper" }]} labels={xLabels} yTicks={yTicks} />
+              </div>
+            </DeckCard>
+
+            <ListPanel title="Recent Activity" fill>
+              {activity.length ? activity.map((item) => (
+                <ListRow
+                  key={item.id}
+                  icon={entityIcon[item.entity_type?.toLowerCase()] ?? Activity}
+                  iconTone="cyan"
+                  title={item.message}
+                  subtitle={item.action.replaceAll("_", " ").toLowerCase()}
+                  trailing={<span className="font-mono text-xs text-deck-muted">{dateShort(item.created_at)}</span>}
+                />
+              )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No activity recorded yet.</div>}
+            </ListPanel>
+          </div>
+
+          <div className="grid min-h-0 grid-rows-[1.1fr_1fr] gap-3">
+            <DeckCard className="flex min-h-0 flex-col" padding="p-4">
+              <div className="shrink-0">
+                <PanelHeader title="Lead Pipeline" right={<span className="font-mono text-xs text-deck-muted">{lostLeads} lost</span>} />
+                <p className="mt-0.5 text-xs text-deck-muted">Reached at least each stage</p>
+              </div>
+              <div className="mt-3 min-h-0 flex-1 overflow-y-auto">
+                {funnelTop > 1 || funnelCounts[0] > 0 ? <Funnel stages={funnelStages} /> : <p className="py-8 text-center text-sm text-deck-muted">No pipeline leads yet.</p>}
+              </div>
+            </DeckCard>
+
+            <ListPanel title="Upcoming Deadlines" fill viewAllHref="/calendar" viewAllLabel="Open calendar">
+              {deadlines.length ? deadlines.map((item) => (
+                <ListRow
+                  key={item.id}
+                  icon={item.icon}
+                  iconTone={item.tone}
+                  title={item.title}
+                  subtitle={item.subtitle}
+                  trailing={
+                    <div className="flex flex-col items-end gap-1">
+                      <DatePill date={dateShort(item.date)} tone={dueTone(item.date)} />
+                      {item.progress != null ? <div className="w-20"><ProgressBar value={item.progress} /></div> : null}
+                    </div>
+                  }
+                  href={item.href}
+                />
+              )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">Nothing due soon.</div>}
+            </ListPanel>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

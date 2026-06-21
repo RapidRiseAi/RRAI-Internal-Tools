@@ -43,19 +43,19 @@ export default async function MessagesPage({ searchParams }: { searchParams?: Pr
 
   return (
     <AppShell>
-      <div className="mb-6">
+    <div className="flex h-full flex-col gap-4">
+      <div className="shrink-0">
         <p className="font-mono text-xs font-semibold uppercase tracking-[0.28em] text-accent-cyan">Comms</p>
-        <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-deck-text">Messages</h1>
-        <p className="mt-1 text-sm text-deck-muted">Direct messages between the team and company-wide broadcasts.</p>
+        <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-deck-text">Messages</h1>
       </div>
 
-      <div className="grid gap-4 lg:grid-cols-[20rem_1fr]">
+      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
         {/* Conversation list */}
-        <DeckCard className="flex max-h-[74vh] flex-col p-0" glow={false}>
-          <div className="border-b border-hairline px-4 py-3">
+        <DeckCard padding="p-0" className="flex h-full flex-col" glow={false}>
+          <div className="shrink-0 border-b border-hairline px-4 py-3">
             <p className="font-display text-[0.78rem] font-semibold uppercase tracking-[0.18em] text-deck-text">Conversations</p>
           </div>
-          <div className="flex-1 overflow-auto">
+          <div className="min-h-0 flex-1 overflow-auto">
             <Link href="/messages?to=broadcast" className={clsx("flex items-center gap-3 border-b border-hairline px-4 py-3 transition", isBroadcast ? "bg-accent-cyan/[0.06]" : "hover:bg-white/[0.02]")}>
               <span className="grid size-9 place-items-center rounded-lg border border-accent-copper/30 bg-accent-copper/10 text-accent-copper"><Megaphone className="size-4" /></span>
               <div className="min-w-0 flex-1">
@@ -81,8 +81,8 @@ export default async function MessagesPage({ searchParams }: { searchParams?: Pr
         </DeckCard>
 
         {/* Thread */}
-        <DeckCard className="flex h-[74vh] flex-col p-0" glow={false}>
-          <div className="flex items-center gap-3 border-b border-hairline px-5 py-3">
+        <DeckCard padding="p-0" className="flex h-full min-h-0 flex-col" glow={false}>
+          <div className="flex shrink-0 items-center gap-3 border-b border-hairline px-5 py-3">
             <span className={clsx("grid size-9 place-items-center rounded-lg", isBroadcast ? "border border-accent-copper/30 bg-accent-copper/10 text-accent-copper" : "bg-gradient-to-br from-accent-copper to-accent-cyan font-mono text-xs font-bold text-deck-bg")}>
               {isBroadcast ? <Megaphone className="size-4" /> : initials(selectedUser?.name ?? "?")}
             </span>
@@ -92,7 +92,7 @@ export default async function MessagesPage({ searchParams }: { searchParams?: Pr
             </div>
           </div>
 
-          <div className="flex flex-1 flex-col-reverse gap-2 overflow-auto px-5 py-4">
+          <div className="flex min-h-0 flex-1 flex-col-reverse gap-2 overflow-auto px-5 py-4">
             {/* column-reverse keeps the latest message in view; iterate newest-first */}
             {thread.length ? [...thread].reverse().map((message) => {
               const mine = message.sender_id === user.id;
@@ -110,7 +110,7 @@ export default async function MessagesPage({ searchParams }: { searchParams?: Pr
           </div>
 
           {(isBroadcast || selectedUser) ? (
-            <form action={sendMessageAction} className="border-t border-hairline p-3">
+            <form action={sendMessageAction} className="shrink-0 border-t border-hairline p-3">
               <input type="hidden" name="audience" value={isBroadcast ? "BROADCAST" : "DIRECT"} />
               {isBroadcast ? null : <input type="hidden" name="recipientId" value={selectedUser?.id ?? ""} />}
               {isBroadcast ? (
@@ -134,7 +134,8 @@ export default async function MessagesPage({ searchParams }: { searchParams?: Pr
         </DeckCard>
       </div>
 
-      {!isBroadcast && selectedUser ? <MarkThreadRead to={selectedUser.id} enabled={selectedUnread > 0} /> : null}
+        {!isBroadcast && selectedUser ? <MarkThreadRead to={selectedUser.id} enabled={selectedUnread > 0} /> : null}
+      </div>
     </AppShell>
   );
 }

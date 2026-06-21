@@ -1,10 +1,8 @@
 import {
-  Activity,
   AlertTriangle,
   Bell,
   BriefcaseBusiness,
   CalendarClock,
-  CircleSlash,
   ClipboardCheck,
   ListTodo,
   Loader,
@@ -26,7 +24,7 @@ import {
   WorkloadBars,
   type Tone,
 } from "@/components/command-deck";
-import { activityByActor, genericList, listClients, listLeads, listTasks, notificationsForUser } from "@/lib/data";
+import { genericList, listClients, listLeads, listTasks, notificationsForUser } from "@/lib/data";
 import { dateShort } from "@/lib/format";
 import { isInMonthOffset, pct, startOfWeekMonday } from "@/lib/deck-metrics";
 import type { Project } from "@/lib/types";
@@ -34,13 +32,6 @@ import type { Project } from "@/lib/types";
 export const dynamic = "force-dynamic";
 
 const inProgressStatuses = ["IN_PROGRESS", "WAITING_FOR_CLIENT", "WAITING_INTERNALLY", "REVIEW_NEEDED"];
-
-const entityIcon: Record<string, LucideIcon> = {
-  lead: Target,
-  client: BriefcaseBusiness,
-  project: BriefcaseBusiness,
-  task: ClipboardCheck,
-};
 
 function sameDay(dateStr: string | null | undefined, day: Date) {
   if (!dateStr) return false;
@@ -65,13 +56,12 @@ function dueTone(dateStr: string | null, startToday: Date): Tone {
 export default async function MyPanelPage() {
   const user = await requirePagePermission(permissions.dashboard);
 
-  const [tasks, projects, leads, clients, activity, notifications] = await Promise.all([
+  const [tasks, projects, leads, clients, notifications] = await Promise.all([
     listTasks(),
     genericList<Project>("projects"),
     listLeads(),
     listClients(),
-    activityByActor(user.id, 8),
-    notificationsForUser(user.id, 6),
+    notificationsForUser(user.id, 8),
   ]);
 
   const now = new Date();
@@ -120,111 +110,61 @@ export default async function MyPanelPage() {
 
   return (
     <AppShell>
-      <div className="mb-6">
-        <p className="font-mono text-xs font-semibold uppercase tracking-[0.28em] text-accent-cyan">Operator</p>
-        <h1 className="mt-2 font-display text-3xl font-bold tracking-tight text-deck-text">My Panel</h1>
-        <p className="mt-1 text-sm text-deck-muted">Everything assigned to you, {user.name} — tasks, workload and signals, live.</p>
-      </div>
+      <div className="flex h-full flex-col gap-3">
+        <div className="flex shrink-0 items-baseline justify-between gap-3">
+          <div>
+            <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-accent-cyan">Operator</p>
+            <h1 className="font-display text-xl font-bold tracking-tight text-deck-text">My Panel · {user.name}</h1>
+          </div>
+          <span className="hidden font-mono text-xs text-deck-muted sm:inline">{hoursLabel(weekTotalMinutes)} scheduled this week</span>
+        </div>
 
-      <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-5">
-        <KpiCard label="My Open Tasks" value={myOpen.length} total={myTasks.length} ringValue={pct(myOpen.length, myTasks.length)} href="/tasks" />
-        <KpiCard label="Due Today" value={dueToday.length} total={myOpen.length} ringValue={pct(dueToday.length, myOpen.length)} href="/calendar" />
-        <KpiCard label="Overdue" value={overdue.length} total={myOpen.length} ringValue={pct(overdue.length, myOpen.length)} href="/tasks" />
-        <KpiCard label="My Projects" value={myActiveProjects.length} total={myProjects.length} ringValue={pct(myActiveProjects.length, myProjects.length)} href="/projects" />
-        <KpiCard label="Done · this month" value={completedThisMonth.length} total={completedThisMonth.length + myOpen.length} ringValue={pct(completedThisMonth.length, completedThisMonth.length + myOpen.length)} href="/tasks" />
-      </div>
+        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+          <KpiCard dense label="My Open Tasks" value={myOpen.length} total={myTasks.length} ringValue={pct(myOpen.length, myTasks.length)} href="/tasks" />
+          <KpiCard dense label="Due Today" value={dueToday.length} total={myOpen.length} ringValue={pct(dueToday.length, myOpen.length)} href="/calendar" />
+          <KpiCard dense label="Overdue" value={overdue.length} total={myOpen.length} ringValue={pct(overdue.length, myOpen.length)} href="/tasks" />
+          <KpiCard dense label="My Projects" value={myActiveProjects.length} total={myProjects.length} ringValue={pct(myActiveProjects.length, myProjects.length)} href="/projects" />
+          <KpiCard dense label="Done · MTD" value={completedThisMonth.length} total={completedThisMonth.length + myOpen.length} ringValue={pct(completedThisMonth.length, completedThisMonth.length + myOpen.length)} href="/tasks" />
+        </div>
 
-      <DeckCard className="mt-6">
-        <PanelHeader title="My Workload · this week" right={<span className="font-mono text-xs text-deck-muted">{hoursLabel(weekTotalMinutes)} scheduled</span>} />
-        <p className="mt-1 text-xs text-deck-muted">Hours derived from your tasks&apos; durations, bucketed by due day.</p>
-        <div className="mt-4"><WorkloadBars days={workloadDays} /></div>
-      </DeckCard>
+        <DeckCard className="shrink-0" padding="p-3">
+          <PanelHeader title="My Workload · this week" right={<span className="font-mono text-xs text-deck-muted">hours by due day</span>} />
+          <div className="mt-2"><WorkloadBars days={workloadDays} /></div>
+        </DeckCard>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <ListPanel title="To-Do" right={<span className="font-mono text-xs text-deck-muted">{todo.length}</span>} viewAllHref="/tasks">
-          {todo.length ? todo.slice(0, 7).map((task) => (
-            <ListRow
-              key={task.id}
-              icon={ListTodo}
-              iconTone="neutral"
-              title={task.title}
-              subtitle={clientName(task.client_id)}
-              trailing={<div className="flex items-center gap-2"><DeckStatusBadge value={task.priority} /><DatePill date={dateShort(task.due_date)} tone={dueTone(task.due_date, startToday)} /></div>}
-              href={`/tasks/${task.id}`}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">Nothing in your to-do list.</div>}
-        </ListPanel>
+        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-4">
+          <ListPanel title="To-Do" fill right={<span className="font-mono text-xs text-deck-muted">{todo.length}</span>} viewAllHref="/tasks">
+            {todo.length ? todo.map((task) => (
+              <ListRow key={task.id} icon={ListTodo} iconTone="neutral" title={task.title} subtitle={clientName(task.client_id)} trailing={<DatePill date={dateShort(task.due_date)} tone={dueTone(task.due_date, startToday)} />} href={`/tasks/${task.id}`} />
+            )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">Nothing in your to-do list.</div>}
+          </ListPanel>
 
-        <ListPanel title="In Progress" right={<span className="font-mono text-xs text-deck-muted">{inProgress.length}</span>} viewAllHref="/tasks">
-          {inProgress.length ? inProgress.slice(0, 7).map((task) => (
-            <ListRow
-              key={task.id}
-              icon={Loader}
-              iconTone="copper"
-              title={task.title}
-              subtitle={clientName(task.client_id)}
-              trailing={<div className="flex items-center gap-2"><DeckStatusBadge value={task.status} /><DatePill date={dateShort(task.due_date)} tone={dueTone(task.due_date, startToday)} /></div>}
-              href={`/tasks/${task.id}`}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No tasks in progress.</div>}
-        </ListPanel>
-      </div>
+          <ListPanel title="In Progress" fill right={<span className="font-mono text-xs text-deck-muted">{inProgress.length}</span>} viewAllHref="/tasks">
+            {inProgress.length ? inProgress.map((task) => (
+              <ListRow key={task.id} icon={Loader} iconTone="copper" title={task.title} subtitle={clientName(task.client_id)} trailing={<DeckStatusBadge value={task.status} />} href={`/tasks/${task.id}`} />
+            )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No tasks in progress.</div>}
+          </ListPanel>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <ListPanel title="My Projects" right={<span className="font-mono text-xs text-deck-muted">{myActiveProjects.length} active</span>} viewAllHref="/projects">
-          {myActiveProjects.length ? myActiveProjects.slice(0, 6).map((project) => (
-            <ListRow
-              key={project.id}
-              icon={BriefcaseBusiness}
-              iconTone="cyan"
-              title={project.name}
-              subtitle={`${clientName(project.client_id)} · ${project.progress}%`}
-              trailing={<div className="w-28"><ProgressBar value={project.progress} /></div>}
-              href={`/projects/${project.id}`}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No active projects assigned to you.</div>}
-        </ListPanel>
+          <ListPanel title="My Projects" fill right={<span className="font-mono text-xs text-deck-muted">{myActiveProjects.length}</span>} viewAllHref="/projects">
+            {myActiveProjects.length ? myActiveProjects.map((project) => (
+              <ListRow key={project.id} icon={BriefcaseBusiness} iconTone="cyan" title={project.name} subtitle={`${clientName(project.client_id)} · ${project.progress}%`} trailing={<div className="w-20"><ProgressBar value={project.progress} /></div>} href={`/projects/${project.id}`} />
+            )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No active projects.</div>}
+          </ListPanel>
 
-        <ListPanel title="Required Actions" right={<span className="font-mono text-xs text-deck-muted">{requiredActions.length}</span>}>
-          {requiredActions.length ? requiredActions.map((item) => (
-            <ListRow
-              key={item.id}
-              icon={item.icon}
-              iconTone={item.tone}
-              title={item.title}
-              subtitle={item.subtitle}
-              trailing={<a href={item.href} className="rounded-lg border border-accent-cyan/30 px-3 py-1 text-xs font-semibold text-accent-cyan transition hover:bg-accent-cyan/10">{item.cta}</a>}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">You&apos;re all clear — no actions need you right now.</div>}
-        </ListPanel>
-      </div>
+          <div className="grid min-h-0 grid-rows-2 gap-3">
+            <ListPanel title="Required Actions" fill right={<span className="font-mono text-xs text-deck-muted">{requiredActions.length}</span>}>
+              {requiredActions.length ? requiredActions.map((item) => (
+                <ListRow key={item.id} icon={item.icon} iconTone={item.tone} title={item.title} subtitle={item.subtitle} trailing={<a href={item.href} className="rounded-lg border border-accent-cyan/30 px-2.5 py-1 text-xs font-semibold text-accent-cyan transition hover:bg-accent-cyan/10">{item.cta}</a>} />
+              )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">You&apos;re all clear.</div>}
+            </ListPanel>
 
-      <div className="mt-6 grid gap-6 xl:grid-cols-2">
-        <ListPanel title="My Recent Activity">
-          {activity.length ? activity.map((item) => (
-            <ListRow
-              key={item.id}
-              icon={entityIcon[item.entity_type?.toLowerCase()] ?? Activity}
-              iconTone="cyan"
-              title={item.message}
-              subtitle={item.action.replaceAll("_", " ").toLowerCase()}
-              trailing={<span className="font-mono text-xs text-deck-muted">{dateShort(item.created_at)}</span>}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted"><CircleSlash className="mx-auto mb-2 size-5 opacity-50" />No recorded activity yet.</div>}
-        </ListPanel>
-
-        <ListPanel title="Notifications">
-          {notifications.length ? notifications.map((note) => (
-            <ListRow
-              key={note.id}
-              icon={Bell}
-              iconTone={note.status === "UNREAD" ? "copper" : "neutral"}
-              title={note.title}
-              subtitle={note.body}
-              trailing={note.status === "UNREAD" ? <span className="inline-flex items-center gap-1.5 font-mono text-[0.65rem] uppercase tracking-wider text-accent-copper"><CalendarClock className="size-3" />{dateShort(note.created_at)}</span> : <span className="font-mono text-xs text-deck-muted">{dateShort(note.created_at)}</span>}
-            />
-          )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No notifications.</div>}
-        </ListPanel>
+            <ListPanel title="Notifications" fill>
+              {notifications.length ? notifications.map((note) => (
+                <ListRow key={note.id} icon={Bell} iconTone={note.status === "UNREAD" ? "copper" : "neutral"} title={note.title} subtitle={note.body} trailing={note.status === "UNREAD" ? <CalendarClock className="size-3.5 text-accent-copper" /> : <span className="font-mono text-[0.6rem] text-deck-muted">{dateShort(note.created_at)}</span>} />
+              )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No notifications.</div>}
+            </ListPanel>
+          </div>
+        </div>
       </div>
     </AppShell>
   );

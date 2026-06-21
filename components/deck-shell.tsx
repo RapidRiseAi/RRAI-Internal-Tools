@@ -190,8 +190,8 @@ export function DeckShell({
         </button>
       </aside>
 
-      <div className={clsx("transition-[padding] duration-200", collapsed ? "xl:pl-[4.75rem]" : "xl:pl-64")}>
-        <header className="sticky top-0 z-20 border-b border-hairline bg-deck-bg/80 px-4 py-3 backdrop-blur-md md:px-6">
+      <div className={clsx("flex h-screen flex-col transition-[padding] duration-200", collapsed ? "xl:pl-[4.75rem]" : "xl:pl-64")}>
+        <header className="shrink-0 border-b border-hairline bg-deck-bg/80 px-4 py-3 backdrop-blur-md md:px-6">
           <div className="flex items-center justify-between gap-3">
             <Link href="/dashboard" className="hidden min-w-[20rem] items-center gap-3 rounded-lg border border-hairline bg-white/[0.03] px-4 py-2 text-sm text-deck-muted transition hover:border-accent-cyan/40 hover:text-deck-text md:flex md:max-w-md md:flex-1">
               <Search className="size-4 text-accent-cyan" />
@@ -270,7 +270,7 @@ export function DeckShell({
           </div>
         </header>
 
-        <main className="page-transition-in mx-auto max-w-[1600px] px-4 py-6 md:px-6 md:py-8">{children}</main>
+        <main className="page-transition-in min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">{children}</main>
       </div>
     </div>
   );

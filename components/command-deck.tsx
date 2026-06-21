@@ -39,12 +39,14 @@ const toneDot: Record<Tone, string> = {
   neutral: "bg-deck-muted",
 };
 
-/** Dark glass card: thin hairline border, soft cyan glow on hover (no drop shadow). */
-export function DeckCard({ children, className, glow = true, ...props }: HTMLAttributes<HTMLElement> & { children: ReactNode; glow?: boolean }) {
+/** Dark glass card: thin hairline border, soft cyan glow on hover (no drop shadow).
+ * `padding` is a single explicit class so callers never collide with a hardcoded default. */
+export function DeckCard({ children, className, glow = true, padding = "p-5", ...props }: HTMLAttributes<HTMLElement> & { children: ReactNode; glow?: boolean; padding?: string }) {
   return (
     <section
       className={clsx(
-        "rounded-xl border border-hairline bg-deck-panel/80 p-5 backdrop-blur-sm transition duration-200",
+        "rounded-xl border border-hairline bg-deck-panel/80 backdrop-blur-sm transition duration-200",
+        padding,
         glow && "hover:border-accent-cyan/30 hover:shadow-[0_0_28px_-8px_rgba(70,232,209,0.35)]",
         className,
       )}
@@ -120,6 +122,7 @@ export function KpiCard({
   ringValue,
   trend,
   href,
+  dense = false,
 }: {
   label: string;
   value: ReactNode;
@@ -127,23 +130,24 @@ export function KpiCard({
   ringValue: number;
   trend?: { direction: "up" | "down"; value: string; good?: boolean };
   href?: string;
+  dense?: boolean;
 }) {
   return (
-    <DeckCard className="p-4">
+    <DeckCard padding={dense ? "p-3" : "p-4"}>
       <div className="flex items-start justify-between gap-2">
-        <p className="font-display text-[0.68rem] font-semibold uppercase tracking-[0.14em] text-deck-muted">{label}</p>
+        <p className="font-display text-[0.64rem] font-semibold uppercase tracking-[0.12em] text-deck-muted">{label}</p>
         {href ? <OverflowLink href={href} label={`Open ${label}`} /> : null}
       </div>
-      <div className="mt-3 flex items-center gap-4">
-        <RadialRing value={ringValue} size={64} stroke={6}>
-          <span className="font-mono text-[0.8rem] font-semibold text-deck-text">{Math.round(ringValue)}%</span>
+      <div className={clsx("flex items-center", dense ? "mt-2 gap-3" : "mt-3 gap-4")}>
+        <RadialRing value={ringValue} size={dense ? 50 : 64} stroke={dense ? 5 : 6}>
+          <span className={clsx("font-mono font-semibold text-deck-text", dense ? "text-[0.7rem]" : "text-[0.8rem]")}>{Math.round(ringValue)}%</span>
         </RadialRing>
         <div className="min-w-0">
           <div className="flex items-baseline gap-1.5">
-            <span className="font-mono text-3xl font-bold leading-none text-deck-text">{value}</span>
+            <span className={clsx("font-mono font-bold leading-none text-deck-text", dense ? "text-2xl" : "text-3xl")}>{value}</span>
             {total != null ? <span className="font-mono text-xs text-deck-muted">/ {total}</span> : null}
           </div>
-          {trend ? <div className="mt-2"><TrendPill {...trend} /></div> : null}
+          {trend ? <div className={dense ? "mt-1" : "mt-2"}><TrendPill {...trend} /></div> : null}
         </div>
       </div>
     </DeckCard>
@@ -167,15 +171,15 @@ export function ProgressBar({ value, tone = "cyan" }: { value: number; tone?: "c
 }
 
 /** List panel: header (title + optional controls), rows, optional "View all ->" footer. */
-export function ListPanel({ title, right, viewAllHref, viewAllLabel = "View all", children }: { title: string; right?: ReactNode; viewAllHref?: string; viewAllLabel?: string; children: ReactNode }) {
+export function ListPanel({ title, right, viewAllHref, viewAllLabel = "View all", fill = false, children }: { title: string; right?: ReactNode; viewAllHref?: string; viewAllLabel?: string; fill?: boolean; children: ReactNode }) {
   return (
-    <DeckCard className="flex flex-col p-0">
-      <div className="border-b border-hairline px-5 py-4">
+    <DeckCard padding="p-0" className={clsx("flex flex-col", fill && "h-full")}>
+      <div className="shrink-0 border-b border-hairline px-5 py-3">
         <PanelHeader title={title} right={right} />
       </div>
-      <div className="flex-1 divide-y divide-hairline">{children}</div>
+      <div className="min-h-0 flex-1 divide-y divide-hairline overflow-y-auto">{children}</div>
       {viewAllHref ? (
-        <Link href={viewAllHref} className="flex items-center justify-center gap-1 border-t border-hairline px-5 py-3 text-xs font-semibold text-accent-cyan transition hover:bg-white/[0.02]">
+        <Link href={viewAllHref} className="flex shrink-0 items-center justify-center gap-1 border-t border-hairline px-5 py-2.5 text-xs font-semibold text-accent-cyan transition hover:bg-white/[0.02]">
           {viewAllLabel} <ChevronRight className="size-3.5" />
         </Link>
       ) : null}
