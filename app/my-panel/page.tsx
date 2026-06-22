@@ -2,7 +2,6 @@ import {
   AlertTriangle,
   Bell,
   BriefcaseBusiness,
-  CalendarClock,
   ClipboardCheck,
   ListTodo,
   Loader,
@@ -108,10 +107,12 @@ export default async function MyPanelPage() {
     .sort((a, b) => new Date(a.date ?? 0).getTime() - new Date(b.date ?? 0).getTime())
     .slice(0, 6);
 
+  const unreadNotifications = notifications.filter((note) => note.status === "UNREAD").length;
+
   return (
     <AppShell>
-      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
-        <div className="flex shrink-0 items-baseline justify-between gap-3">
+      <div className="flex flex-col gap-3">
+        <div className="flex flex-wrap items-baseline justify-between gap-3">
           <div>
             <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-accent-cyan">Operator</p>
             <h1 className="font-display text-xl font-bold tracking-tight text-deck-text">My Panel · {user.name}</h1>
@@ -119,7 +120,7 @@ export default async function MyPanelPage() {
           <span className="hidden font-mono text-xs text-deck-muted sm:inline">{hoursLabel(weekTotalMinutes)} scheduled this week</span>
         </div>
 
-        <div className="grid shrink-0 grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
+        <div className="grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-5">
           <KpiCard dense label="My Open Tasks" value={myOpen.length} total={myTasks.length} ringValue={pct(myOpen.length, myTasks.length)} href="/tasks" />
           <KpiCard dense label="Due Today" value={dueToday.length} total={myOpen.length} ringValue={pct(dueToday.length, myOpen.length)} href="/calendar" />
           <KpiCard dense label="Overdue" value={overdue.length} total={myOpen.length} ringValue={pct(overdue.length, myOpen.length)} href="/tasks" />
@@ -127,43 +128,58 @@ export default async function MyPanelPage() {
           <KpiCard dense label="Done · MTD" value={completedThisMonth.length} total={completedThisMonth.length + myOpen.length} ringValue={pct(completedThisMonth.length, completedThisMonth.length + myOpen.length)} href="/tasks" />
         </div>
 
-        <DeckCard className="shrink-0" padding="p-3">
+        <DeckCard padding="p-3">
           <PanelHeader title="My Workload · this week" right={<span className="font-mono text-xs text-deck-muted">hours by due day</span>} />
           <div className="mt-2"><WorkloadBars days={workloadDays} /></div>
         </DeckCard>
 
-        <div className="grid min-h-0 flex-1 auto-rows-fr gap-3 overflow-hidden xl:grid-cols-4">
-          <ListPanel title="To-Do" fill right={<span className="font-mono text-xs text-deck-muted">{todo.length}</span>} viewAllHref="/tasks">
+        <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-4">
+          <ListPanel title="To-Do" right={<span className="font-mono text-xs text-deck-muted">{todo.length}</span>} viewAllHref="/tasks">
             {todo.length ? todo.map((task) => (
               <ListRow key={task.id} icon={ListTodo} iconTone="neutral" title={task.title} subtitle={clientName(task.client_id)} trailing={<DatePill date={dateShort(task.due_date)} tone={dueTone(task.due_date, startToday)} />} href={`/tasks/${task.id}`} />
             )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">Nothing in your to-do list.</div>}
           </ListPanel>
 
-          <ListPanel title="In Progress" fill right={<span className="font-mono text-xs text-deck-muted">{inProgress.length}</span>} viewAllHref="/tasks">
+          <ListPanel title="In Progress" right={<span className="font-mono text-xs text-deck-muted">{inProgress.length}</span>} viewAllHref="/tasks">
             {inProgress.length ? inProgress.map((task) => (
               <ListRow key={task.id} icon={Loader} iconTone="copper" title={task.title} subtitle={clientName(task.client_id)} trailing={<DeckStatusBadge value={task.status} />} href={`/tasks/${task.id}`} />
             )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No tasks in progress.</div>}
           </ListPanel>
 
-          <ListPanel title="My Projects" fill right={<span className="font-mono text-xs text-deck-muted">{myActiveProjects.length}</span>} viewAllHref="/projects">
+          <ListPanel title="My Projects" right={<span className="font-mono text-xs text-deck-muted">{myActiveProjects.length}</span>} viewAllHref="/projects">
             {myActiveProjects.length ? myActiveProjects.map((project) => (
               <ListRow key={project.id} icon={BriefcaseBusiness} iconTone="cyan" title={project.name} subtitle={`${clientName(project.client_id)} · ${project.progress}%`} trailing={<div className="w-20"><ProgressBar value={project.progress} /></div>} href={`/projects/${project.id}`} />
             )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No active projects.</div>}
           </ListPanel>
 
-          <div className="grid min-h-0 grid-rows-2 gap-3">
-            <ListPanel title="Required Actions" fill right={<span className="font-mono text-xs text-deck-muted">{requiredActions.length}</span>}>
-              {requiredActions.length ? requiredActions.map((item) => (
-                <ListRow key={item.id} icon={item.icon} iconTone={item.tone} title={item.title} subtitle={item.subtitle} trailing={<a href={item.href} className="rounded-lg border border-accent-cyan/30 px-2.5 py-1 text-xs font-semibold text-accent-cyan transition hover:bg-accent-cyan/10">{item.cta}</a>} />
-              )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">You&apos;re all clear.</div>}
-            </ListPanel>
-
-            <ListPanel title="Notifications" fill>
-              {notifications.length ? notifications.map((note) => (
-                <ListRow key={note.id} icon={Bell} iconTone={note.status === "UNREAD" ? "copper" : "neutral"} title={note.title} subtitle={note.body} trailing={note.status === "UNREAD" ? <CalendarClock className="size-3.5 text-accent-copper" /> : <span className="font-mono text-[0.6rem] text-deck-muted">{dateShort(note.created_at)}</span>} />
-              )) : <div className="px-5 py-8 text-center text-sm text-deck-muted">No notifications.</div>}
-            </ListPanel>
-          </div>
+          <ListPanel title="Action Center" right={<span className="font-mono text-xs text-deck-muted">{requiredActions.length + unreadNotifications}</span>}>
+            {requiredActions.map((item) => (
+              <ListRow
+                key={item.id}
+                icon={item.icon}
+                iconTone={item.tone}
+                title={item.title}
+                subtitle={item.subtitle}
+                trailing={
+                  <div className="flex items-center gap-2">
+                    <span className="rounded border border-neg/30 bg-neg/10 px-1.5 py-0.5 text-[0.55rem] font-semibold uppercase tracking-wider text-neg">Required</span>
+                    <a href={item.href} className="rounded-lg border border-accent-cyan/30 px-2 py-1 text-xs font-semibold text-accent-cyan transition hover:bg-accent-cyan/10">{item.cta}</a>
+                  </div>
+                }
+              />
+            ))}
+            {notifications.map((note) => (
+              <ListRow
+                key={note.id}
+                icon={Bell}
+                iconTone={note.status === "UNREAD" ? "copper" : "neutral"}
+                title={note.title}
+                subtitle={note.body}
+                trailing={<span className="font-mono text-[0.6rem] text-deck-muted">{dateShort(note.created_at)}</span>}
+              />
+            ))}
+            {requiredActions.length + notifications.length === 0 ? <div className="px-5 py-8 text-center text-sm text-deck-muted">You&apos;re all clear.</div> : null}
+          </ListPanel>
         </div>
       </div>
     </AppShell>
