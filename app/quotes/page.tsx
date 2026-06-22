@@ -2,8 +2,11 @@ import { AppShell } from "@/components/app-shell";
 import { AcceptQuoteButton, QuoteForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
+import { DonutChart } from "@/components/deck-charts";
 import { genericList, listClients, listLeads, listServices } from "@/lib/data";
 import { money } from "@/lib/format";
+import { distribution } from "@/lib/deck-metrics";
 import type { Quote } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
@@ -67,6 +70,25 @@ export default async function Quotes() {
             </Card>
           ))}
         </div>
+        {quotes.length ? (
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <DeckCard padding="p-4"><PanelHeader title="Quotes by Status" /><div className="mt-3"><BarList items={distribution(quotes, (quote) => quote.status)} tone="mixed" /></div></DeckCard>
+            <DeckCard padding="p-4">
+              <PanelHeader title="Outcome" />
+              <div className="mt-4">
+                <DonutChart
+                  centerLabel={String(quotes.length)}
+                  centerSub="quotes"
+                  segments={[
+                    { label: "Accepted", value: quotes.filter((quote) => quote.status === "ACCEPTED").length, color: "var(--deck-pos)" },
+                    { label: "Open", value: quotes.filter((quote) => ["DRAFT", "SENT", "VIEWED", "FOLLOW_UP_DUE"].includes(quote.status)).length, color: "var(--deck-accent-copper)" },
+                    { label: "Lost", value: quotes.filter((quote) => ["REJECTED", "EXPIRED"].includes(quote.status)).length, color: "var(--deck-neg)" },
+                  ].filter((segment) => segment.value > 0)}
+                />
+              </div>
+            </DeckCard>
+          </div>
+        ) : null}
         <Card>
           <h2 className="mb-4 text-lg font-semibold">Quote pipeline</h2>
           {quotes.length ? (
