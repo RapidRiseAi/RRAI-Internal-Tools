@@ -53,6 +53,48 @@ export function RadialRing({
   );
 }
 
+/** Donut / ring distribution chart with a legend. Solid arcs, no gradient ids. */
+export function DonutChart({ segments, centerLabel, centerSub, size = 128, thickness = 16 }: { segments: { label: string; value: number; color: string }[]; centerLabel?: string; centerSub?: string; size?: number; thickness?: number }) {
+  const total = Math.max(1, segments.reduce((sum, segment) => sum + segment.value, 0));
+  const radius = (size - thickness) / 2;
+  const circumference = 2 * Math.PI * radius;
+  let offset = 0;
+  return (
+    <div className="flex flex-wrap items-center gap-4">
+      <div className="relative grid shrink-0 place-items-center" style={{ width: size, height: size }}>
+        <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} className="-rotate-90">
+          <circle cx={size / 2} cy={size / 2} r={radius} fill="none" stroke="var(--deck-hairline)" strokeWidth={thickness} />
+          {segments.map((segment, index) => {
+            const length = (segment.value / total) * circumference;
+            const node = (
+              <circle key={index} cx={size / 2} cy={size / 2} r={radius} fill="none" stroke={segment.color} strokeWidth={thickness} strokeDasharray={`${length} ${circumference - length}`} strokeDashoffset={-offset} />
+            );
+            offset += length;
+            return node;
+          })}
+        </svg>
+        {centerLabel ? (
+          <div className="absolute inset-0 grid place-items-center text-center">
+            <div>
+              <p className="font-mono text-lg font-bold leading-none text-deck-text">{centerLabel}</p>
+              {centerSub ? <p className="mt-0.5 font-mono text-[0.6rem] text-deck-muted">{centerSub}</p> : null}
+            </div>
+          </div>
+        ) : null}
+      </div>
+      <div className="grid gap-1.5">
+        {segments.map((segment) => (
+          <div key={segment.label} className="flex items-center gap-2 text-xs">
+            <span className="size-2.5 shrink-0 rounded-sm" style={{ background: segment.color }} />
+            <span className="text-deck-muted">{segment.label}</span>
+            <span className="ml-auto font-mono text-deck-text">{segment.value}</span>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+}
+
 type Series = { name: string; values: number[]; tone: "cyan" | "copper" };
 
 /**

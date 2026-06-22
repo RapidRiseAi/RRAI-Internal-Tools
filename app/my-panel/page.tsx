@@ -114,6 +114,12 @@ export default async function MyPanelPage() {
 
   const unreadNotifications = notifications.filter((note) => note.status === "UNREAD").length;
 
+  const timeOnly = (value: string) => new Intl.DateTimeFormat("en-US", { hour: "numeric", minute: "2-digit" }).format(new Date(value));
+  const todayItems = [
+    ...myOpen.filter((task) => sameDay(task.due_date, startToday)).map((task) => ({ id: task.id, title: task.title, date: task.due_date as string, kind: "Task", href: `/tasks/${task.id}` })),
+    ...myActiveProjects.filter((project) => sameDay(project.deadline, startToday)).map((project) => ({ id: `proj-${project.id}`, title: project.name, date: project.deadline as string, kind: "Deadline", href: `/projects/${project.id}` })),
+  ].sort((a, b) => new Date(a.date).getTime() - new Date(b.date).getTime());
+
   return (
     <AppShell>
       <div className="flex flex-col gap-3">
@@ -133,10 +139,29 @@ export default async function MyPanelPage() {
           <KpiCard dense label="Done · MTD" value={completedThisMonth.length} total={completedThisMonth.length + myOpen.length} ringValue={pct(completedThisMonth.length, completedThisMonth.length + myOpen.length)} href="/tasks" />
         </div>
 
-        <DeckCard padding="p-3">
-          <PanelHeader title="My Workload · this week" right={<span className="font-mono text-xs text-deck-muted">hours by due day</span>} />
-          <div className="mt-2"><WorkloadBars days={workloadDays} /></div>
-        </DeckCard>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)]">
+          <DeckCard padding="p-3">
+            <PanelHeader title="My Workload · this week" right={<span className="font-mono text-xs text-deck-muted">hours by due day</span>} />
+            <div className="mt-2"><WorkloadBars days={workloadDays} /></div>
+          </DeckCard>
+
+          <DeckCard padding="p-3">
+            <PanelHeader title="Today's Agenda" right={<span className="font-mono text-xs text-deck-muted">{todayItems.length}</span>} />
+            {todayItems.length ? (
+              <div className="mt-2 grid gap-1.5">
+                {todayItems.map((item) => (
+                  <a key={item.id} href={item.href} className="flex items-center gap-3 rounded-lg border border-hairline bg-deck-panel/60 px-3 py-1.5 transition hover:border-accent-cyan/30">
+                    <span className="w-14 shrink-0 font-mono text-xs text-accent-cyan">{timeOnly(item.date)}</span>
+                    <span className="flex-1 truncate text-sm text-deck-text">{item.title}</span>
+                    <span className="font-mono text-[0.6rem] uppercase tracking-wider text-deck-muted">{item.kind}</span>
+                  </a>
+                ))}
+              </div>
+            ) : (
+              <p className="mt-2 text-sm text-deck-muted">Nothing scheduled for today.</p>
+            )}
+          </DeckCard>
+        </div>
 
         <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-4">
           <ListPanel title="To-Do" right={<span className="font-mono text-xs text-deck-muted">{todo.length}</span>} viewAllHref="/tasks">
