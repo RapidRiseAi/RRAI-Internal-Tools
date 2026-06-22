@@ -1,7 +1,7 @@
 import "server-only";
 
 import { getSupabaseAdmin, hasSupabaseConfig } from "./supabase";
-import type { ActivityLog, Affiliate, Campaign, ChecklistItem, ChecklistTemplate, Client, Commission, CompanySettings, ContentItem, DocumentTemplate, FileRecord, Invoice, KnowledgeBaseItem, Lead, Message, Note, Notification, Package, Payment, Project, ProjectChecklist, Quote, QuoteItem, Referral, Retainer, Role, Service, SupportTicket, Task, User } from "./types";
+import type { ActivityLog, Affiliate, Campaign, ChecklistItem, ChecklistTemplate, Client, Commission, CompanySettings, ContentItem, DocumentTemplate, FileRecord, Goal, Invoice, KnowledgeBaseItem, Lead, Message, Note, Notification, Package, Payment, Project, ProjectChecklist, Quote, QuoteItem, Referral, Retainer, Role, Service, SupportTicket, Task, User } from "./types";
 
 export async function tableCount(table: string, filters?: Record<string, string | number | boolean | null>) {
   if (!hasSupabaseConfig()) return 0;
@@ -30,6 +30,8 @@ export async function notificationsForUser(userId: string, limit = 10) { if (!ha
 export async function listDirectMessages(userId: string) { if (!hasSupabaseConfig()) return [] as Message[]; const { data } = await getSupabaseAdmin().from("messages").select("*, sender:users!messages_sender_id_fkey(id,name)").eq("audience", "DIRECT").or(`sender_id.eq.${userId},recipient_id.eq.${userId}`).order("created_at", { ascending: true }); return (data ?? []) as Message[]; }
 export async function listBroadcastMessages(limit = 50) { if (!hasSupabaseConfig()) return [] as Message[]; const { data } = await getSupabaseAdmin().from("messages").select("*, sender:users!messages_sender_id_fkey(id,name)").eq("audience", "BROADCAST").order("created_at", { ascending: true }).limit(limit); return (data ?? []) as Message[]; }
 export async function unreadMessageCount(userId: string) { if (!hasSupabaseConfig()) return 0; const { count } = await getSupabaseAdmin().from("messages").select("id", { count: "exact", head: true }).eq("audience", "DIRECT").eq("recipient_id", userId).is("read_at", null); return count ?? 0; }
+export async function listGoals() { if (!hasSupabaseConfig()) return [] as Goal[]; const { data } = await getSupabaseAdmin().from("goals").select("*").order("created_at", { ascending: false }); return (data ?? []) as Goal[]; }
+export async function listSelfNotes(userId: string) { if (!hasSupabaseConfig()) return [] as Note[]; const { data } = await getSupabaseAdmin().from("notes").select("*").eq("entity_type", "USER").eq("entity_id", userId).order("created_at", { ascending: false }); return (data ?? []) as Note[]; }
 export async function genericList<T>(table: string, order = "updated_at") { if (!hasSupabaseConfig()) return [] as T[]; const { data } = await getSupabaseAdmin().from(table).select("*").order(order, { ascending: false }); return (data ?? []) as T[]; }
 export async function getProject(id: string) { if (!hasSupabaseConfig()) return null; const { data } = await getSupabaseAdmin().from("projects").select("*").eq("id", id).maybeSingle(); return data as Project | null; }
 export async function getProjectChecklist(projectId: string) { if (!hasSupabaseConfig()) return [] as ProjectChecklist[]; const { data } = await getSupabaseAdmin().from("project_checklists").select("*").eq("project_id", projectId).order("created_at"); return (data ?? []) as ProjectChecklist[]; }

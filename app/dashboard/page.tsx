@@ -23,9 +23,13 @@ import {
   ProgressBar,
   type Tone,
 } from "@/components/command-deck";
-import { LineChart } from "@/components/deck-charts";
+import { LineChart, RadialRing } from "@/components/deck-charts";
 import { RangeControl } from "@/components/range-control";
-import { genericList, listAllLeadsForReporting, listClients, listPayments, recentActivity } from "@/lib/data";
+import { ModalPanel } from "@/components/modal-panel";
+import { inputClass } from "@/components/ui";
+import { deleteGoalAction, saveGoalAction } from "@/lib/actions";
+import { goalMetricMap, goalMetrics } from "@/lib/goal-metrics";
+import { genericList, listAllLeadsForReporting, listClients, listGoals, listPayments, recentActivity } from "@/lib/data";
 import { dateShort, money } from "@/lib/format";
 import { compactMoney, deltaTrend, isInMonthOffset, lastNWeekStarts, monthDayShort, pct, weeklyTotals } from "@/lib/deck-metrics";
 import type { Expense, Invoice, Payment, Project, Quote, Retainer, SupportTicket, Task } from "@/lib/types";
@@ -60,7 +64,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
   const rangeParam = typeof params.range === "string" ? params.range : "8";
   const weeks = rangeParam === "4" ? 4 : rangeParam === "12" ? 12 : 8;
 
-  const [projects, tasks, quotes, payments, invoices, expenses, retainers, tickets, clients, leads, activity] = await Promise.all([
+  const [projects, tasks, quotes, payments, invoices, expenses, retainers, tickets, clients, leads, activity, goals] = await Promise.all([
     genericList<Project>("projects"),
     genericList<Task>("tasks"),
     genericList<Quote>("quotes"),
@@ -72,6 +76,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     listClients(),
     listAllLeadsForReporting(),
     recentActivity(7),
+    listGoals(),
   ]);
 
   // --- KPI cards -----------------------------------------------------------
@@ -169,6 +174,19 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
     ["Outstanding", money(outstandingValue)],
   ];
 
+  // --- Goals (current vs target) ------------------------------------------
+  const newLeadsMonth = leads.filter((lead) => isInMonthOffset(lead.created_at, 0)).length;
+  const tasksDoneMonth = tasks.filter((task) => task.status === "DONE" && isInMonthOffset(task.completed_at, 0)).length;
+  const currentByMetric: Record<string, number> = {
+    REVENUE_MONTH: revenueThisMonth,
+    NEW_LEADS_MONTH: newLeadsMonth,
+    TASKS_DONE_MONTH: tasksDoneMonth,
+    ACTIVE_PROJECTS: activeProjects,
+    PIPELINE_VALUE: openQuoteValue,
+    MRR: activeMrr,
+  };
+  const formatGoalValue = (metric: string, value: number) => (goalMetricMap[metric]?.kind === "money" ? compactMoney(value) : String(value));
+
   const revenueTrend = deltaTrend(revenueThisMonth, revenueLastMonth, true);
   const expenseTrend = deltaTrend(expensesThisMonth, expensesLastMonth, false);
 
@@ -199,6 +217,59 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
           <KpiCard dense label="Revenue · MTD" value={compactMoney(revenueThisMonth)} ringValue={pct(paidInvoiceValue, paidInvoiceValue + outstandingValue)} trend={revenueTrend ?? undefined} href="/billing" />
           <KpiCard dense label="Expenses · MTD" value={compactMoney(expensesThisMonth)} ringValue={pct(recurringExpenseValue, totalExpenseValue)} trend={expenseTrend ?? undefined} href="/billing" />
         </div>
+
+        {/* Goals */}
+        <DeckCard padding="p-4">
+          <PanelHeader
+            title="Goals"
+            right={
+              <ModalPanel title="Set a goal" triggerLabel="Add goal" variant="ghost">
+                <form action={saveGoalAction} className="grid gap-3">
+                  <label className="grid gap-1 text-sm font-medium text-deck-muted">Metric
+                    <select name="metric" className={inputClass} defaultValue={goalMetrics[0].key}>
+                      {goalMetrics.map((metric) => <option key={metric.key} value={metric.key} className="bg-deck-panel">{metric.label}</option>)}
+                    </select>
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-deck-muted">Target (R for money metrics, otherwise a count)
+                    <input name="target" type="number" min="0" step="any" required className={inputClass} placeholder="e.g. 50000" />
+                  </label>
+                  <label className="grid gap-1 text-sm font-medium text-deck-muted">Label (optional)
+                    <input name="label" className={inputClass} placeholder="Custom name" />
+                  </label>
+                  <input type="hidden" name="period" value="MONTHLY" />
+                  <button type="submit" className="rounded-lg bg-accent-cyan px-4 py-2 text-sm font-semibold text-deck-bg transition hover:brightness-110">Save goal</button>
+                </form>
+              </ModalPanel>
+            }
+          />
+          {goals.length ? (
+            <div className="mt-3 grid grid-cols-2 gap-3 sm:grid-cols-3 xl:grid-cols-6">
+              {goals.map((goal) => {
+                const meta = goalMetricMap[goal.metric];
+                const current = currentByMetric[goal.metric] ?? 0;
+                const target = goal.target_value || 0;
+                const ringPct = target ? Math.min(100, (current / target) * 100) : 0;
+                const actualPct = target ? Math.round((current / target) * 100) : 0;
+                return (
+                  <div key={goal.id} className="relative flex items-center gap-3 rounded-lg border border-hairline bg-deck-panel/60 p-3">
+                    <RadialRing value={ringPct} size={44} stroke={4}><span className="font-mono text-[0.55rem] font-semibold text-deck-text">{actualPct}%</span></RadialRing>
+                    <div className="min-w-0">
+                      <p className="truncate font-display text-[0.58rem] font-semibold uppercase tracking-wider text-deck-muted">{goal.label || meta?.label || goal.metric}</p>
+                      <p className="font-mono text-sm font-bold text-deck-text">{formatGoalValue(goal.metric, current)}</p>
+                      <p className="font-mono text-[0.6rem] text-deck-muted">/ {formatGoalValue(goal.metric, target)}</p>
+                    </div>
+                    <form action={deleteGoalAction} className="absolute right-1 top-1">
+                      <input type="hidden" name="id" value={goal.id} />
+                      <button className="grid size-5 place-items-center rounded text-deck-muted transition hover:text-neg" aria-label="Delete goal">×</button>
+                    </form>
+                  </div>
+                );
+              })}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-deck-muted">No goals yet — add revenue, lead or project targets to track progress as live rings.</p>
+          )}
+        </DeckCard>
 
         {/* Panels grow to content; the page scrolls if needed, and wide screens spread to 4 columns. */}
         <div className="grid gap-3 xl:grid-cols-2 2xl:grid-cols-4">

@@ -5,7 +5,9 @@ import {
   ClipboardCheck,
   ListTodo,
   Loader,
+  StickyNote,
   Target,
+  Trash2,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
 import { AppShell } from "@/components/app-shell";
@@ -23,7 +25,9 @@ import {
   WorkloadBars,
   type Tone,
 } from "@/components/command-deck";
-import { genericList, listClients, listLeads, listTasks, notificationsForUser } from "@/lib/data";
+import { genericList, listClients, listLeads, listSelfNotes, listTasks, notificationsForUser } from "@/lib/data";
+import { addSelfNoteAction, deleteSelfNoteAction } from "@/lib/actions";
+import { inputClass } from "@/components/ui";
 import { dateShort } from "@/lib/format";
 import { isInMonthOffset, pct, startOfWeekMonday } from "@/lib/deck-metrics";
 import type { Project } from "@/lib/types";
@@ -55,12 +59,13 @@ function dueTone(dateStr: string | null, startToday: Date): Tone {
 export default async function MyPanelPage() {
   const user = await requirePagePermission(permissions.dashboard);
 
-  const [tasks, projects, leads, clients, notifications] = await Promise.all([
+  const [tasks, projects, leads, clients, notifications, selfNotes] = await Promise.all([
     listTasks(),
     genericList<Project>("projects"),
     listLeads(),
     listClients(),
     notificationsForUser(user.id, 8),
+    listSelfNotes(user.id),
   ]);
 
   const now = new Date();
@@ -181,6 +186,34 @@ export default async function MyPanelPage() {
             {requiredActions.length + notifications.length === 0 ? <div className="px-5 py-8 text-center text-sm text-deck-muted">You&apos;re all clear.</div> : null}
           </ListPanel>
         </div>
+
+        {/* Notes to self */}
+        <DeckCard padding="p-4">
+          <PanelHeader title="Notes to Self" right={<span className="font-mono text-xs text-deck-muted">{selfNotes.length}</span>} />
+          <form action={addSelfNoteAction} className="mt-3 flex items-start gap-2">
+            <textarea name="body" required rows={2} placeholder="Jot a note to yourself…" className={`${inputClass} resize-none`} />
+            <button type="submit" className="shrink-0 rounded-lg bg-accent-cyan px-4 py-2 text-sm font-semibold text-deck-bg transition hover:brightness-110">Add</button>
+          </form>
+          {selfNotes.length ? (
+            <div className="mt-3 grid gap-2 md:grid-cols-2 2xl:grid-cols-3">
+              {selfNotes.map((note) => (
+                <div key={note.id} className="group relative rounded-lg border border-hairline bg-deck-panel/60 p-3 pr-8">
+                  <div className="flex items-start gap-2">
+                    <StickyNote className="mt-0.5 size-3.5 shrink-0 text-accent-copper" />
+                    <p className="whitespace-pre-wrap break-words text-sm text-deck-text">{note.body}</p>
+                  </div>
+                  <p className="mt-1.5 pl-5 font-mono text-[0.6rem] text-deck-muted">{dateShort(note.created_at)}</p>
+                  <form action={deleteSelfNoteAction} className="absolute right-1.5 top-1.5">
+                    <input type="hidden" name="id" value={note.id} />
+                    <button className="grid size-6 place-items-center rounded text-deck-muted transition hover:text-neg" aria-label="Delete note"><Trash2 className="size-3.5" /></button>
+                  </form>
+                </div>
+              ))}
+            </div>
+          ) : (
+            <p className="mt-3 text-sm text-deck-muted">No notes yet — your private scratchpad lives here.</p>
+          )}
+        </DeckCard>
       </div>
     </AppShell>
   );
