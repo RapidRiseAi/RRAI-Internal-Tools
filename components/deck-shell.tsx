@@ -11,6 +11,7 @@ import {
   ChevronRight,
   CircleDollarSign,
   ClipboardCheck,
+  Clock,
   FileText,
   Gauge,
   Headset,
@@ -29,6 +30,7 @@ import {
 import type { LucideIcon } from "lucide-react";
 import { clsx } from "clsx";
 import { logoutAction } from "@/lib/actions";
+import { TimeClock } from "./time-clock";
 
 export type DeckNavItem = { label: string; href: string; iconKey: string };
 export type DeckNotification = { id: string; title: string; body: string; status: string; created_at: string };
@@ -43,6 +45,7 @@ const iconMap: Record<string, LucideIcon> = {
   projects: BriefcaseBusiness,
   tasks: ClipboardCheck,
   calendar: CalendarDays,
+  time: Clock,
   finance: CircleDollarSign,
   payroll: UsersRound,
   support: Headset,
@@ -113,6 +116,7 @@ export function DeckShell({
   adminNav,
   notifications,
   unreadCount,
+  running,
   children,
 }: {
   user: { name: string; role: string };
@@ -120,6 +124,7 @@ export function DeckShell({
   adminNav: DeckNavItem[];
   notifications: DeckNotification[];
   unreadCount: number;
+  running: { startedAt: string; taskTitle: string | null } | null;
   children: React.ReactNode;
 }) {
   const [collapsed, setCollapsed] = useState(false);
@@ -205,6 +210,8 @@ export function DeckShell({
               </span>
 
               <LiveClock />
+
+              <TimeClock running={running} />
 
               <div className="relative">
                 <button

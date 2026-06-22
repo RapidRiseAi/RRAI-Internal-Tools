@@ -108,6 +108,8 @@ export type Service = {
   base_once_off_cents: number;
   base_monthly_cents: number;
   is_active: boolean;
+  hourly_rate_cents: number;
+  estimated_hours: number;
 };
 
 export type Package = {
@@ -202,6 +204,7 @@ export type KnowledgeBaseItem = { id: string; title: string; category: string; b
 export type Notification = { id: string; title: string; body: string; user_id: string | null; status: string; created_at: string; updated_at: string; };
 export type Message = { id: string; sender_id: string; recipient_id: string | null; audience: "DIRECT" | "BROADCAST"; broadcast_role: string | null; body: string; read_at: string | null; created_at: string; sender?: Pick<User, "id" | "name"> | null; };
 export type Goal = { id: string; metric: string; label: string | null; target_value: number; period: string; created_by: string | null; created_at: string; updated_at: string; };
+export type TimeEntry = { id: string; user_id: string; task_id: string | null; project_id: string | null; client_id: string | null; description: string | null; started_at: string; ended_at: string | null; is_billable: boolean; created_at: string; user?: Pick<User, "id" | "name"> | null; task?: Pick<Task, "id" | "title"> | null; };
 
 export type CompanySettings = { id: boolean; company_name: string; billing_email: string | null; bank_name: string | null; bank_account_name: string | null; bank_account_number: string | null; bank_branch_code: string | null; payment_terms: string | null; quote_footer: string | null; invoice_footer: string | null; updated_at: string; };
 export type DocumentTemplate = { id: string; name: string; type: string; content: string; is_default: boolean; created_at: string; updated_at: string; };
