@@ -39,11 +39,12 @@ button, input, select, textarea { font: inherit; }
   --color-background: var(--background);
   --color-foreground: var(--foreground);
 
-  /* Legacy brand tokens — kept so existing pages keep rendering until restyled. */
-  --color-rapid-blue: #2f7dff;
-  --color-rapid-cyan: #38d5ff;
-  --color-surface: #0b1020;
-  --color-surface-2: #11182b;
+  /* Legacy brand tokens, remapped to the command-deck palette so every existing
+     inline `rapid-blue` / `rapid-cyan` / `surface` usage recolours app-wide. */
+  --color-rapid-blue: #2bb7a6;
+  --color-rapid-cyan: #46e8d1;
+  --color-surface: #0e1420;
+  --color-surface-2: #131a28;
 
   /* Command-deck design tokens (utilities: bg-deck-bg, text-accent-cyan, border-hairline, …) */
   --color-deck-bg: var(--deck-bg);
