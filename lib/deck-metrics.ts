@@ -1,6 +1,18 @@
 // Pure presentation-layer aggregation helpers for the command-deck views.
 // No database, no business logic — just math over data the pages already fetch.
 
+import { labelize } from "./constants";
+
+/** Counts items by a key and returns labelised {label,value} sorted desc — for bar/donut charts. */
+export function distribution<T>(items: T[], key: (item: T) => string) {
+  const map = new Map<string, number>();
+  for (const item of items) {
+    const value = key(item);
+    map.set(value, (map.get(value) ?? 0) + 1);
+  }
+  return [...map.entries()].map(([label, value]) => ({ label: labelize(label), value })).sort((a, b) => b.value - a.value);
+}
+
 export function compactMoney(cents: number) {
   const rand = (cents ?? 0) / 100;
   const sign = rand < 0 ? "-" : "";
