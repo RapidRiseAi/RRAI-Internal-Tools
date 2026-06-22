@@ -43,13 +43,13 @@ export default async function MessagesPage({ searchParams }: { searchParams?: Pr
 
   return (
     <AppShell>
-    <div className="flex h-full flex-col gap-4">
+    <div className="flex min-h-0 flex-1 flex-col gap-4 overflow-hidden">
       <div className="shrink-0">
         <p className="font-mono text-xs font-semibold uppercase tracking-[0.28em] text-accent-cyan">Comms</p>
         <h1 className="mt-1 font-display text-2xl font-bold tracking-tight text-deck-text">Messages</h1>
       </div>
 
-      <div className="grid min-h-0 flex-1 gap-4 lg:grid-cols-[20rem_1fr]">
+      <div className="grid min-h-0 flex-1 auto-rows-fr gap-4 overflow-hidden lg:grid-cols-[20rem_minmax(0,1fr)]">
         {/* Conversation list */}
         <DeckCard padding="p-0" className="flex h-full flex-col" glow={false}>
           <div className="shrink-0 border-b border-hairline px-4 py-3">

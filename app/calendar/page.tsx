@@ -179,7 +179,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
 
   return (
     <AppShell>
-      <div className="flex h-full flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         {/* Toolbar */}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div className="flex items-center gap-3">
@@ -198,8 +198,8 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
         </div>
 
         {/* Calendar + day detail */}
-        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1fr_21rem]">
-          <DeckCard padding="p-3" className="flex min-h-0 flex-col" glow={false}>
+        <div className="grid min-h-0 flex-1 auto-rows-fr gap-3 overflow-hidden xl:grid-cols-[minmax(0,1fr)_21rem]">
+          <DeckCard padding="p-3" className="flex min-h-0 flex-col overflow-hidden" glow={false}>
             {view === "month" ? (
               <div className="grid min-h-0 flex-1 grid-cols-7 grid-rows-[auto_repeat(6,minmax(0,1fr))] gap-1">
                 {weekdayLabels.map((label) => (
@@ -259,7 +259,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
           </DeckCard>
 
           {/* Day detail */}
-          <DeckCard padding="p-0" className="flex min-h-0 flex-col" glow={false}>
+          <DeckCard padding="p-0" className="flex min-h-0 flex-col overflow-hidden" glow={false}>
             <div className="shrink-0 border-b border-hairline px-4 py-3">
               <p className="font-mono text-[0.6rem] uppercase tracking-[0.2em] text-accent-cyan">Selected day</p>
               <h2 className="mt-0.5 font-display text-base font-bold text-deck-text">{selectedDate.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}</h2>

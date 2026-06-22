@@ -110,7 +110,7 @@ export default async function MyPanelPage() {
 
   return (
     <AppShell>
-      <div className="flex h-full flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         <div className="flex shrink-0 items-baseline justify-between gap-3">
           <div>
             <p className="font-mono text-[0.65rem] font-semibold uppercase tracking-[0.28em] text-accent-cyan">Operator</p>
@@ -132,7 +132,7 @@ export default async function MyPanelPage() {
           <div className="mt-2"><WorkloadBars days={workloadDays} /></div>
         </DeckCard>
 
-        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-4">
+        <div className="grid min-h-0 flex-1 auto-rows-fr gap-3 overflow-hidden xl:grid-cols-4">
           <ListPanel title="To-Do" fill right={<span className="font-mono text-xs text-deck-muted">{todo.length}</span>} viewAllHref="/tasks">
             {todo.length ? todo.map((task) => (
               <ListRow key={task.id} icon={ListTodo} iconTone="neutral" title={task.title} subtitle={clientName(task.client_id)} trailing={<DatePill date={dateShort(task.due_date)} tone={dueTone(task.due_date, startToday)} />} href={`/tasks/${task.id}`} />

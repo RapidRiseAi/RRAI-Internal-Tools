@@ -270,7 +270,7 @@ export function DeckShell({
           </div>
         </header>
 
-        <main className="page-transition-in min-h-0 flex-1 overflow-y-auto px-4 py-5 md:px-6">{children}</main>
+        <main className="page-transition-in flex min-h-0 flex-1 flex-col overflow-y-auto px-4 py-5 md:px-6">{children}</main>
       </div>
     </div>
   );

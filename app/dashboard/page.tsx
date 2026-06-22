@@ -174,7 +174,7 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
 
   return (
     <AppShell>
-      <div className="flex h-full flex-col gap-3">
+      <div className="flex min-h-0 flex-1 flex-col gap-3 overflow-hidden">
         {/* Title + secondary stat chips */}
         <div className="flex shrink-0 flex-wrap items-center justify-between gap-3">
           <div>
@@ -201,9 +201,9 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
         </div>
 
         {/* Charts + lists fill the rest of the viewport */}
-        <div className="grid min-h-0 flex-1 gap-3 xl:grid-cols-[1.55fr_1fr]">
-          <div className="grid min-h-0 grid-rows-[1.5fr_1fr] gap-3">
-            <DeckCard className="flex min-h-0 flex-col" padding="p-4">
+        <div className="grid min-h-0 flex-1 auto-rows-fr gap-3 overflow-hidden xl:grid-cols-[minmax(0,1.55fr)_minmax(0,1fr)]">
+          <div className="grid min-h-0 auto-rows-fr gap-3 xl:grid-rows-[minmax(0,1.5fr)_minmax(0,1fr)]">
+            <DeckCard className="flex min-h-0 flex-col overflow-hidden" padding="p-4">
               <div className="shrink-0">
                 <PanelHeader
                   title="Revenue vs Expenses"
@@ -233,8 +233,8 @@ export default async function DashboardPage({ searchParams }: { searchParams?: P
             </ListPanel>
           </div>
 
-          <div className="grid min-h-0 grid-rows-[1.1fr_1fr] gap-3">
-            <DeckCard className="flex min-h-0 flex-col" padding="p-4">
+          <div className="grid min-h-0 auto-rows-fr gap-3 xl:grid-rows-[minmax(0,1.1fr)_minmax(0,1fr)]">
+            <DeckCard className="flex min-h-0 flex-col overflow-hidden" padding="p-4">
               <div className="shrink-0">
                 <PanelHeader title="Lead Pipeline" right={<span className="font-mono text-xs text-deck-muted">{lostLeads} lost</span>} />
                 <p className="mt-0.5 text-xs text-deck-muted">Reached at least each stage</p>

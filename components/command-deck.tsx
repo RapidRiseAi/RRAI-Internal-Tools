@@ -173,7 +173,7 @@ export function ProgressBar({ value, tone = "cyan" }: { value: number; tone?: "c
 /** List panel: header (title + optional controls), rows, optional "View all ->" footer. */
 export function ListPanel({ title, right, viewAllHref, viewAllLabel = "View all", fill = false, children }: { title: string; right?: ReactNode; viewAllHref?: string; viewAllLabel?: string; fill?: boolean; children: ReactNode }) {
   return (
-    <DeckCard padding="p-0" className={clsx("flex flex-col", fill && "h-full")}>
+    <DeckCard padding="p-0" className={clsx("flex flex-col overflow-hidden", fill && "h-full")}>
       <div className="shrink-0 border-b border-hairline px-5 py-3">
         <PanelHeader title={title} right={right} />
       </div>
