@@ -6,14 +6,18 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
 import { listClients } from "@/lib/data";
 import { money } from "@/lib/format";
+import { distribution } from "@/lib/deck-metrics";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 export const dynamic = "force-dynamic";
 export default async function ClientsPage() {
   await requirePagePermission(permissions.clientsRead);
   const clients = await listClients();
+  const totalMrr = clients.reduce((sum, client) => sum + client.mrr_cents, 0);
+  const topMrr = [...clients].filter((client) => client.mrr_cents > 0).sort((a, b) => b.mrr_cents - a.mrr_cents).slice(0, 6).map((client) => ({ label: client.company_name, value: Math.round(client.mrr_cents / 100), sub: money(client.mrr_cents) }));
   return (
     <AppShell>
       <PageHeader
@@ -22,6 +26,13 @@ export default async function ClientsPage() {
         description="Central client profiles for contacts, services, projects, retainers, files, notes and support."
         actions={<LinkButton href="/clients/new">Create client</LinkButton>}
       />
+      {clients.length ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <DeckCard padding="p-4"><PanelHeader title="By Status" /><div className="mt-3"><BarList items={distribution(clients, (client) => client.account_status)} tone="cyan" /></div></DeckCard>
+          <DeckCard padding="p-4"><PanelHeader title="By Industry" /><div className="mt-3"><BarList items={distribution(clients, (client) => client.industry ?? "Unknown")} tone="copper" /></div></DeckCard>
+          <DeckCard padding="p-4"><PanelHeader title="Top MRR" right={<span className="font-mono text-xs text-deck-muted">{money(totalMrr)}</span>} /><div className="mt-3"><BarList items={topMrr} tone="mixed" /></div></DeckCard>
+        </div>
+      ) : null}
       {clients.length ? (
         <div className="overflow-hidden rounded-2xl border border-white/10">
           <table className="w-full bg-white/[0.035] text-sm">
