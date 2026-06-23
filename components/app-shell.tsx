@@ -21,7 +21,10 @@ const primaryNav: [string, string, string, string][] = [
   ["Marketing", "/marketing", "marketing", permissions.marketingRead],
 ];
 
-const adminNav: [string, string, string, string][] = [["Settings", "/settings", "settings", permissions.settingsManage]];
+const adminNav: [string, string, string, string][] = [
+  ["Affiliates", "/affiliates", "marketing", permissions.settingsManage],
+  ["Settings", "/settings", "settings", permissions.settingsManage],
+];
 
 function toNav(rows: [string, string, string, string][], allowed: string[]): DeckNavItem[] {
   return rows.filter(([, , , permission]) => allowed.includes(permission)).map(([label, href, iconKey]) => ({ label, href, iconKey }));

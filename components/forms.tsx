@@ -1231,9 +1231,9 @@ export function SupportTicketForm({
   );
 }
 
-export function AffiliateForm() {
+export function AffiliateForm({ compact = false }: { compact?: boolean }) {
   return (
-    <form action={upsertAffiliate} className="grid gap-4 md:grid-cols-5">
+    <form action={upsertAffiliate} className={compact ? "grid gap-3 sm:grid-cols-2" : "grid gap-4 md:grid-cols-5"}>
       <SubmissionInput scope="upsert-affiliate" />
       <Field label="Name">
         <input className={inputClass} name="name" required />
@@ -1253,18 +1253,9 @@ export function AffiliateForm() {
           <Options values={affiliateStatuses} />
         </select>
       </Field>
-      <Field label="Commission %">
-        <input
-          className={inputClass}
-          name="defaultCommissionRate"
-          type="number"
-          min="0"
-          max="100"
-          defaultValue="10"
-        />
-      </Field>
+      <input type="hidden" name="defaultCommissionRate" value="0" />
       <input type="hidden" name="defaultCommissionType" value="ONCE_OFF" />
-      <div className="md:col-span-5">
+      <div className={compact ? "sm:col-span-2" : "md:col-span-5"}>
         <SubmitButton pendingLabel="Creating affiliate…">
           Create affiliate
         </SubmitButton>

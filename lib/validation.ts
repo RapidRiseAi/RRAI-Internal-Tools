@@ -2,6 +2,7 @@ import { z } from "zod";
 import {
   affiliateStatuses,
   clientStatuses,
+  commissionStatuses,
   contentStatuses,
   documentTemplateTypes,
   employmentTypes,
@@ -40,6 +41,18 @@ const optionalDate = z
   .transform((value) => (value ? new Date(value) : undefined));
 const cents = z.coerce.number().int().min(0).default(0);
 const optionalUuid = optionalText;
+const optionalStrictUuid = z
+  .string()
+  .trim()
+  .uuid()
+  .or(z.literal(""))
+  .transform((value) => value || undefined);
+const optionalTrackingCode = z
+  .string()
+  .trim()
+  .regex(/^[a-z0-9][a-z0-9-]{3,39}$/)
+  .or(z.literal(""))
+  .transform((value) => value || undefined);
 
 export const messageSchema = z.object({
   audience: z.enum(["DIRECT", "BROADCAST"]).default("DIRECT"),
@@ -241,6 +254,67 @@ export const commissionSchema = z.object({
   status: z.string().trim().min(2),
   amountCents: z.coerce.number().int().min(1),
   commissionType: z.enum(["ONCE_OFF", "RECURRING"]),
+});
+export const portalApplicationApprovalSchema = z.object({
+  applicationId: z.string().uuid(),
+  approvalMode: z.enum(["create", "link"]),
+  selectedAffiliateId: optionalStrictUuid,
+  newTrackingCode: optionalTrackingCode,
+}).superRefine((value, context) => {
+  if (value.approvalMode === "create" && !value.newTrackingCode) {
+    context.addIssue({ code: "custom", message: "A tracking code is required when creating an affiliate." });
+  }
+  if (value.approvalMode === "link" && !value.selectedAffiliateId) {
+    context.addIssue({ code: "custom", message: "Select an existing affiliate to link." });
+  }
+});
+export const portalApplicationDeclineSchema = z.object({
+  applicationId: z.string().uuid(),
+  reason: z.string().trim().min(3).max(500),
+});
+export const portalManualReferralSchema = z.object({
+  affiliateId: z.string().uuid(),
+  leadId: z.string().uuid(),
+  reason: z.string().trim().min(3).max(500),
+});
+export const portalCommissionSchema = z.object({
+  affiliateId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  quoteId: optionalStrictUuid,
+  projectId: optionalStrictUuid,
+  paymentId: optionalStrictUuid,
+  status: z.enum(commissionStatuses),
+  baseAmountCents: z.coerce.number().int().positive(),
+}).refine(
+  (value) => Boolean(value.quoteId || value.projectId || value.paymentId),
+  { message: "Select a quote, project, or payment source." },
+);
+export const portalAgreementSchema = z.object({
+  agreementId: optionalStrictUuid,
+  affiliateId: z.string().uuid(),
+  commissionModel: z.enum(["BUILD_COST", "LIFETIME"]),
+  defaultRatePercent: z.preprocess(
+    (value) => value === "" || value === null ? undefined : value,
+    z.coerce.number().min(0.01).max(50).optional(),
+  ),
+  status: z.enum(["DRAFT", "ACTIVE", "SUSPENDED", "ENDED"]),
+  effectiveFrom: z.preprocess((value) => value === "" ? undefined : value, z.string().date().optional()),
+  effectiveTo: z.preprocess((value) => value === "" ? undefined : value, z.string().date().optional()),
+  signedAt: z.preprocess((value) => value === "" ? undefined : value, z.string().datetime().optional()),
+  termsSummary: z.string().trim().min(3).max(5000),
+}).superRefine((value, context) => {
+  if (value.status === "ACTIVE" && !value.signedAt) {
+    context.addIssue({ code: "custom", path: ["signedAt"], message: "Active agreements must be signed." });
+  }
+  if (value.effectiveFrom && value.effectiveTo && value.effectiveTo < value.effectiveFrom) {
+    context.addIssue({ code: "custom", path: ["effectiveTo"], message: "The end date cannot precede the start date." });
+  }
+});
+export const portalAgreementRateSchema = z.object({
+  agreementId: z.string().uuid(),
+  serviceId: z.string().uuid(),
+  ratePercent: z.coerce.number().min(0.01).max(50),
+  notes: z.string().trim().max(1000).optional(),
 });
 export const campaignSchema = z.object({
   name: z.string().trim().min(2),

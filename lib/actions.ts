@@ -28,7 +28,6 @@ import {
   checklistItemSchema,
   checklistTemplateSchema,
   clientSchema,
-  commissionSchema,
   companySettingsSchema,
   contentItemSchema,
   documentTemplateSchema,
@@ -45,12 +44,17 @@ import {
   leadSchema,
   noteSchema,
   paymentSchema,
+  portalAgreementRateSchema,
+  portalAgreementSchema,
+  portalApplicationApprovalSchema,
+  portalApplicationDeclineSchema,
+  portalCommissionSchema,
+  portalManualReferralSchema,
   payrollItemSchema,
   payrollRunSchema,
   projectChecklistSchema,
   projectSchema,
   quoteSchema,
-  referralSchema,
   retainerSchema,
   serviceSchema,
   supportTicketSchema,
@@ -1738,7 +1742,7 @@ export async function upsertSupportTicket(formData: FormData) {
 }
 
 export async function upsertAffiliate(formData: FormData) {
-  const user = await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.settingsManage);
   if (!(await reserveSubmission(user.id, formData, "affiliate:create")))
     redirect("/affiliates");
   const parsed = affiliateSchema.parse({
@@ -1765,52 +1769,161 @@ export async function upsertAffiliate(formData: FormData) {
 }
 
 export async function createReferral(formData: FormData) {
-  const user = await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.settingsManage);
   if (!(await reserveSubmission(user.id, formData, "referral:create")))
     redirect("/affiliates");
-  const parsed = referralSchema.parse({
+  const parsed = portalManualReferralSchema.parse({
     affiliateId: str(formData, "affiliateId"),
     leadId: str(formData, "leadId"),
-    clientId: str(formData, "clientId"),
-    status: str(formData, "status") || "PENDING",
+    reason: str(formData, "reason"),
   });
-  await getSupabaseAdmin()
-    .from("referrals")
-    .insert({
-      affiliate_id: parsed.affiliateId,
-      lead_id: parsed.leadId ?? null,
-      client_id: parsed.clientId ?? null,
-      status: parsed.status,
-    });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_record_manual_referral",
+    {
+      p_actor_crm_user_id: user.id,
+      p_lead_id: parsed.leadId,
+      p_selected_affiliate_id: parsed.affiliateId,
+      p_reason: parsed.reason,
+    },
+  );
+  if (error) throw error;
   revalidatePath("/affiliates");
   redirect("/affiliates");
 }
 
 export async function createCommission(formData: FormData) {
-  const user = await requirePermission(permissions.marketingWrite);
+  const user = await requirePermission(permissions.settingsManage);
   if (!(await reserveSubmission(user.id, formData, "commission:create")))
     redirect("/affiliates");
-  const parsed = commissionSchema.parse({
+  const parsed = portalCommissionSchema.parse({
     affiliateId: str(formData, "affiliateId"),
+    serviceId: str(formData, "serviceId"),
     quoteId: str(formData, "quoteId"),
     projectId: str(formData, "projectId"),
     paymentId: str(formData, "paymentId"),
     status: str(formData, "status"),
-    amountCents: randsToCents(formData.get("amountRands")),
-    commissionType: str(formData, "commissionType"),
+    baseAmountCents: randsToCents(formData.get("baseAmountRands")),
   });
-  await getSupabaseAdmin()
-    .from("commissions")
-    .insert({
-      affiliate_id: parsed.affiliateId,
-      quote_id: parsed.quoteId ?? null,
-      project_id: parsed.projectId ?? null,
-      payment_id: parsed.paymentId ?? null,
-      status: parsed.status,
-      amount_cents: parsed.amountCents,
-      commission_type: parsed.commissionType,
-      paid_at: parsed.status === "PAID" ? new Date().toISOString() : null,
-    });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_create_agreement_commission",
+    {
+      p_actor_crm_user_id: user.id,
+      p_affiliate_id: parsed.affiliateId,
+      p_service_id: parsed.serviceId,
+      p_quote_id: parsed.quoteId ?? null,
+      p_project_id: parsed.projectId ?? null,
+      p_payment_id: parsed.paymentId ?? null,
+      p_status: parsed.status,
+      p_base_amount_cents: parsed.baseAmountCents,
+    },
+  );
+  if (error) throw error;
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
+export async function saveAffiliateAgreement(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-agreement:save")))
+    redirect("/affiliates");
+  const parsed = portalAgreementSchema.parse({
+    agreementId: str(formData, "agreementId"),
+    affiliateId: str(formData, "affiliateId"),
+    commissionModel: str(formData, "commissionModel"),
+    defaultRatePercent: formData.get("defaultRatePercent"),
+    status: str(formData, "status"),
+    effectiveFrom: str(formData, "effectiveFrom"),
+    effectiveTo: str(formData, "effectiveTo"),
+    signedAt: formData.get("signed") === "on" ? new Date().toISOString() : str(formData, "signedAt"),
+    termsSummary: str(formData, "termsSummary"),
+  });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_save_agreement",
+    {
+      p_actor_crm_user_id: user.id,
+      p_agreement_id: parsed.agreementId ?? null,
+      p_affiliate_id: parsed.affiliateId,
+      p_commission_model: parsed.commissionModel,
+      p_default_rate_percent: parsed.defaultRatePercent ?? null,
+      p_status: parsed.status,
+      p_effective_from: parsed.effectiveFrom ?? null,
+      p_effective_to: parsed.effectiveTo ?? null,
+      p_signed_at: parsed.signedAt ?? null,
+      p_terms_summary: parsed.termsSummary,
+    },
+  );
+  if (error) throw error;
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
+export async function saveAffiliateAgreementRate(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-agreement-rate:save")))
+    redirect("/affiliates");
+  const parsed = portalAgreementRateSchema.parse({
+    agreementId: str(formData, "agreementId"),
+    serviceId: str(formData, "serviceId"),
+    ratePercent: formData.get("ratePercent"),
+    notes: str(formData, "notes") || undefined,
+  });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_save_agreement_rate",
+    {
+      p_actor_crm_user_id: user.id,
+      p_agreement_id: parsed.agreementId,
+      p_service_id: parsed.serviceId,
+      p_rate_percent: parsed.ratePercent,
+      p_notes: parsed.notes ?? null,
+    },
+  );
+  if (error) throw error;
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
+export async function approvePortalApplication(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-application:approve")))
+    redirect("/affiliates");
+  const parsed = portalApplicationApprovalSchema.parse({
+    applicationId: str(formData, "applicationId"),
+    approvalMode: str(formData, "approvalMode"),
+    selectedAffiliateId: str(formData, "selectedAffiliateId"),
+    newTrackingCode: str(formData, "newTrackingCode"),
+  });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_approve_application",
+    {
+      p_actor_crm_user_id: user.id,
+      p_application_id: parsed.applicationId,
+      p_approval_mode: parsed.approvalMode,
+      p_selected_affiliate_id: parsed.selectedAffiliateId ?? null,
+      p_new_tracking_code: parsed.newTrackingCode ?? null,
+    },
+  );
+  if (error) throw error;
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
+export async function declinePortalApplication(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-application:decline")))
+    redirect("/affiliates");
+  const parsed = portalApplicationDeclineSchema.parse({
+    applicationId: str(formData, "applicationId"),
+    reason: str(formData, "reason"),
+  });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_decline_application",
+    {
+      p_actor_crm_user_id: user.id,
+      p_application_id: parsed.applicationId,
+      p_reason: parsed.reason,
+    },
+  );
+  if (error) throw error;
   revalidatePath("/affiliates");
   redirect("/affiliates");
 }

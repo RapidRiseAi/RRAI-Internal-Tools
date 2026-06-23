@@ -8,7 +8,8 @@
     "start": "next start",
     "lint": "eslint .",
     "typecheck": "tsc --noEmit",
-    "test": "vitest run"
+    "test": "vitest run",
+    "test:affiliate-integration": "node tests/affiliate-portal-integration.mjs"
   },
   "dependencies": {
     "@supabase/supabase-js": "^2.76.1",
@@ -23,6 +24,7 @@
     "zod": "^4.1.12"
   },
   "devDependencies": {
+    "@electric-sql/pglite": "0.5.3",
     "@eslint/eslintrc": "^3.3.1",
     "@tailwindcss/postcss": "^4.1.14",
     "@testing-library/dom": "^10.4.1",

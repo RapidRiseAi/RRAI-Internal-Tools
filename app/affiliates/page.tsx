@@ -1,116 +1,36 @@
+import { AffiliateDashboard } from "@/components/affiliate-dashboard";
 import { AppShell } from "@/components/app-shell";
-import { AffiliateForm, ReferralCommissionForms } from "@/components/forms";
-import { Card, PageHeader, StatusBadge } from "@/components/ui";
-import {
-  genericList,
-  listClients,
-  listCommissions,
-  listLeads,
-  listPayments,
-  listReferrals,
-} from "@/lib/data";
-import { money } from "@/lib/format";
-import type { Affiliate, Project, Quote } from "@/lib/types";
+import { PageHeader } from "@/components/ui";
+import { loadAffiliateOperations } from "@/lib/affiliate-operations";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
+
 export const dynamic = "force-dynamic";
-export default async function Affiliates() {
-  await requirePagePermission(permissions.marketingRead);
-  const [
-    affiliates,
-    referrals,
-    commissions,
-    leads,
-    clients,
-    quotes,
-    projects,
-    payments,
-  ] = await Promise.all([
-    genericList<Affiliate>("affiliates"),
-    listReferrals(),
-    listCommissions(),
-    listLeads(),
-    listClients(),
-    genericList<Quote>("quotes"),
-    genericList<Project>("projects"),
-    listPayments(),
-  ]);
+
+export default async function AffiliatesPage() {
+  await requirePagePermission(permissions.settingsManage);
+  const data = await loadAffiliateOperations();
+  const portalUrl = process.env.NEXT_PUBLIC_AFFILIATE_PORTAL_URL
+    || "https://affaliate-system.vercel.app/partners";
+
   return (
     <AppShell>
       <PageHeader
-        eyebrow="Partners"
-        title="Affiliates"
-        description="Manage partner profiles, safe tracking codes, referrals, payable commissions and payment readiness."
+        eyebrow="Partner operations"
+        title="Affiliate command centre"
+        description="Review verified applicants, manage CRM affiliates, monitor referral performance, and create auditable commission records from one staff-only workspace."
+        actions={(
+          <a
+            href={portalUrl}
+            target="_blank"
+            rel="noreferrer"
+            className="inline-flex min-h-11 items-center rounded-lg border border-hairline bg-white/[0.03] px-4 py-2 text-sm font-semibold text-deck-text transition-colors hover:border-accent-cyan/40 hover:text-accent-cyan focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-accent-cyan"
+          >
+            Open partner portal
+          </a>
+        )}
       />
-      <div className="grid gap-6">
-        <Card>
-          <h2 className="mb-4 text-lg font-semibold">Create affiliate</h2>
-          <AffiliateForm />
-        </Card>
-        {affiliates.length ? (
-          <ReferralCommissionForms
-            affiliates={affiliates}
-            leads={leads}
-            clients={clients}
-            quotes={quotes}
-            projects={projects}
-            payments={payments}
-          />
-        ) : null}
-        <div className="grid gap-4 md:grid-cols-5">
-          {[
-            ["Affiliates", affiliates.length],
-            [
-              "Active",
-              affiliates.filter((affiliate) => affiliate.status === "ACTIVE")
-                .length,
-            ],
-            ["Referrals", referrals.length],
-            [
-              "Pending commissions",
-              commissions.filter((commission) => commission.status !== "PAID")
-                .length,
-            ],
-            [
-              "Payable",
-              money(
-                commissions
-                  .filter((commission) =>
-                    ["PAYABLE", "APPROVED"].includes(commission.status),
-                  )
-                  .reduce(
-                    (sum, commission) => sum + commission.amount_cents,
-                    0,
-                  ),
-              ),
-            ],
-          ].map(([label, value]) => (
-            <Card key={label}>
-              <p className="text-sm text-slate-400">{label}</p>
-              <p className="mt-3 text-2xl font-bold text-white">{value}</p>
-            </Card>
-          ))}
-        </div>
-        <Card>
-          <div className="grid gap-3">
-            {affiliates.map((affiliate) => (
-              <div
-                key={affiliate.id}
-                className="flex items-center justify-between rounded-xl bg-white/[0.04] p-3"
-              >
-                <div>
-                  <p className="font-semibold text-white">{affiliate.name}</p>
-                  <p className="text-sm text-slate-400">
-                    {affiliate.email} • /?ref={affiliate.tracking_code} •{" "}
-                    {affiliate.default_commission_rate}%
-                  </p>
-                </div>
-                <StatusBadge value={affiliate.status} />
-              </div>
-            ))}
-          </div>
-        </Card>
-      </div>
+      <AffiliateDashboard data={data} />
     </AppShell>
   );
 }
