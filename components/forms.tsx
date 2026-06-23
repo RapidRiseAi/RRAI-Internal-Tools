@@ -141,7 +141,7 @@ function Options({ values }: { values: readonly string[] }) {
   ));
 }
 
-function SubmissionInput({ scope }: { scope: string }) {
+export function SubmissionInput({ scope }: { scope: string }) {
   const submissionKey = useMemo(
     () =>
       `${scope}:${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`,

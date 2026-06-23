@@ -13,7 +13,7 @@ import {
 import type { AffiliateOperationsData, PortalApplication } from "@/lib/affiliate-operations";
 import { commissionStatuses, labelize } from "@/lib/constants";
 import { money } from "@/lib/format";
-import { AffiliateForm } from "./forms";
+import { AffiliateForm, SubmissionInput } from "./forms";
 import { SubmitButton } from "./submit-button";
 import { Card, EmptyState, Field, StatusBadge, inputClass } from "./ui";
 
@@ -69,7 +69,9 @@ function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
 
       {data.applications.length ? (
         <div className="mt-5 grid gap-4">
-          {data.applications.map((application) => (
+          {data.applications.map((application) => {
+            const submissionKey = globalThis.crypto.randomUUID();
+            return (
             <article key={application.id} className="rounded-xl border border-hairline bg-deck-bg/45 p-4">
               <div className="flex flex-wrap items-start justify-between gap-3">
                 <div>
@@ -91,10 +93,13 @@ function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
               </div>
 
               {application.status === "pending_review" ? (
-                <div className="mt-4 grid gap-3 xl:grid-cols-3">
+                <div className="mt-4">
+                  {!application.email_verified ? <div className="mb-3 rounded-lg border border-accent-copper/30 bg-accent-copper/10 px-4 py-3 text-sm text-accent-copper"><strong>Approval locked:</strong> the applicant must click the verification link sent to {application.email}. Refresh this page after they verify; the approval buttons will then unlock.</div> : null}
+                  <div className="grid gap-3 xl:grid-cols-3">
                   <form action={approvePortalApplication} className="rounded-lg border border-hairline bg-white/[0.025] p-4">
                     <input type="hidden" name="applicationId" value={application.id} />
                     <input type="hidden" name="approvalMode" value="create" />
+                    <input type="hidden" name="submissionKey" value={submissionKey} />
                     <Field label="Create CRM affiliate with tracking code">
                       <input className={inputClass} name="newTrackingCode" defaultValue={suggestedTrackingCode(application)} pattern="[a-z0-9][a-z0-9-]{3,39}" required />
                     </Field>
@@ -106,6 +111,7 @@ function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
                   <form action={approvePortalApplication} className="rounded-lg border border-hairline bg-white/[0.025] p-4">
                     <input type="hidden" name="applicationId" value={application.id} />
                     <input type="hidden" name="approvalMode" value="link" />
+                    <input type="hidden" name="submissionKey" value={submissionKey} />
                     <Field label="Link a selected existing affiliate">
                       <select className={inputClass} name="selectedAffiliateId" required>
                         <option value="">Choose an unmapped affiliate</option>
@@ -121,6 +127,7 @@ function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
 
                   <form action={declinePortalApplication} className="rounded-lg border border-neg/20 bg-neg/[0.035] p-4">
                     <input type="hidden" name="applicationId" value={application.id} />
+                    <input type="hidden" name="submissionKey" value={submissionKey} />
                     <Field label="Decline reason">
                       <input className={inputClass} name="reason" minLength={3} maxLength={500} required />
                     </Field>
@@ -128,6 +135,7 @@ function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
                       Decline and schedule cleanup
                     </SubmitButton>
                   </form>
+                  </div>
                 </div>
               ) : (
                 <p className="mt-3 text-sm text-deck-muted">
@@ -136,7 +144,8 @@ function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
                 </p>
               )}
             </article>
-          ))}
+            );
+          })}
         </div>
       ) : (
         <div className="mt-5"><EmptyState title="No partner applications" body="New verified applications from the affiliate portal will appear here for an explicit admin decision." /></div>
@@ -156,6 +165,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
       <p className="mt-1 text-sm text-deck-muted">Choose one model per agreement. Default and product-specific rates are negotiable and capped at 50%.</p>
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         <form action={saveAffiliateAgreement} className="grid gap-3 rounded-xl border border-hairline bg-deck-bg/45 p-4">
+          <SubmissionInput scope="affiliate-agreement-create" />
           <h3 className="font-semibold text-deck-text">Create agreement</h3>
           <Field label="Affiliate"><select className={inputClass} name="affiliateId" required><option value="">Choose affiliate</option>{data.affiliates.map((affiliate) => <option key={affiliate.id} value={affiliate.id}>{affiliate.name}</option>)}</select></Field>
           <Field label="Commission model"><select className={inputClass} name="commissionModel" required><option value="BUILD_COST">Build-cost commission</option><option value="LIFETIME">Lifetime commission</option></select></Field>
@@ -174,6 +184,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
             <article key={agreement.id} className="rounded-xl border border-hairline bg-deck-bg/45 p-4">
               <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-semibold text-deck-text">{affiliateById.get(agreement.affiliate_id)?.name ?? agreement.affiliate_id}</h3><p className="mt-1 text-sm text-accent-cyan">{modelLabel(agreement.commission_model)}</p></div><StatusBadge value={agreement.status} /></div>
               <form action={saveAffiliateAgreement} className="mt-4 grid gap-3">
+                <SubmissionInput scope={`affiliate-agreement-update:${agreement.id}`} />
                 <input type="hidden" name="agreementId" value={agreement.id} /><input type="hidden" name="affiliateId" value={agreement.affiliate_id} /><input type="hidden" name="signedAt" value={agreement.signed_at ?? ""} />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Model"><select className={inputClass} name="commissionModel" defaultValue={agreement.commission_model}><option value="BUILD_COST">Build-cost</option><option value="LIFETIME">Lifetime</option></select></Field>
@@ -187,6 +198,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
                 <SubmitButton className="min-h-11" pendingLabel="Updating…">Update agreement</SubmitButton>
               </form>
               <form action={saveAffiliateAgreementRate} className="mt-4 grid gap-3 border-t border-hairline pt-4">
+                <SubmissionInput scope={`affiliate-agreement-rate:${agreement.id}`} />
                 <input type="hidden" name="agreementId" value={agreement.id} />
                 <h4 className="text-sm font-semibold text-deck-text">Add or update product rate</h4>
                 <Field label="CRM product/service"><select className={inputClass} name="serviceId" required><option value="">Choose service</option>{data.services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></Field>
@@ -216,6 +228,7 @@ function ManualOperations({ data }: { data: AffiliateOperationsData }) {
         <p className="mt-1 mb-4 text-sm text-deck-muted">Creates the CRM referral and portal attribution together.</p>
         {data.affiliates.length && data.leads.length ? (
           <form action={createReferral} className="grid gap-3">
+            <SubmissionInput scope="affiliate-referral-create" />
             <Field label="Affiliate">
               <select className={inputClass} name="affiliateId" required>
                 {data.affiliates.map((affiliate) => <option key={affiliate.id} value={affiliate.id}>{affiliate.name}</option>)}
@@ -239,6 +252,7 @@ function ManualOperations({ data }: { data: AffiliateOperationsData }) {
         <p className="mt-1 mb-4 text-sm text-deck-muted">The active agreement determines the model and rate; the result is stored as a locked snapshot.</p>
         {data.agreements.some((agreement) => agreement.status === "ACTIVE") ? (
           <form action={createCommission} className="grid gap-3">
+            <SubmissionInput scope="affiliate-commission-create" />
             <Field label="Affiliate">
               <select className={inputClass} name="affiliateId" required>
                 {data.affiliates.filter((affiliate) => data.agreements.some((agreement) => agreement.affiliate_id === affiliate.id && agreement.status === "ACTIVE")).map((affiliate) => <option key={affiliate.id} value={affiliate.id}>{affiliate.name}</option>)}
