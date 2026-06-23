@@ -19,6 +19,7 @@ const ids = {
   quote: "70000000-0000-4000-8000-000000000001",
   project: "70000000-0000-4000-8000-000000000002",
   service: "80000000-0000-4000-8000-000000000001",
+  trackingLink: "90000000-0000-4000-8000-000000000001",
 };
 
 const db = new PGlite();
@@ -143,6 +144,20 @@ await db.exec(`
     created_at timestamptz not null default now(),
     updated_at timestamptz not null default now()
   );
+  create table public.affiliate_portal_tracking_links (
+    id uuid primary key default gen_random_uuid(),
+    affiliate_id uuid not null references public.affiliates(id),
+    tracking_token text not null unique,
+    destination_url text not null,
+    private_reference text not null,
+    channel text not null,
+    notes text,
+    custom_alias text,
+    is_active boolean not null default true,
+    created_at timestamptz not null default now(),
+    updated_at timestamptz not null default now(),
+    expires_at timestamptz
+  );
   create table public.affiliate_portal_commission_snapshots (
     commission_id uuid primary key references public.commissions(id),
     base_amount_cents integer not null,
@@ -188,6 +203,8 @@ await db.exec(`
   insert into public.quotes (id) values ('${ids.quote}');
   insert into public.projects (id) values ('${ids.project}');
   insert into public.services (id,name,category) values ('${ids.service}','Website Build','WEB');
+  insert into public.affiliate_portal_tracking_links (id,affiliate_id,tracking_token,destination_url,private_reference,channel)
+  values ('${ids.trackingLink}','${ids.affiliate}','test-link','/contact','Test','EMAIL');
 `);
 
 const migration = await readFile(
@@ -195,6 +212,11 @@ const migration = await readFile(
   "utf8",
 );
 await db.exec(migration);
+const managementMigration = await readFile(
+  new URL("../supabase/migrations/20260623181444_affiliate_portal_admin_management.sql", import.meta.url),
+  "utf8",
+);
+await db.exec(managementMigration);
 
 async function asService(sql, params = []) {
   await db.exec("begin");
@@ -229,7 +251,9 @@ const privileges = (await db.query(`
     has_function_privilege('authenticated','public.affiliate_portal_admin_approve_application(uuid,uuid,text,uuid,text)','execute') as authenticated_can_approve,
     has_function_privilege('anon','public.affiliate_portal_admin_approve_application(uuid,uuid,text,uuid,text)','execute') as anon_can_approve,
     has_function_privilege('service_role','public.affiliate_portal_admin_create_agreement_commission(uuid,uuid,uuid,uuid,uuid,uuid,text,integer)','execute') as service_can_create_agreement_commission,
-    has_function_privilege('service_role','public.affiliate_portal_admin_create_commission(uuid,uuid,uuid,uuid,uuid,text,text,integer,numeric)','execute') as legacy_commission_disabled
+    has_function_privilege('service_role','public.affiliate_portal_admin_create_commission(uuid,uuid,uuid,uuid,uuid,text,text,integer,numeric)','execute') as legacy_commission_disabled,
+    has_function_privilege('service_role','public.affiliate_portal_admin_update_commission_status(uuid,uuid,text)','execute') as service_can_manage_commissions,
+    has_function_privilege('authenticated','public.affiliate_portal_admin_update_commission_status(uuid,uuid,text)','execute') as authenticated_cannot_manage_commissions
 `)).rows[0];
 assert.deepEqual(privileges, {
   service_can_approve: true,
@@ -237,6 +261,8 @@ assert.deepEqual(privileges, {
   anon_can_approve: false,
   service_can_create_agreement_commission: true,
   legacy_commission_disabled: false,
+  service_can_manage_commissions: true,
+  authenticated_cannot_manage_commissions: false,
 });
 
 await assert.rejects(() => asService(
@@ -315,6 +341,17 @@ const snapshot = (await db.query("select base_amount_cents,rate_percent::text,co
 assert.deepEqual(snapshot, { base_amount_cents: 100000, rate_percent: "12.5000", commission_model: "BUILD_COST", service_id: ids.service });
 assert.equal((await db.query("select commission_type from public.commissions where id=$1", [commission[0].commission_id])).rows[0].commission_type, "ONCE_OFF");
 
+await asService("select public.affiliate_portal_admin_update_affiliate($1,$2,'Updated Affiliate','updated@example.com','updated-code','PAUSED')", [ids.admin, ids.affiliate]);
+assert.deepEqual((await db.query("select name,email,tracking_code,status from public.affiliates where id=$1", [ids.affiliate])).rows[0], { name: "Updated Affiliate", email: "updated@example.com", tracking_code: "updated-code", status: "PAUSED" });
+await asService("select public.affiliate_portal_admin_set_tracking_link_active($1,$2,false)", [ids.admin, ids.trackingLink]);
+assert.equal((await db.query("select is_active from public.affiliate_portal_tracking_links where id=$1", [ids.trackingLink])).rows[0].is_active, false);
+await asService("select public.affiliate_portal_admin_update_commission_status($1,$2,'PAYABLE')", [ids.admin, commission[0].commission_id]);
+await asService("select public.affiliate_portal_admin_update_commission_status($1,$2,'PAID')", [ids.admin, commission[0].commission_id]);
+assert.equal((await db.query("select status,paid_at is not null as paid from public.commissions where id=$1", [commission[0].commission_id])).rows[0].status, "PAID");
+await assert.rejects(() => asService("select public.affiliate_portal_admin_update_commission_status($1,$2,'APPROVED')", [ids.admin, commission[0].commission_id]));
+const usedRateId = (await db.query("select agreement_rate_id from public.affiliate_portal_commission_snapshots where commission_id=$1", [commission[0].commission_id])).rows[0].agreement_rate_id;
+await assert.rejects(() => asService("select public.affiliate_portal_admin_delete_agreement_rate($1,$2)", [ids.admin, usedRateId]));
+
 await db.exec(`
   create function public.fail_commission_audit() returns trigger language plpgsql as $$
   begin
@@ -342,6 +379,8 @@ console.log(JSON.stringify({
   customAgreementAndRateCap: "passed",
   productRateAndModelMapping: "passed",
   agreementOwnershipRls: "passed",
+  affiliateAndLinkManagement: "passed",
+  commissionStatusWorkflow: "passed",
   commissionAtomicRollback: "passed",
 }));
 

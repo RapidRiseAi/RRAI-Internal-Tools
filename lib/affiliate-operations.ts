@@ -40,8 +40,10 @@ export type PortalUserLink = {
 export type PortalTrackingLink = {
   id: string;
   affiliate_id: string;
+  tracking_token: string;
   destination_url: string;
-  campaign_name: string | null;
+  private_reference: string;
+  channel: string;
   is_active: boolean;
   created_at: string;
 };
@@ -160,7 +162,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     supabase.from("affiliates").select("*").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_partner_applications").select("*").order("submitted_at", { ascending: false }).limit(100),
     supabase.from("affiliate_portal_user_links").select("auth_user_id,affiliate_id,crm_user_id"),
-    supabase.from("affiliate_portal_tracking_links").select("id,affiliate_id,destination_url,campaign_name,is_active,created_at").order("created_at", { ascending: false }),
+    supabase.from("affiliate_portal_tracking_links").select("id,affiliate_id,tracking_token,destination_url,private_reference,channel,is_active,created_at").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_click_events").select("id,affiliate_id,occurred_at").order("occurred_at", { ascending: false }).limit(5000),
     supabase.from("referrals").select("*").order("created_at", { ascending: false }),
     supabase.from("commissions").select("*").order("created_at", { ascending: false }),

@@ -316,6 +316,24 @@ export const portalAgreementRateSchema = z.object({
   ratePercent: z.coerce.number().min(0.01).max(50),
   notes: z.string().trim().max(1000).optional(),
 });
+export const portalAffiliateUpdateSchema = z.object({
+  affiliateId: z.string().uuid(),
+  name: z.string().trim().min(2).max(200),
+  email: z.string().trim().email(),
+  trackingCode: z.string().trim().regex(/^[A-Za-z0-9][A-Za-z0-9_-]{3,63}$/),
+  status: z.enum(affiliateStatuses),
+});
+export const portalCommissionStatusSchema = z.object({
+  commissionId: z.string().uuid(),
+  status: z.enum(commissionStatuses),
+});
+export const portalTrackingLinkStatusSchema = z.object({
+  trackingLinkId: z.string().uuid(),
+  isActive: z.enum(["true", "false"]).transform((value) => value === "true"),
+});
+export const portalAgreementRateDeleteSchema = z.object({
+  agreementRateId: z.string().uuid(),
+});
 export const campaignSchema = z.object({
   name: z.string().trim().min(2),
   platform: z.string().trim().min(2),

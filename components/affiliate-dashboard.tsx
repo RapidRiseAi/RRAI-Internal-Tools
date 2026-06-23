@@ -2,9 +2,13 @@ import {
   approvePortalApplication,
   createCommission,
   createReferral,
+  deleteAffiliateAgreementRate,
   declinePortalApplication,
   saveAffiliateAgreement,
   saveAffiliateAgreementRate,
+  setPortalTrackingLinkActive,
+  updatePortalAffiliate,
+  updatePortalCommissionStatus,
 } from "@/lib/actions";
 import type { AffiliateOperationsData, PortalApplication } from "@/lib/affiliate-operations";
 import { commissionStatuses, labelize } from "@/lib/constants";
@@ -34,6 +38,13 @@ function dateTime(value: string | null) {
 function modelLabel(value: "BUILD_COST" | "LIFETIME") {
   return value === "BUILD_COST" ? "Build-cost commission" : "Lifetime commission";
 }
+
+const commissionTransitions: Record<string, string[]> = {
+  PENDING: ["APPROVED", "CANCELLED", "DISPUTED"],
+  APPROVED: ["PAYABLE", "CANCELLED", "DISPUTED"],
+  PAYABLE: ["PAID", "CANCELLED", "DISPUTED"],
+  DISPUTED: ["APPROVED", "CANCELLED"],
+};
 
 function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
   const mappedAffiliateIds = new Set(
@@ -182,7 +193,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
                 <div className="grid gap-3 sm:grid-cols-2"><Field label="Rate %"><input className={inputClass} name="ratePercent" type="number" min="0.01" max="50" step="0.01" required /></Field><Field label="Notes"><input className={inputClass} name="notes" maxLength={1000} /></Field></div>
                 <SubmitButton className="min-h-11" pendingLabel="Saving rate…">Save product rate</SubmitButton>
               </form>
-              {data.agreementRates.some((rate) => rate.agreement_id === agreement.id) ? <div className="mt-3 flex flex-wrap gap-2">{data.agreementRates.filter((rate) => rate.agreement_id === agreement.id).map((rate) => <span key={rate.id} className="rounded-full border border-accent-cyan/25 bg-accent-cyan/10 px-2.5 py-1 text-xs text-accent-cyan">{serviceById.get(rate.service_id)?.name ?? "Service"}: {rate.rate_percent}%</span>)}</div> : null}
+              {data.agreementRates.some((rate) => rate.agreement_id === agreement.id) ? <div className="mt-3 grid gap-2">{data.agreementRates.filter((rate) => rate.agreement_id === agreement.id).map((rate) => <div key={rate.id} className="flex items-center justify-between gap-3 rounded-lg border border-accent-cyan/20 bg-accent-cyan/[0.06] px-3 py-2"><span className="text-xs text-accent-cyan">{serviceById.get(rate.service_id)?.name ?? "Service"}: {rate.rate_percent}%</span><form action={deleteAffiliateAgreementRate}><input type="hidden" name="agreementRateId" value={rate.id} /><SubmitButton className="min-h-8 px-3 py-1 text-xs" pendingLabel="Removing…">Remove</SubmitButton></form></div>)}</div> : null}
             </article>
           )) : <EmptyState title="No agreements yet" body="Create a draft, record negotiated product rates, then activate it once signed." />}
         </div>
@@ -255,6 +266,41 @@ function ManualOperations({ data }: { data: AffiliateOperationsData }) {
   );
 }
 
+function AffiliateControls({ data }: { data: AffiliateOperationsData }) {
+  const affiliateById = new Map(data.affiliates.map((affiliate) => [affiliate.id, affiliate]));
+  return (
+    <div className="grid gap-4 xl:grid-cols-2">
+      <Card>
+        <p className="font-mono text-xs font-bold uppercase tracking-[0.22em] text-accent-cyan">Partner controls</p>
+        <h2 className="mt-2 font-display text-xl font-semibold text-deck-text">Affiliate records</h2>
+        <p className="mt-1 text-sm text-deck-muted">Update contact details, tracking codes and portal availability without changing historical commissions.</p>
+        {data.affiliates.length ? <div className="mt-5 grid gap-3">{data.affiliates.map((affiliate) => (
+          <form key={affiliate.id} action={updatePortalAffiliate} className="grid gap-3 rounded-xl border border-hairline bg-deck-bg/45 p-4 sm:grid-cols-2">
+            <input type="hidden" name="affiliateId" value={affiliate.id} />
+            <Field label="Name"><input className={inputClass} name="name" defaultValue={affiliate.name} required /></Field>
+            <Field label="Email"><input className={inputClass} name="email" type="email" defaultValue={affiliate.email} required /></Field>
+            <Field label="Tracking code"><input className={inputClass} name="trackingCode" defaultValue={affiliate.tracking_code} pattern="[A-Za-z0-9][A-Za-z0-9_-]{3,63}" required /></Field>
+            <Field label="Status"><select className={inputClass} name="status" defaultValue={affiliate.status}>{["ACTIVE", "PAUSED", "INACTIVE"].map((status) => <option key={status} value={status}>{labelize(status)}</option>)}</select></Field>
+            <div className="sm:col-span-2"><SubmitButton className="min-h-11" pendingLabel="Saving partner…">Save affiliate</SubmitButton></div>
+          </form>
+        ))}</div> : <div className="mt-5"><EmptyState title="No affiliate records" body="Approved partners will appear here." /></div>}
+      </Card>
+
+      <Card>
+        <p className="font-mono text-xs font-bold uppercase tracking-[0.22em] text-accent-cyan">Campaign safety</p>
+        <h2 className="mt-2 font-display text-xl font-semibold text-deck-text">Tracking-link controls</h2>
+        <p className="mt-1 text-sm text-deck-muted">Pause a link immediately without deleting its click history or attribution evidence.</p>
+        {data.trackingLinks.length ? <div className="mt-5 grid gap-3">{data.trackingLinks.map((link) => (
+          <article key={link.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl border border-hairline bg-deck-bg/45 p-4">
+            <div><p className="font-semibold text-deck-text">{link.private_reference}</p><p className="mt-1 text-xs text-deck-muted">{affiliateById.get(link.affiliate_id)?.name ?? "Affiliate"} · {link.channel} · {link.destination_url}</p><p className="mt-1 font-mono text-xs text-accent-cyan">{link.tracking_token}</p></div>
+            <form action={setPortalTrackingLinkActive}><input type="hidden" name="trackingLinkId" value={link.id} /><input type="hidden" name="isActive" value={link.is_active ? "false" : "true"} /><SubmitButton className="min-h-10" pendingLabel="Updating…">{link.is_active ? "Pause link" : "Reactivate link"}</SubmitButton></form>
+          </article>
+        ))}</div> : <div className="mt-5"><EmptyState title="No tracking links" body="Links generated by approved partners will appear here." /></div>}
+      </Card>
+    </div>
+  );
+}
+
 export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) {
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
@@ -273,6 +319,7 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
   for (const commission of data.commissions) commissionsByAffiliate.set(commission.affiliate_id, (commissionsByAffiliate.get(commission.affiliate_id) ?? 0) + commission.amount_cents);
   const snapshotByCommission = new Map(data.snapshots.map((snapshot) => [snapshot.commission_id, snapshot]));
   const affiliateById = new Map(data.affiliates.map((affiliate) => [affiliate.id, affiliate]));
+  const serviceById = new Map(data.services.map((service) => [service.id, service]));
 
   return (
     <div className="grid gap-6">
@@ -295,6 +342,7 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
       <ApplicationQueue data={data} />
       <AgreementManagement data={data} />
       <ManualOperations data={data} />
+      <AffiliateControls data={data} />
 
       <Card>
         <div className="flex items-center justify-between gap-3">
@@ -321,7 +369,8 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
           {data.commissions.length ? <div className="mt-4 grid gap-3">{data.commissions.slice(0, 20).map((commission) => {
             const affiliate = affiliateById.get(commission.affiliate_id);
             const snapshot = snapshotByCommission.get(commission.id);
-            return <div key={commission.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-deck-bg/45 p-3"><div><p className="font-semibold text-deck-text">{affiliate?.name ?? commission.affiliate_id}</p><p className="text-xs text-deck-muted">{snapshot ? `${money(snapshot.base_amount_cents)} × ${snapshot.rate_percent}%` : "Legacy commission without calculation snapshot"}</p></div><div className="flex items-center gap-3"><p className="font-mono font-semibold text-deck-text">{money(commission.amount_cents)}</p><StatusBadge value={commission.status} /></div></div>;
+            const transitions = commissionTransitions[commission.status] ?? [];
+            return <div key={commission.id} className="flex flex-wrap items-center justify-between gap-3 rounded-lg border border-hairline bg-deck-bg/45 p-3"><div><p className="font-semibold text-deck-text">{affiliate?.name ?? commission.affiliate_id}</p><p className="text-xs text-deck-muted">{snapshot ? `${serviceById.get(snapshot.service_id ?? "")?.name ?? modelLabel(snapshot.commission_model ?? "BUILD_COST")} · ${money(snapshot.base_amount_cents)} × ${snapshot.rate_percent}%` : "Legacy commission without calculation snapshot"}</p></div><div className="flex flex-wrap items-center gap-3"><p className="font-mono font-semibold text-deck-text">{money(commission.amount_cents)}</p><StatusBadge value={commission.status} />{transitions.length ? <form action={updatePortalCommissionStatus} className="flex items-center gap-2"><input type="hidden" name="commissionId" value={commission.id} /><select className={inputClass} name="status" aria-label="Next commission status">{transitions.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}</select><SubmitButton className="min-h-10 whitespace-nowrap" pendingLabel="Updating…">Update</SubmitButton></form> : null}</div></div>;
           })}</div> : <div className="mt-4"><EmptyState title="No commissions" body="Calculated commission records will appear here with their immutable base-and-rate evidence." /></div>}
         </Card>
 

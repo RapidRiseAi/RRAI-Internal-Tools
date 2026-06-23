@@ -45,11 +45,15 @@ import {
   noteSchema,
   paymentSchema,
   portalAgreementRateSchema,
+  portalAgreementRateDeleteSchema,
   portalAgreementSchema,
+  portalAffiliateUpdateSchema,
   portalApplicationApprovalSchema,
   portalApplicationDeclineSchema,
   portalCommissionSchema,
+  portalCommissionStatusSchema,
   portalManualReferralSchema,
+  portalTrackingLinkStatusSchema,
   payrollItemSchema,
   payrollRunSchema,
   projectChecklistSchema,
@@ -1880,6 +1884,56 @@ export async function saveAffiliateAgreementRate(formData: FormData) {
   if (error) throw error;
   revalidatePath("/affiliates");
   redirect("/affiliates");
+}
+
+export async function updatePortalAffiliate(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  const parsed = portalAffiliateUpdateSchema.parse({
+    affiliateId: str(formData, "affiliateId"), name: str(formData, "name"),
+    email: str(formData, "email"), trackingCode: str(formData, "trackingCode"),
+    status: str(formData, "status"),
+  });
+  const { error } = await getSupabaseAdmin().rpc("affiliate_portal_admin_update_affiliate", {
+    p_actor_crm_user_id: user.id, p_affiliate_id: parsed.affiliateId,
+    p_name: parsed.name, p_email: parsed.email, p_tracking_code: parsed.trackingCode,
+    p_status: parsed.status,
+  });
+  if (error) throw error;
+  revalidatePath("/affiliates");
+}
+
+export async function updatePortalCommissionStatus(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  const parsed = portalCommissionStatusSchema.parse({
+    commissionId: str(formData, "commissionId"), status: str(formData, "status"),
+  });
+  const { error } = await getSupabaseAdmin().rpc("affiliate_portal_admin_update_commission_status", {
+    p_actor_crm_user_id: user.id, p_commission_id: parsed.commissionId, p_status: parsed.status,
+  });
+  if (error) throw error;
+  revalidatePath("/affiliates");
+}
+
+export async function setPortalTrackingLinkActive(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  const parsed = portalTrackingLinkStatusSchema.parse({
+    trackingLinkId: str(formData, "trackingLinkId"), isActive: str(formData, "isActive"),
+  });
+  const { error } = await getSupabaseAdmin().rpc("affiliate_portal_admin_set_tracking_link_active", {
+    p_actor_crm_user_id: user.id, p_tracking_link_id: parsed.trackingLinkId, p_is_active: parsed.isActive,
+  });
+  if (error) throw error;
+  revalidatePath("/affiliates");
+}
+
+export async function deleteAffiliateAgreementRate(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  const parsed = portalAgreementRateDeleteSchema.parse({ agreementRateId: str(formData, "agreementRateId") });
+  const { error } = await getSupabaseAdmin().rpc("affiliate_portal_admin_delete_agreement_rate", {
+    p_actor_crm_user_id: user.id, p_agreement_rate_id: parsed.agreementRateId,
+  });
+  if (error) throw error;
+  revalidatePath("/affiliates");
 }
 
 export async function approvePortalApplication(formData: FormData) {
