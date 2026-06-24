@@ -1,29 +1,50 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
-import { useRouter } from "next/navigation";
+import { useState } from "react";
 import { LoginTransition } from "@/components/login-transition";
 import { SubmitButton } from "@/components/submit-button";
 import { Card, inputClass, LinkButton } from "@/components/ui";
-import { loginAction } from "@/lib/actions";
 
 export default function LoginPage() {
-  const [state, formAction, pending] = useActionState(loginAction, null);
-  const [successTransition, setSuccessTransition] = useState(false);
-  const router = useRouter();
-  const loginSucceeded = successTransition || Boolean(state?.success);
+  const [status, setStatus] = useState<"idle" | "pending" | "success">("idle");
+  const [error, setError] = useState("");
+  const pending = status === "pending";
+  const loginSucceeded = status === "success";
 
-  useEffect(() => {
-    if (!state?.success) return;
+  async function submit(event: React.FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (status !== "idle") return;
+    setStatus("pending");
+    setError("");
 
-    setSuccessTransition(true);
-    const timer = setTimeout(() => {
-      router.replace("/dashboard");
-      router.refresh();
-    }, 950);
+    const controller = new AbortController();
+    const timeout = window.setTimeout(() => controller.abort(), 20_000);
+    try {
+      const response = await fetch("/api/auth/login", {
+        method: "POST",
+        body: new FormData(event.currentTarget),
+        signal: controller.signal,
+      });
+      const result = await response.json().catch(() => null) as { ok?: boolean; error?: string } | null;
+      if (!response.ok || !result?.ok) {
+        setError(result?.error ?? "Login failed. Refresh the page and try again.");
+        setStatus("idle");
+        return;
+      }
 
-    return () => clearTimeout(timer);
-  }, [router, state]);
+      setStatus("success");
+      window.setTimeout(() => window.location.replace("/dashboard"), 350);
+    } catch (submissionError) {
+      setError(
+        submissionError instanceof DOMException && submissionError.name === "AbortError"
+          ? "Login took too long. Check your connection and try again."
+          : "The login request could not reach Rapid Rise OS. Refresh and try again.",
+      );
+      setStatus("idle");
+    } finally {
+      window.clearTimeout(timeout);
+    }
+  }
 
   return (
     <main className="grid min-h-screen place-items-center bg-[radial-gradient(circle_at_top,#1d4ed833,transparent_34rem)] px-6 py-10">
@@ -44,17 +65,17 @@ export default function LoginPage() {
           <section className="p-8 lg:p-10">
             <h2 className="text-xl font-semibold text-white">Welcome back</h2>
             <p className="mt-2 text-sm text-slate-400">Enter your employee credentials to continue to the dashboard.</p>
-            <form action={formAction} className="mt-6 grid gap-4">
-              <input className={inputClass} name="email" type="email" placeholder="owner@rapidrise.ai" autoComplete="email" disabled={loginSucceeded} required />
-              <input className={inputClass} name="password" type="password" placeholder="Password" autoComplete="current-password" disabled={loginSucceeded} required />
-              {state?.error ? <p className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{state.error}</p> : null}
-              <SubmitButton forcePending={loginSucceeded} pendingLabel={loginSucceeded ? "Opening dashboard…" : "Verifying credentials…"}>Sign in</SubmitButton>
+            <form onSubmit={submit} className="mt-6 grid gap-4">
+              <input className={inputClass} name="email" type="email" placeholder="owner@rapidrise.ai" autoComplete="email" disabled={pending || loginSucceeded} required />
+              <input className={inputClass} name="password" type="password" placeholder="Password" autoComplete="current-password" disabled={pending || loginSucceeded} required />
+              {error ? <p role="alert" className="rounded-xl border border-red-400/30 bg-red-400/10 px-3 py-2 text-sm text-red-200">{error}</p> : null}
+              <SubmitButton forcePending={pending || loginSucceeded} pendingLabel={loginSucceeded ? "Opening dashboard…" : "Verifying credentials…"}>Sign in</SubmitButton>
               <LoginTransition active={loginSucceeded} />
               <div className="relative my-1 text-center text-xs uppercase tracking-[0.2em] text-slate-500">or</div>
               <LinkButton href="/api/auth/google/start?mode=login" variant="ghost">Sign in with Google</LinkButton>
               <p className="text-xs leading-5 text-slate-500">The button stays in verification mode until Rapid Rise OS receives the login result. Google sign-in only works for active employee emails already approved in Rapid Rise OS.</p>
             </form>
-            {pending && !loginSucceeded ? <p className="mt-4 rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/10 px-4 py-3 text-xs font-semibold text-rapid-cyan">Checking credentials securely…</p> : null}
+            {pending ? <p role="status" className="mt-4 rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/10 px-4 py-3 text-xs font-semibold text-rapid-cyan">Checking credentials securely. This normally takes only a moment…</p> : null}
           </section>
         </div>
       </Card>
