@@ -78,12 +78,24 @@ export type PortalAgreement = {
   affiliate_id: string;
   commission_model: "BUILD_COST" | "LIFETIME";
   default_rate_percent: number | null;
-  status: "DRAFT" | "ACTIVE" | "SUSPENDED" | "ENDED";
+  status: "DRAFT" | "PENDING_SIGNATURE" | "ACTIVE" | "SUSPENDED" | "ENDED";
   effective_from: string | null;
   effective_to: string | null;
   signed_at: string | null;
   terms_summary: string | null;
+  signature_requested_at: string | null;
+  signature_request_expires_at: string | null;
   created_at: string;
+};
+
+export type PortalAgreementSignature = {
+  id: string;
+  agreement_id: string;
+  signer_name: string;
+  signer_email: string;
+  agreement_sha256: string;
+  consent_version: string;
+  signed_at: string;
 };
 
 export type PortalAgreementRate = {
@@ -104,6 +116,24 @@ export type PortalAuditEvent = {
   occurred_at: string;
 };
 
+export type PortalPayoutBatch = {
+  id: string;
+  reference: string;
+  status: "DRAFT" | "PROCESSING" | "PAID" | "CANCELLED";
+  scheduled_for: string | null;
+  paid_at: string | null;
+  notes: string | null;
+  created_at: string;
+};
+
+export type PortalPayoutItem = {
+  id: string;
+  payout_batch_id: string;
+  commission_id: string;
+  affiliate_id: string;
+  amount_cents: number;
+};
+
 export type AffiliateOperationsData = {
   affiliates: Affiliate[];
   applications: PortalApplication[];
@@ -115,6 +145,9 @@ export type AffiliateOperationsData = {
   snapshots: CommissionSnapshot[];
   agreements: PortalAgreement[];
   agreementRates: PortalAgreementRate[];
+  agreementSignatures: PortalAgreementSignature[];
+  payoutBatches: PortalPayoutBatch[];
+  payoutItems: PortalPayoutItem[];
   services: Service[];
   attributions: PortalAttribution[];
   auditEvents: PortalAuditEvent[];
@@ -134,7 +167,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     return {
       affiliates: [], applications: [], userLinks: [], trackingLinks: [], clicks: [],
       referrals: [], commissions: [], snapshots: [], attributions: [], auditEvents: [],
-      agreements: [], agreementRates: [], services: [], leads: [], quotes: [], projects: [], payments: [],
+      agreements: [], agreementRates: [], agreementSignatures: [], payoutBatches: [], payoutItems: [], services: [], leads: [], quotes: [], projects: [], payments: [],
     };
   }
 
@@ -150,6 +183,9 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     snapshotsResult,
     agreementsResult,
     agreementRatesResult,
+    agreementSignaturesResult,
+    payoutBatchesResult,
+    payoutItemsResult,
     servicesResult,
     attributionsResult,
     auditResult,
@@ -167,8 +203,11 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     supabase.from("referrals").select("*").order("created_at", { ascending: false }),
     supabase.from("commissions").select("*").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_commission_snapshots").select("commission_id,base_amount_cents,rate_percent,agreement_id,agreement_rate_id,service_id,commission_model"),
-    supabase.from("affiliate_portal_agreements").select("id,affiliate_id,commission_model,default_rate_percent,status,effective_from,effective_to,signed_at,terms_summary,created_at").order("created_at", { ascending: false }),
+    supabase.from("affiliate_portal_agreements").select("id,affiliate_id,commission_model,default_rate_percent,status,effective_from,effective_to,signed_at,terms_summary,signature_requested_at,signature_request_expires_at,created_at").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_agreement_rates").select("id,agreement_id,service_id,rate_percent,notes"),
+    supabase.from("affiliate_portal_agreement_signatures").select("id,agreement_id,signer_name,signer_email,agreement_sha256,consent_version,signed_at"),
+    supabase.from("affiliate_portal_payout_batches").select("id,reference,status,scheduled_for,paid_at,notes,created_at").order("created_at", { ascending: false }),
+    supabase.from("affiliate_portal_payout_items").select("id,payout_batch_id,commission_id,affiliate_id,amount_cents"),
     supabase.from("services").select("id,name,category,description,base_once_off_cents,base_monthly_cents,is_active").eq("is_active", true).order("name"),
     supabase.from("affiliate_portal_lead_attributions").select("id,crm_referral_id,attribution_source,fraud_flag,manual_attribution_reason,created_at").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_audit_events").select("id,actor_crm_user_id,affiliate_id,action_type,entity_type,entity_id,occurred_at").order("occurred_at", { ascending: false }).limit(50),
@@ -203,6 +242,9 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     snapshots: dataOrThrow<CommissionSnapshot[]>(snapshotsResult, "Load commission snapshots"),
     agreements: dataOrThrow<PortalAgreement[]>(agreementsResult, "Load affiliate agreements"),
     agreementRates: dataOrThrow<PortalAgreementRate[]>(agreementRatesResult, "Load agreement product rates"),
+    agreementSignatures: dataOrThrow<PortalAgreementSignature[]>(agreementSignaturesResult, "Load agreement signatures"),
+    payoutBatches: dataOrThrow<PortalPayoutBatch[]>(payoutBatchesResult, "Load payout batches"),
+    payoutItems: dataOrThrow<PortalPayoutItem[]>(payoutItemsResult, "Load payout items"),
     services: dataOrThrow<Service[]>(servicesResult, "Load CRM services"),
     attributions: dataOrThrow<PortalAttribution[]>(attributionsResult, "Load lead attributions"),
     auditEvents: dataOrThrow<PortalAuditEvent[]>(auditResult, "Load portal audit events"),

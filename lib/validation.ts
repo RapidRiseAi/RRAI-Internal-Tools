@@ -297,18 +297,30 @@ export const portalAgreementSchema = z.object({
     (value) => value === "" || value === null ? undefined : value,
     z.coerce.number().min(0.01).max(50).optional(),
   ),
-  status: z.enum(["DRAFT", "ACTIVE", "SUSPENDED", "ENDED"]),
+  status: z.literal("DRAFT"),
   effectiveFrom: z.preprocess((value) => value === "" ? undefined : value, z.string().date().optional()),
   effectiveTo: z.preprocess((value) => value === "" ? undefined : value, z.string().date().optional()),
   signedAt: z.preprocess((value) => value === "" ? undefined : value, z.string().datetime().optional()),
   termsSummary: z.string().trim().min(3).max(5000),
 }).superRefine((value, context) => {
-  if (value.status === "ACTIVE" && !value.signedAt) {
-    context.addIssue({ code: "custom", path: ["signedAt"], message: "Active agreements must be signed." });
-  }
   if (value.effectiveFrom && value.effectiveTo && value.effectiveTo < value.effectiveFrom) {
     context.addIssue({ code: "custom", path: ["effectiveTo"], message: "The end date cannot precede the start date." });
   }
+});
+export const portalAgreementActionSchema = z.object({ agreementId: z.string().uuid() });
+export const portalAgreementStatusSchema = z.object({
+  agreementId: z.string().uuid(),
+  status: z.enum(["ACTIVE", "SUSPENDED", "ENDED"]),
+});
+export const portalPayoutBatchSchema = z.object({
+  reference: z.string().trim().min(3).max(100),
+  scheduledFor: z.preprocess((value) => value === "" ? undefined : value, z.string().date().optional()),
+  notes: z.string().trim().max(2000).optional(),
+  commissionIds: z.array(z.string().uuid()).min(1),
+});
+export const portalPayoutStatusSchema = z.object({
+  payoutBatchId: z.string().uuid(),
+  status: z.enum(["PROCESSING", "PAID", "CANCELLED"]),
 });
 export const portalAgreementRateSchema = z.object({
   agreementId: z.string().uuid(),

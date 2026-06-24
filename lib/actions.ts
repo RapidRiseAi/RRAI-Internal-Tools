@@ -10,6 +10,12 @@ import {
   requireUser,
 } from "./auth";
 import { buildOnceOffInvoiceItemsFromQuoteItems } from "./business-rules";
+import {
+  affiliateAgreementUrl,
+  affiliateAuthUserId,
+  escapeEmailHtml,
+  sendAffiliateNotification,
+} from "./affiliate-email";
 import { labelize, permissions } from "./constants";
 import { goalMetricMap } from "./goal-metrics";
 import { getSupabaseAdmin } from "./supabase";
@@ -46,13 +52,17 @@ import {
   paymentSchema,
   portalAgreementRateSchema,
   portalAgreementRateDeleteSchema,
+  portalAgreementActionSchema,
   portalAgreementSchema,
+  portalAgreementStatusSchema,
   portalAffiliateUpdateSchema,
   portalApplicationApprovalSchema,
   portalApplicationDeclineSchema,
   portalCommissionSchema,
   portalCommissionStatusSchema,
   portalManualReferralSchema,
+  portalPayoutBatchSchema,
+  portalPayoutStatusSchema,
   portalTrackingLinkStatusSchema,
   payrollItemSchema,
   payrollRunSchema,
@@ -1411,6 +1421,25 @@ export async function recordPayment(formData: FormData) {
       .from("invoices")
       .update({ status: "PAID" })
       .eq("id", parsed.invoiceId);
+  if (parsed.status === "PAID") {
+    const { data: automatedCommissions } = await supabase
+      .from("commissions")
+      .select("affiliate_id,amount_cents")
+      .eq("payment_id", data.id);
+    const totals = new Map<string, number>();
+    for (const commission of automatedCommissions ?? []) {
+      totals.set(commission.affiliate_id, (totals.get(commission.affiliate_id) ?? 0) + commission.amount_cents);
+    }
+    for (const [affiliateId, amountCents] of totals) {
+      const authUserId = await affiliateAuthUserId(affiliateId);
+      if (authUserId) await notifyAffiliateSafely({
+        authUserId,
+        preference: "commission_created",
+        subject: "A new Rapid Rise AI affiliate commission was recorded",
+        html: `<h1>New commission</h1><p>A commission of R${(amountCents / 100).toFixed(2)} was created automatically from a paid client invoice.</p>`,
+      });
+    }
+  }
   await logActivity({
     action: "PAYMENT_RECORDED",
     entityType: "Payment",
@@ -1795,6 +1824,18 @@ export async function createReferral(formData: FormData) {
   redirect("/affiliates");
 }
 
+async function notifyAffiliateSafely(
+  input: Parameters<typeof sendAffiliateNotification>[0],
+) {
+  try {
+    await sendAffiliateNotification(input);
+  } catch (error) {
+    console.error("affiliate_notification_failed", {
+      code: error instanceof Error ? error.message.slice(0, 80) : "unknown",
+    });
+  }
+}
+
 export async function createCommission(formData: FormData) {
   const user = await requirePermission(permissions.settingsManage);
   if (!(await reserveSubmission(user.id, formData, "commission:create")))
@@ -1808,7 +1849,7 @@ export async function createCommission(formData: FormData) {
     status: str(formData, "status"),
     baseAmountCents: randsToCents(formData.get("baseAmountRands")),
   });
-  const { error } = await getSupabaseAdmin().rpc(
+  const { data, error } = await getSupabaseAdmin().rpc(
     "affiliate_portal_admin_create_agreement_commission",
     {
       p_actor_crm_user_id: user.id,
@@ -1822,6 +1863,16 @@ export async function createCommission(formData: FormData) {
     },
   );
   if (error) throw error;
+  const authUserId = await affiliateAuthUserId(parsed.affiliateId);
+  if (authUserId) {
+    const created = data?.[0] as { amount_cents?: number } | undefined;
+    await notifyAffiliateSafely({
+      authUserId,
+      preference: "commission_created",
+      subject: "A new Rapid Rise AI affiliate commission was recorded",
+      html: `<h1>New commission</h1><p>A commission of R${((created?.amount_cents ?? 0) / 100).toFixed(2)} has been recorded in your affiliate portal.</p>`,
+    });
+  }
   revalidatePath("/affiliates");
   redirect("/affiliates");
 }
@@ -1838,7 +1889,7 @@ export async function saveAffiliateAgreement(formData: FormData) {
     status: str(formData, "status"),
     effectiveFrom: str(formData, "effectiveFrom"),
     effectiveTo: str(formData, "effectiveTo"),
-    signedAt: formData.get("signed") === "on" ? new Date().toISOString() : str(formData, "signedAt"),
+    signedAt: undefined,
     termsSummary: str(formData, "termsSummary"),
   });
   const { error } = await getSupabaseAdmin().rpc(
@@ -1852,7 +1903,7 @@ export async function saveAffiliateAgreement(formData: FormData) {
       p_status: parsed.status,
       p_effective_from: parsed.effectiveFrom ?? null,
       p_effective_to: parsed.effectiveTo ?? null,
-      p_signed_at: parsed.signedAt ?? null,
+      p_signed_at: null,
       p_terms_summary: parsed.termsSummary,
     },
   );
@@ -1886,6 +1937,126 @@ export async function saveAffiliateAgreementRate(formData: FormData) {
   redirect("/affiliates");
 }
 
+export async function sendAffiliateAgreementForSignature(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-agreement:send")))
+    redirect("/affiliates");
+  const parsed = portalAgreementActionSchema.parse({ agreementId: str(formData, "agreementId") });
+  const { data, error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_send_agreement_for_signature",
+    { p_actor_crm_user_id: user.id, p_agreement_id: parsed.agreementId },
+  );
+  if (error) throw error;
+  const recipient = data?.[0] as { auth_user_id?: string; expires_at?: string } | undefined;
+  if (recipient?.auth_user_id) {
+    await notifyAffiliateSafely({
+      authUserId: recipient.auth_user_id,
+      preference: "agreement_updates",
+      subject: "Your Rapid Rise AI affiliate agreement is ready to sign",
+      html: `<h1>Your agreement is ready</h1><p>Review and electronically sign your negotiated affiliate agreement.</p><p><a href="${escapeEmailHtml(affiliateAgreementUrl())}">Review and sign agreement</a></p><p>This request expires ${escapeEmailHtml(recipient.expires_at ? new Date(recipient.expires_at).toLocaleDateString("en-ZA") : "in 30 days")}.</p>`,
+    });
+  }
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
+export async function cancelAffiliateSignatureRequest(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-agreement:cancel-signature")))
+    redirect("/affiliates");
+  const parsed = portalAgreementActionSchema.parse({ agreementId: str(formData, "agreementId") });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_cancel_signature_request",
+    { p_actor_crm_user_id: user.id, p_agreement_id: parsed.agreementId },
+  );
+  if (error) throw error;
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
+export async function updateAffiliateAgreementStatus(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  const parsed = portalAgreementStatusSchema.parse({
+    agreementId: str(formData, "agreementId"),
+    status: str(formData, "status"),
+  });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_update_agreement_status",
+    { p_actor_crm_user_id: user.id, p_agreement_id: parsed.agreementId, p_status: parsed.status },
+  );
+  if (error) throw error;
+  revalidatePath("/affiliates");
+}
+
+export async function createAffiliatePayoutBatch(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-payout:create")))
+    redirect("/affiliates");
+  const parsed = portalPayoutBatchSchema.parse({
+    reference: str(formData, "reference"),
+    scheduledFor: str(formData, "scheduledFor"),
+    notes: str(formData, "notes") || undefined,
+    commissionIds: formData.getAll("commissionIds").map(String),
+  });
+  const { error } = await getSupabaseAdmin().rpc(
+    "affiliate_portal_admin_create_payout_batch",
+    {
+      p_actor_crm_user_id: user.id,
+      p_reference: parsed.reference,
+      p_scheduled_for: parsed.scheduledFor ?? null,
+      p_notes: parsed.notes ?? null,
+      p_commission_ids: parsed.commissionIds,
+    },
+  );
+  if (error) throw error;
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
+export async function updateAffiliatePayoutBatchStatus(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  if (!(await reserveSubmission(user.id, formData, "affiliate-payout:status")))
+    redirect("/affiliates");
+  const parsed = portalPayoutStatusSchema.parse({
+    payoutBatchId: str(formData, "payoutBatchId"),
+    status: str(formData, "status"),
+  });
+  const supabase = getSupabaseAdmin();
+  const { data: items } = await supabase
+    .from("affiliate_portal_payout_items")
+    .select("affiliate_id,amount_cents")
+    .eq("payout_batch_id", parsed.payoutBatchId);
+  const { data: batch } = await supabase
+    .from("affiliate_portal_payout_batches")
+    .select("reference")
+    .eq("id", parsed.payoutBatchId)
+    .maybeSingle();
+  const { error } = await supabase.rpc(
+    "affiliate_portal_admin_update_payout_batch_status",
+    {
+      p_actor_crm_user_id: user.id,
+      p_payout_batch_id: parsed.payoutBatchId,
+      p_status: parsed.status,
+    },
+  );
+  if (error) throw error;
+  if (parsed.status === "PAID") {
+    const totals = new Map<string, number>();
+    for (const item of items ?? []) totals.set(item.affiliate_id, (totals.get(item.affiliate_id) ?? 0) + item.amount_cents);
+    for (const [affiliateId, amountCents] of totals) {
+      const authUserId = await affiliateAuthUserId(affiliateId);
+      if (authUserId) await notifyAffiliateSafely({
+        authUserId,
+        preference: "payout_summaries",
+        subject: "Your Rapid Rise AI affiliate payout was marked paid",
+        html: `<h1>Payout paid</h1><p>Payout ${escapeEmailHtml(batch?.reference ?? parsed.payoutBatchId.slice(0, 8))} for R${(amountCents / 100).toFixed(2)} was marked paid.</p>`,
+      });
+    }
+  }
+  revalidatePath("/affiliates");
+  redirect("/affiliates");
+}
+
 export async function updatePortalAffiliate(formData: FormData) {
   const user = await requirePermission(permissions.settingsManage);
   const parsed = portalAffiliateUpdateSchema.parse({
@@ -1907,10 +2078,21 @@ export async function updatePortalCommissionStatus(formData: FormData) {
   const parsed = portalCommissionStatusSchema.parse({
     commissionId: str(formData, "commissionId"), status: str(formData, "status"),
   });
-  const { error } = await getSupabaseAdmin().rpc("affiliate_portal_admin_update_commission_status", {
+  const supabase = getSupabaseAdmin();
+  const { data: existing } = await supabase.from("commissions").select("affiliate_id,amount_cents,status").eq("id", parsed.commissionId).maybeSingle();
+  const { error } = await supabase.rpc("affiliate_portal_admin_update_commission_status", {
     p_actor_crm_user_id: user.id, p_commission_id: parsed.commissionId, p_status: parsed.status,
   });
   if (error) throw error;
+  if (existing) {
+    const authUserId = await affiliateAuthUserId(existing.affiliate_id);
+    if (authUserId) await notifyAffiliateSafely({
+      authUserId,
+      preference: parsed.status === "PAID" ? "commission_paid" : "commission_status_updates",
+      subject: parsed.status === "PAID" ? "Your Rapid Rise AI affiliate commission was paid" : "Your affiliate commission status changed",
+      html: `<h1>Commission ${escapeEmailHtml(parsed.status.toLowerCase())}</h1><p>Your R${(existing.amount_cents / 100).toFixed(2)} commission is now ${escapeEmailHtml(parsed.status.toLowerCase())}.</p>`,
+    });
+  }
   revalidatePath("/affiliates");
 }
 
@@ -1946,7 +2128,9 @@ export async function approvePortalApplication(formData: FormData) {
     selectedAffiliateId: str(formData, "selectedAffiliateId"),
     newTrackingCode: str(formData, "newTrackingCode"),
   });
-  const { error } = await getSupabaseAdmin().rpc(
+  const supabase = getSupabaseAdmin();
+  const { data: application } = await supabase.from("affiliate_portal_partner_applications").select("auth_user_id,first_name").eq("id", parsed.applicationId).maybeSingle();
+  const { error } = await supabase.rpc(
     "affiliate_portal_admin_approve_application",
     {
       p_actor_crm_user_id: user.id,
@@ -1957,6 +2141,12 @@ export async function approvePortalApplication(formData: FormData) {
     },
   );
   if (error) throw error;
+  if (application) await notifyAffiliateSafely({
+    authUserId: application.auth_user_id,
+    preference: "application_updates",
+    subject: "Your Rapid Rise AI partner application was approved",
+    html: `<h1>Welcome to the partner network</h1><p>Hi ${escapeEmailHtml(application.first_name)}, your application has been approved. You can now sign in to your affiliate portal.</p>`,
+  });
   revalidatePath("/affiliates");
   redirect("/affiliates");
 }
@@ -1969,7 +2159,9 @@ export async function declinePortalApplication(formData: FormData) {
     applicationId: str(formData, "applicationId"),
     reason: str(formData, "reason"),
   });
-  const { error } = await getSupabaseAdmin().rpc(
+  const supabase = getSupabaseAdmin();
+  const { data: application } = await supabase.from("affiliate_portal_partner_applications").select("auth_user_id,first_name").eq("id", parsed.applicationId).maybeSingle();
+  const { error } = await supabase.rpc(
     "affiliate_portal_admin_decline_application",
     {
       p_actor_crm_user_id: user.id,
@@ -1978,6 +2170,12 @@ export async function declinePortalApplication(formData: FormData) {
     },
   );
   if (error) throw error;
+  if (application) await notifyAffiliateSafely({
+    authUserId: application.auth_user_id,
+    preference: "application_updates",
+    subject: "Update on your Rapid Rise AI partner application",
+    html: `<h1>Application update</h1><p>Hi ${escapeEmailHtml(application.first_name)}, your partner application was not approved.</p><p>Reason: ${escapeEmailHtml(parsed.reason)}</p>`,
+  });
   revalidatePath("/affiliates");
   redirect("/affiliates");
 }

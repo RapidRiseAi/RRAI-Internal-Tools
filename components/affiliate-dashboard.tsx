@@ -1,13 +1,18 @@
 import {
   approvePortalApplication,
+  cancelAffiliateSignatureRequest,
+  createAffiliatePayoutBatch,
   createCommission,
   createReferral,
   deleteAffiliateAgreementRate,
   declinePortalApplication,
   saveAffiliateAgreement,
   saveAffiliateAgreementRate,
+  sendAffiliateAgreementForSignature,
   setPortalTrackingLinkActive,
   updatePortalAffiliate,
+  updateAffiliateAgreementStatus,
+  updateAffiliatePayoutBatchStatus,
   updatePortalCommissionStatus,
 } from "@/lib/actions";
 import type { AffiliateOperationsData, PortalApplication } from "@/lib/affiliate-operations";
@@ -157,45 +162,48 @@ function ApplicationQueue({ data }: { data: AffiliateOperationsData }) {
 function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
   const affiliateById = new Map(data.affiliates.map((affiliate) => [affiliate.id, affiliate]));
   const serviceById = new Map(data.services.map((service) => [service.id, service]));
+  const signatureByAgreement = new Map(data.agreementSignatures.map((signature) => [signature.agreement_id, signature]));
 
   return (
     <Card>
       <p className="font-mono text-xs font-bold uppercase tracking-[0.22em] text-accent-cyan">Commercial terms</p>
-      <h2 className="mt-2 font-display text-xl font-semibold text-deck-text">Custom affiliate agreements</h2>
-      <p className="mt-1 text-sm text-deck-muted">Choose one model per agreement. Default and product-specific rates are negotiable and capped at 50%.</p>
+      <h2 className="mt-2 font-display text-xl font-semibold text-deck-text">Electronic affiliate agreements</h2>
+      <p className="mt-1 text-sm text-deck-muted">Build an unsigned draft, add negotiated rates, then send it to the verified affiliate for electronic signature. Signed terms are immutable.</p>
       <div className="mt-5 grid gap-4 xl:grid-cols-2">
         <form action={saveAffiliateAgreement} className="grid gap-3 rounded-xl border border-hairline bg-deck-bg/45 p-4">
           <SubmissionInput scope="affiliate-agreement-create" />
-          <h3 className="font-semibold text-deck-text">Create agreement</h3>
+          <input type="hidden" name="status" value="DRAFT" />
+          <h3 className="font-semibold text-deck-text">Create agreement draft</h3>
           <Field label="Affiliate"><select className={inputClass} name="affiliateId" required><option value="">Choose affiliate</option>{data.affiliates.map((affiliate) => <option key={affiliate.id} value={affiliate.id}>{affiliate.name}</option>)}</select></Field>
           <Field label="Commission model"><select className={inputClass} name="commissionModel" required><option value="BUILD_COST">Build-cost commission</option><option value="LIFETIME">Lifetime commission</option></select></Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Default rate % (optional)"><input className={inputClass} name="defaultRatePercent" type="number" min="0.01" max="50" step="0.01" /></Field>
-            <Field label="Status"><select className={inputClass} name="status"><option value="DRAFT">Draft</option><option value="ACTIVE">Active</option></select></Field>
             <Field label="Effective from"><input className={inputClass} name="effectiveFrom" type="date" /></Field>
             <Field label="Effective to"><input className={inputClass} name="effectiveTo" type="date" /></Field>
           </div>
           <Field label="Negotiated terms"><textarea className={inputClass} name="termsSummary" minLength={3} maxLength={5000} required /></Field>
-          <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-deck-text"><input name="signed" type="checkbox" /> Agreement has been signed</label>
-          <SubmitButton className="min-h-11" pendingLabel="Saving agreement…">Save agreement</SubmitButton>
+          <SubmitButton className="min-h-11" pendingLabel="Saving draft…">Save draft</SubmitButton>
         </form>
         <div className="grid gap-3">
-          {data.agreements.length ? data.agreements.map((agreement) => (
+          {data.agreements.length ? data.agreements.map((agreement) => {
+            const signature = signatureByAgreement.get(agreement.id);
+            const agreementRates = data.agreementRates.filter((rate) => rate.agreement_id === agreement.id);
+            const operationalStatus = agreement.status === "SUSPENDED" || agreement.status === "ENDED" ? agreement.status : "ACTIVE";
+            return (
             <article key={agreement.id} className="rounded-xl border border-hairline bg-deck-bg/45 p-4">
               <div className="flex flex-wrap items-start justify-between gap-2"><div><h3 className="font-semibold text-deck-text">{affiliateById.get(agreement.affiliate_id)?.name ?? agreement.affiliate_id}</h3><p className="mt-1 text-sm text-accent-cyan">{modelLabel(agreement.commission_model)}</p></div><StatusBadge value={agreement.status} /></div>
+              {agreement.status === "DRAFT" ? <>
               <form action={saveAffiliateAgreement} className="mt-4 grid gap-3">
                 <SubmissionInput scope={`affiliate-agreement-update:${agreement.id}`} />
-                <input type="hidden" name="agreementId" value={agreement.id} /><input type="hidden" name="affiliateId" value={agreement.affiliate_id} /><input type="hidden" name="signedAt" value={agreement.signed_at ?? ""} />
+                <input type="hidden" name="agreementId" value={agreement.id} /><input type="hidden" name="affiliateId" value={agreement.affiliate_id} /><input type="hidden" name="status" value="DRAFT" />
                 <div className="grid gap-3 sm:grid-cols-2">
                   <Field label="Model"><select className={inputClass} name="commissionModel" defaultValue={agreement.commission_model}><option value="BUILD_COST">Build-cost</option><option value="LIFETIME">Lifetime</option></select></Field>
                   <Field label="Default %"><input className={inputClass} name="defaultRatePercent" type="number" min="0.01" max="50" step="0.01" defaultValue={agreement.default_rate_percent ?? ""} /></Field>
-                  <Field label="Status"><select className={inputClass} name="status" defaultValue={agreement.status}>{["DRAFT", "ACTIVE", "SUSPENDED", "ENDED"].map((status) => <option key={status}>{status}</option>)}</select></Field>
                   <Field label="Effective from"><input className={inputClass} name="effectiveFrom" type="date" defaultValue={agreement.effective_from ?? ""} /></Field>
                   <Field label="Effective to"><input className={inputClass} name="effectiveTo" type="date" defaultValue={agreement.effective_to ?? ""} /></Field>
                 </div>
                 <Field label="Terms"><textarea className={inputClass} name="termsSummary" minLength={3} maxLength={5000} defaultValue={agreement.terms_summary ?? ""} required /></Field>
-                {!agreement.signed_at ? <label className="flex min-h-11 cursor-pointer items-center gap-3 text-sm text-deck-text"><input name="signed" type="checkbox" /> Mark agreement signed now</label> : <p className="text-xs text-pos">Signed {dateTime(agreement.signed_at)}</p>}
-                <SubmitButton className="min-h-11" pendingLabel="Updating…">Update agreement</SubmitButton>
+                <SubmitButton className="min-h-11" pendingLabel="Updating draft…">Update draft</SubmitButton>
               </form>
               <form action={saveAffiliateAgreementRate} className="mt-4 grid gap-3 border-t border-hairline pt-4">
                 <SubmissionInput scope={`affiliate-agreement-rate:${agreement.id}`} />
@@ -205,9 +213,11 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
                 <div className="grid gap-3 sm:grid-cols-2"><Field label="Rate %"><input className={inputClass} name="ratePercent" type="number" min="0.01" max="50" step="0.01" required /></Field><Field label="Notes"><input className={inputClass} name="notes" maxLength={1000} /></Field></div>
                 <SubmitButton className="min-h-11" pendingLabel="Saving rate…">Save product rate</SubmitButton>
               </form>
-              {data.agreementRates.some((rate) => rate.agreement_id === agreement.id) ? <div className="mt-3 grid gap-2">{data.agreementRates.filter((rate) => rate.agreement_id === agreement.id).map((rate) => <div key={rate.id} className="flex items-center justify-between gap-3 rounded-lg border border-accent-cyan/20 bg-accent-cyan/[0.06] px-3 py-2"><span className="text-xs text-accent-cyan">{serviceById.get(rate.service_id)?.name ?? "Service"}: {rate.rate_percent}%</span><form action={deleteAffiliateAgreementRate}><input type="hidden" name="agreementRateId" value={rate.id} /><SubmitButton className="min-h-8 px-3 py-1 text-xs" pendingLabel="Removing…">Remove</SubmitButton></form></div>)}</div> : null}
+              {agreementRates.length ? <div className="mt-3 grid gap-2">{agreementRates.map((rate) => <div key={rate.id} className="flex items-center justify-between gap-3 rounded-lg border border-accent-cyan/20 bg-accent-cyan/[0.06] px-3 py-2"><span className="text-xs text-accent-cyan">{serviceById.get(rate.service_id)?.name ?? "Service"}: {rate.rate_percent}%</span><form action={deleteAffiliateAgreementRate}><input type="hidden" name="agreementRateId" value={rate.id} /><SubmitButton className="min-h-8 px-3 py-1 text-xs" pendingLabel="Removing…">Remove</SubmitButton></form></div>)}</div> : null}
+              <form action={sendAffiliateAgreementForSignature} className="mt-4 border-t border-hairline pt-4"><SubmissionInput scope={`affiliate-agreement-send:${agreement.id}`} /><input type="hidden" name="agreementId" value={agreement.id} /><SubmitButton className="min-h-11 w-full" pendingLabel="Sending signature request…">Send for electronic signature</SubmitButton></form>
+              </> : <div className="mt-4 grid gap-3 rounded-lg border border-hairline bg-white/[0.02] p-4"><p className="whitespace-pre-wrap text-sm leading-6 text-deck-muted">{agreement.terms_summary}</p><p className="text-sm text-accent-cyan">{agreement.default_rate_percent ? `Default rate: ${agreement.default_rate_percent}%` : "Product-specific rates"}</p>{agreement.status === "PENDING_SIGNATURE" ? <><p className="text-xs text-accent-copper">Sent {dateTime(agreement.signature_requested_at)} · expires {dateTime(agreement.signature_request_expires_at)}</p><form action={cancelAffiliateSignatureRequest}><SubmissionInput scope={`affiliate-agreement-cancel:${agreement.id}`} /><input type="hidden" name="agreementId" value={agreement.id} /><SubmitButton className="min-h-10 w-full" pendingLabel="Cancelling…">Cancel request and return to draft</SubmitButton></form></> : null}{agreement.signed_at ? <div className="rounded-lg border border-pos/25 bg-pos/[0.06] p-3 text-xs text-pos"><p className="font-semibold">Signed {dateTime(agreement.signed_at)}</p>{signature ? <><p className="mt-1">{signature.signer_name} · {signature.signer_email}</p><p className="mt-1 break-all font-mono text-[10px]">SHA-256 {signature.agreement_sha256}</p></> : <p className="mt-1">Legacy manual signature timestamp preserved.</p>}</div> : null}{agreement.signed_at ? <form action={updateAffiliateAgreementStatus} className="flex flex-wrap items-center gap-2"><input type="hidden" name="agreementId" value={agreement.id} /><select className={inputClass} name="status" defaultValue={operationalStatus}>{["ACTIVE", "SUSPENDED", "ENDED"].map((status) => <option key={status}>{status}</option>)}</select><SubmitButton className="min-h-10 whitespace-nowrap" pendingLabel="Updating status…">Update status</SubmitButton></form> : null}</div>}
             </article>
-          )) : <EmptyState title="No agreements yet" body="Create a draft, record negotiated product rates, then activate it once signed." />}
+          );}) : <EmptyState title="No agreements yet" body="Create a draft, record negotiated product rates, then send it to the affiliate for signature." />}
         </div>
       </div>
     </Card>
@@ -315,6 +325,47 @@ function AffiliateControls({ data }: { data: AffiliateOperationsData }) {
   );
 }
 
+function PayoutManagement({ data }: { data: AffiliateOperationsData }) {
+  const affiliateById = new Map(data.affiliates.map((affiliate) => [affiliate.id, affiliate]));
+  const batchedCommissionIds = new Set(data.payoutItems.map((item) => item.commission_id));
+  const payable = data.commissions.filter((commission) =>
+    commission.status === "PAYABLE" && !batchedCommissionIds.has(commission.id),
+  );
+  const itemsByBatch = new Map<string, typeof data.payoutItems>();
+  for (const item of data.payoutItems) {
+    itemsByBatch.set(item.payout_batch_id, [...(itemsByBatch.get(item.payout_batch_id) ?? []), item]);
+  }
+  const reference = `PAYOUT-${new Date().toISOString().slice(0, 10).replaceAll("-", "")}-${globalThis.crypto.randomUUID().slice(0, 6).toUpperCase()}`;
+  const transitions: Record<string, string[]> = {
+    DRAFT: ["PROCESSING", "CANCELLED"],
+    PROCESSING: ["PAID", "CANCELLED"],
+  };
+
+  return <Card>
+    <p className="font-mono text-xs font-bold uppercase tracking-[0.22em] text-accent-cyan">Payout control</p>
+    <h2 className="mt-2 font-display text-xl font-semibold text-deck-text">Affiliate payout batches</h2>
+    <p className="mt-1 text-sm text-deck-muted">Group payable commissions, record processing, and mark the full batch paid atomically.</p>
+    <div className="mt-5 grid gap-4 xl:grid-cols-[.8fr_1.2fr]">
+      <form action={createAffiliatePayoutBatch} className="grid h-fit gap-3 rounded-xl border border-hairline bg-deck-bg/45 p-4">
+        <SubmissionInput scope="affiliate-payout-create" />
+        <Field label="Payout reference"><input className={inputClass} name="reference" defaultValue={reference} required /></Field>
+        <Field label="Scheduled date"><input className={inputClass} name="scheduledFor" type="date" /></Field>
+        <Field label="Internal notes"><textarea className={inputClass} name="notes" maxLength={2000} /></Field>
+        <fieldset><legend className="mb-2 text-sm text-deck-muted">Payable commissions</legend>{payable.length ? <div className="grid max-h-64 gap-2 overflow-y-auto">{payable.map((commission) => <label key={commission.id} className="flex cursor-pointer items-center justify-between gap-3 rounded-lg border border-hairline bg-white/[0.025] p-3 text-sm"><span><span className="block font-semibold text-deck-text">{affiliateById.get(commission.affiliate_id)?.name ?? "Affiliate"}</span><span className="text-xs text-deck-muted">{commission.id.slice(0, 8)}</span></span><span className="flex items-center gap-3 font-mono text-accent-cyan">{money(commission.amount_cents)}<input type="checkbox" name="commissionIds" value={commission.id} /></span></label>)}</div> : <p className="rounded-lg border border-hairline p-3 text-sm text-deck-muted">No unbatched payable commissions.</p>}</fieldset>
+        <SubmitButton className="min-h-11" pendingLabel="Creating payout…" disabled={!payable.length}>Create payout batch</SubmitButton>
+      </form>
+      <div className="grid gap-3">
+        {data.payoutBatches.length ? data.payoutBatches.map((batch) => {
+          const items = itemsByBatch.get(batch.id) ?? [];
+          const total = items.reduce((sum, item) => sum + item.amount_cents, 0);
+          const next = transitions[batch.status] ?? [];
+          return <article key={batch.id} className="rounded-xl border border-hairline bg-deck-bg/45 p-4"><div className="flex flex-wrap items-start justify-between gap-3"><div><p className="font-semibold text-deck-text">{batch.reference}</p><p className="mt-1 text-xs text-deck-muted">{items.length} commission{items.length === 1 ? "" : "s"} · {batch.scheduled_for ?? "No scheduled date"}</p></div><div className="text-right"><StatusBadge value={batch.status} /><p className="mt-2 font-mono font-semibold text-deck-text">{money(total)}</p></div></div>{next.length ? <form action={updateAffiliatePayoutBatchStatus} className="mt-4 flex flex-wrap items-center gap-2"><SubmissionInput scope={`affiliate-payout-status:${batch.id}`} /><input type="hidden" name="payoutBatchId" value={batch.id} /><select className={inputClass} name="status">{next.map((status) => <option key={status} value={status}>{labelize(status)}</option>)}</select><SubmitButton className="min-h-10 whitespace-nowrap" pendingLabel="Updating payout…">Update payout</SubmitButton></form> : null}{batch.paid_at ? <p className="mt-3 text-xs text-pos">Paid {dateTime(batch.paid_at)}</p> : null}</article>;
+        }) : <EmptyState title="No payout batches" body="Move commissions to payable, then group them here for controlled payout." />}
+      </div>
+    </div>
+  </Card>;
+}
+
 export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) {
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
@@ -356,6 +407,7 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
       <ApplicationQueue data={data} />
       <AgreementManagement data={data} />
       <ManualOperations data={data} />
+      <PayoutManagement data={data} />
       <AffiliateControls data={data} />
 
       <Card>
