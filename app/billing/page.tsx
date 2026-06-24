@@ -10,9 +10,12 @@ import {
 import { ModalPanel } from "@/components/modal-panel";
 import { RecordResourceLink } from "@/components/record-resource-link";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
+import { DonutChart, LineChart } from "@/components/deck-charts";
 import { genericList, listClients, listPayments } from "@/lib/data";
 import { markExpensePaid } from "@/lib/actions";
 import { dateShort, money } from "@/lib/format";
+import { compactMoney, distribution, lastNWeekStarts, monthDayShort, weeklyTotals } from "@/lib/deck-metrics";
 import type {
   Expense,
   Invoice,
@@ -67,6 +70,20 @@ export default async function Billing() {
   const monthlyRecurringExpenses = expenses
     .filter((expense) => expense.recurrence !== "NONE")
     .reduce((sum, expense) => sum + expense.amount_cents, 0);
+
+  const weeks = lastNWeekStarts(12);
+  const revenueSeries = weeklyTotals((payments as Payment[]).filter((payment) => payment.status === "PAID"), (payment) => payment.paid_at, (payment) => payment.amount_cents, weeks);
+  const expenseSeries = weeklyTotals(expenses, (expense) => expense.expense_date, (expense) => expense.amount_cents, weeks);
+  const chartMax = Math.max(1, ...revenueSeries, ...expenseSeries);
+  const yTicks = [1, 0.75, 0.5, 0.25, 0].map((fraction) => compactMoney(chartMax * fraction));
+  const xLabels = weeks.filter((_, index) => index % 2 === 0).map(monthDayShort);
+  const invoiceSegments = [
+    { label: "Paid", value: invoices.filter((invoice) => invoice.status === "PAID").length, color: "var(--deck-pos)" },
+    { label: "Outstanding", value: invoices.filter((invoice) => ["SENT", "PART_PAID"].includes(invoice.status)).length, color: "var(--deck-accent-copper)" },
+    { label: "Overdue", value: invoices.filter((invoice) => invoice.status === "OVERDUE").length, color: "var(--deck-neg)" },
+  ].filter((segment) => segment.value > 0);
+  const expenseByCategory = distribution(expenses, (expense) => expense.category);
+
   return (
     <AppShell>
       <PageHeader
@@ -127,6 +144,20 @@ export default async function Billing() {
               <p className="mt-2 text-2xl font-bold text-white">{value}</p>
             </Card>
           ))}
+        </div>
+        <div className="grid gap-3 xl:grid-cols-[minmax(0,2fr)_minmax(0,1fr)_minmax(0,1fr)]">
+          <DeckCard padding="p-4" className="flex flex-col">
+            <PanelHeader title="Revenue vs Expenses" right={<span className="font-mono text-xs text-deck-muted">12 weeks</span>} />
+            <div className="mt-1.5 flex items-center gap-4 text-xs">
+              <span className="inline-flex items-center gap-1.5 text-deck-muted"><span className="h-0.5 w-4 rounded-full bg-accent-cyan" /> Revenue</span>
+              <span className="inline-flex items-center gap-1.5 text-deck-muted"><span className="h-0.5 w-4 rounded-full bg-accent-copper" /> Expenses</span>
+            </div>
+            <div className="mt-3 h-44">
+              <LineChart series={[{ name: "Revenue", values: revenueSeries, tone: "cyan" }, { name: "Expenses", values: expenseSeries, tone: "copper" }]} labels={xLabels} yTicks={yTicks} />
+            </div>
+          </DeckCard>
+          <DeckCard padding="p-4"><PanelHeader title="Invoices" />{invoiceSegments.length ? <div className="mt-4"><DonutChart segments={invoiceSegments} centerLabel={String(invoices.length)} centerSub="invoices" /></div> : <p className="mt-4 text-sm text-deck-muted">No invoices yet.</p>}</DeckCard>
+          <DeckCard padding="p-4"><PanelHeader title="Expenses by Category" /><div className="mt-3"><BarList items={expenseByCategory} tone="copper" /></div></DeckCard>
         </div>
         <div className="grid gap-6 xl:grid-cols-[1fr_0.8fr]">
           <Card>

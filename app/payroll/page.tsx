@@ -2,10 +2,12 @@ import { AppShell } from "@/components/app-shell";
 import { PayrollItemForm, PayrollRunForm, UserForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 import { genericList, listPayrollItems, listRoles, listUsers } from "@/lib/data";
 import { dateShort, money } from "@/lib/format";
+import { distribution } from "@/lib/deck-metrics";
 import type { PayrollRun } from "@/lib/types";
 
 export const dynamic = "force-dynamic";
@@ -24,6 +26,16 @@ export default async function PayrollPage() {
   const currentRunItems = currentRun
     ? items.filter((item) => item.payroll_run_id === currentRun.id)
     : [];
+
+  const empNet = new Map<string, number>();
+  const empHours = new Map<string, number>();
+  for (const item of items) {
+    const name = item.user?.name ?? "Unknown";
+    empNet.set(name, (empNet.get(name) ?? 0) + item.net_pay_cents);
+    empHours.set(name, (empHours.get(name) ?? 0) + (item.hours ?? 0));
+  }
+  const netByEmployee = [...empNet.entries()].map(([label, cents]) => ({ label, value: Math.round(cents / 100), sub: money(cents) })).sort((a, b) => b.value - a.value).slice(0, 8);
+  const hoursByEmployee = [...empHours.entries()].filter(([, hours]) => hours > 0).map(([label, hours]) => ({ label, value: hours, sub: `${hours}h` })).sort((a, b) => b.value - a.value).slice(0, 8);
 
   return (
     <AppShell>
@@ -59,6 +71,13 @@ export default async function PayrollPage() {
             </Card>
           ))}
         </div>
+        {items.length ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            <DeckCard padding="p-4"><PanelHeader title="Net Pay by Employee" /><div className="mt-3"><BarList items={netByEmployee} tone="cyan" /></div></DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="Hours by Employee" /><div className="mt-3"><BarList items={hoursByEmployee} tone="copper" /></div></DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="Pay Type" /><div className="mt-3"><BarList items={distribution(users, (user) => user.pay_type ?? "SALARY")} tone="mixed" /></div></DeckCard>
+          </div>
+        ) : null}
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-white">Employee directory</h2>
           <div className="grid gap-3 md:grid-cols-2 xl:grid-cols-3">

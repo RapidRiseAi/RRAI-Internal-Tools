@@ -447,7 +447,19 @@ export const serviceSchema = z.object({
   description: z.string().trim().min(5),
   baseOnceOffCents: cents,
   baseMonthlyCents: cents,
+  hourlyRateCents: cents,
+  estimatedHours: z.coerce.number().min(0).default(0),
   isActive: z.boolean().default(true),
+});
+
+export const logTimeSchema = z.object({
+  taskId: optionalText,
+  projectId: optionalText,
+  clientId: optionalText,
+  description: optionalText,
+  startedAt: z.string().min(1),
+  endedAt: optionalText,
+  isBillable: z.boolean().optional(),
 });
 export const interactionEventSchema = z.object({
   entityType: z.enum(["Lead", "Client"]),

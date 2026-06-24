@@ -6,8 +6,10 @@ import {
   PageHeader,
   StatusBadge,
 } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
 import { listLeads } from "@/lib/data";
 import { dateShort } from "@/lib/format";
+import { distribution } from "@/lib/deck-metrics";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
 
@@ -24,6 +26,13 @@ export default async function LeadsPage() {
         description="Track stages, scores, service interest, owner, next action and follow-up dates."
         actions={<LinkButton href="/leads/new">Create lead</LinkButton>}
       />
+      {leads.length ? (
+        <div className="mb-4 grid gap-3 md:grid-cols-2 xl:grid-cols-3">
+          <DeckCard padding="p-4"><PanelHeader title="By Stage" /><div className="mt-3"><BarList items={distribution(leads, (lead) => lead.stage)} tone="mixed" /></div></DeckCard>
+          <DeckCard padding="p-4"><PanelHeader title="By Source" /><div className="mt-3"><BarList items={distribution(leads, (lead) => lead.source)} tone="cyan" /></div></DeckCard>
+          <DeckCard padding="p-4"><PanelHeader title="By Service Interest" /><div className="mt-3"><BarList items={distribution(leads, (lead) => lead.service_interest)} tone="copper" /></div></DeckCard>
+        </div>
+      ) : null}
       {leads.length ? (
         <div className="overflow-hidden rounded-2xl border border-white/10">
           <table className="w-full border-collapse bg-white/[0.035] text-sm">

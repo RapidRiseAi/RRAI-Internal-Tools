@@ -249,6 +249,31 @@ export function Funnel({ stages }: { stages: { label: string; count: number; pct
   );
 }
 
+/** Horizontal bar list for distributions (hours by person, leads by stage, etc.). */
+export function BarList({ items, tone = "cyan" }: { items: { label: string; value: number; sub?: string }[]; tone?: "cyan" | "copper" | "mixed" }) {
+  const max = Math.max(1, ...items.map((item) => item.value));
+  const barColor = (index: number) => {
+    if (tone === "copper") return "var(--deck-accent-copper)";
+    if (tone === "mixed") return index % 2 === 0 ? "var(--deck-accent-cyan)" : "var(--deck-accent-copper)";
+    return "var(--deck-accent-cyan)";
+  };
+  return (
+    <div className="grid gap-2">
+      {items.length ? items.map((item, index) => (
+        <div key={item.label} className="grid gap-1">
+          <div className="flex items-center justify-between gap-2 text-xs">
+            <span className="truncate text-deck-text">{item.label}</span>
+            <span className="shrink-0 font-mono text-deck-muted">{item.sub ?? item.value}</span>
+          </div>
+          <div className="h-2 w-full overflow-hidden rounded-full bg-hairline">
+            <div className="h-full rounded-full" style={{ width: `${(item.value / max) * 100}%`, background: barColor(index), boxShadow: "0 0 8px rgba(70,232,209,0.4)" }} />
+          </div>
+        </div>
+      )) : <p className="py-4 text-center text-sm text-deck-muted">No data yet.</p>}
+    </div>
+  );
+}
+
 /** Per-day workload strip (HUD telemetry) — used by the personal panel timeline. */
 export function WorkloadBars({ days }: { days: { label: string; sub: string; hoursLabel: string; fill: number; active?: boolean }[] }) {
   return (

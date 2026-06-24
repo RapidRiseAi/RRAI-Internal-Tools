@@ -2,7 +2,9 @@ import { AppShell } from "@/components/app-shell";
 import { SupportTicketForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
 import { genericList, listClients, listUsers } from "@/lib/data";
+import { distribution } from "@/lib/deck-metrics";
 import type { Project, SupportTicket } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
@@ -58,6 +60,13 @@ export default async function Support() {
             </Card>
           ))}
         </div>
+        {tickets.length ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            <DeckCard padding="p-4"><PanelHeader title="By Status" /><div className="mt-3"><BarList items={distribution(tickets, (ticket) => ticket.status)} tone="cyan" /></div></DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="By Category" /><div className="mt-3"><BarList items={distribution(tickets, (ticket) => ticket.category)} tone="copper" /></div></DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="By Priority" /><div className="mt-3"><BarList items={distribution(tickets, (ticket) => ticket.priority)} tone="mixed" /></div></DeckCard>
+          </div>
+        ) : null}
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">

@@ -2,7 +2,7 @@ import type { ReactNode } from "react";
 import { redirect } from "next/navigation";
 import { getCurrentUser, permissionsFor } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
-import { notificationsForUser } from "@/lib/data";
+import { notificationsForUser, runningTimeEntry } from "@/lib/data";
 import { DeckShell, type DeckNavItem } from "./deck-shell";
 
 const primaryNav: [string, string, string, string][] = [
@@ -15,6 +15,7 @@ const primaryNav: [string, string, string, string][] = [
   ["Projects", "/projects", "projects", permissions.projectsRead],
   ["Tasks", "/tasks", "tasks", permissions.tasksRead],
   ["Calendar", "/calendar", "calendar", permissions.tasksRead],
+  ["Time", "/time", "time", permissions.dashboard],
   ["Finance", "/billing", "finance", permissions.billingRead],
   ["Payroll", "/payroll", "payroll", permissions.payrollRead],
   ["Support", "/support", "support", permissions.supportRead],
@@ -35,7 +36,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
   if (!user) redirect("/login");
 
   const userPermissions = permissionsFor(user);
-  const notifications = await notificationsForUser(user.id, 10);
+  const [notifications, running] = await Promise.all([notificationsForUser(user.id, 10), runningTimeEntry(user.id)]);
   const unreadCount = notifications.filter((note) => note.status === "UNREAD").length;
 
   return (
@@ -45,6 +46,7 @@ export async function AppShell({ children }: { children: ReactNode }) {
       adminNav={toNav(adminNav, userPermissions)}
       notifications={notifications.map((note) => ({ id: note.id, title: note.title, body: note.body, status: note.status, created_at: note.created_at }))}
       unreadCount={unreadCount}
+      running={running ? { startedAt: running.started_at, taskTitle: running.task?.title ?? null } : null}
     >
       {children}
     </DeckShell>

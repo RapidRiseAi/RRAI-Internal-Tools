@@ -3,7 +3,9 @@ import { TaskForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { syncMyGoogleCalendar, updateTaskStatus } from "@/lib/actions";
 import { Button, Card, EmptyState, LinkButton, PageHeader, StatusBadge } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
 import { genericList, listClients, listTasks, listUsers } from "@/lib/data";
+import { distribution } from "@/lib/deck-metrics";
 import { dateShort } from "@/lib/format";
 import type { Project } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
@@ -92,6 +94,13 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
             </Card>
           ))}
         </div>
+        {tasks.length ? (
+          <div className="grid gap-3 md:grid-cols-3">
+            <DeckCard padding="p-4"><PanelHeader title="By Status" /><div className="mt-3"><BarList items={distribution(tasks, (task) => task.status)} tone="cyan" /></div></DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="By Priority" /><div className="mt-3"><BarList items={distribution(tasks, (task) => task.priority)} tone="mixed" /></div></DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="By Type" /><div className="mt-3"><BarList items={distribution(tasks, (task) => task.type)} tone="copper" /></div></DeckCard>
+          </div>
+        ) : null}
         <Card>
           {tasks.length ? (
             <div className="overflow-x-auto">

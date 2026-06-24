@@ -4,7 +4,10 @@ import { AppShell } from "@/components/app-shell";
 import { ProjectForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
+import { BarList, DeckCard, PanelHeader } from "@/components/command-deck";
+import { DonutChart } from "@/components/deck-charts";
 import { genericList, listChecklistTemplates, listClients, listUsers } from "@/lib/data";
+import { distribution } from "@/lib/deck-metrics";
 import type { ChecklistTemplate, Project, Quote, Task } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
@@ -59,6 +62,26 @@ export default async function Projects() {
             </Card>
           ))}
         </div>
+        {projects.length ? (
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1fr)_minmax(0,1fr)_minmax(0,1fr)]">
+            <DeckCard padding="p-4"><PanelHeader title="Projects by Status" /><div className="mt-3"><BarList items={distribution(projects, (project) => project.status)} tone="cyan" /></div></DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="Tasks by Status" /><div className="mt-3"><BarList items={distribution(tasks, (task) => task.status)} tone="copper" /></div></DeckCard>
+            <DeckCard padding="p-4">
+              <PanelHeader title="Delivery Health" />
+              <div className="mt-4">
+                <DonutChart
+                  centerLabel={String(projects.length)}
+                  centerSub="projects"
+                  segments={[
+                    { label: "Active", value: activeProjects.filter((project) => !project.blocker).length, color: "var(--deck-accent-cyan)" },
+                    { label: "Blocked", value: projects.filter((project) => project.blocker).length, color: "var(--deck-neg)" },
+                    { label: "Completed", value: projects.filter((project) => project.status === "COMPLETED").length, color: "var(--deck-pos)" },
+                  ].filter((segment) => segment.value > 0)}
+                />
+              </div>
+            </DeckCard>
+          </div>
+        ) : null}
         <Card>
           <div className="mb-4 flex items-center justify-between">
             <h2 className="text-lg font-semibold text-white">

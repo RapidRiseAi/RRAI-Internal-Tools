@@ -2,7 +2,9 @@ import { AppShell } from "@/components/app-shell";
 import { CampaignForm, ContentItemForm } from "@/components/forms";
 import { ModalPanel } from "@/components/modal-panel";
 import { Card, EmptyState, PageHeader, StatusBadge } from "@/components/ui";
+import { BarList, DeckCard, Funnel, PanelHeader } from "@/components/command-deck";
 import { genericList } from "@/lib/data";
+import { distribution, pct } from "@/lib/deck-metrics";
 import type { Campaign, ContentItem } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
 import { permissions } from "@/lib/constants";
@@ -67,6 +69,27 @@ export default async function Marketing() {
             </Card>
           ))}
         </div>
+        {campaigns.length ? (
+          <div className="grid gap-3 xl:grid-cols-[minmax(0,1.4fr)_minmax(0,1fr)]">
+            <DeckCard padding="p-4">
+              <PanelHeader title="Outreach Funnel" right={<span className="font-mono text-xs text-deck-muted">all campaigns</span>} />
+              <div className="mt-4">
+                {(() => {
+                  const steps: [string, number][] = [
+                    ["Contacted", campaigns.reduce((sum, campaign) => sum + campaign.number_contacted, 0)],
+                    ["Replies", campaigns.reduce((sum, campaign) => sum + campaign.replies, 0)],
+                    ["Calls booked", campaigns.reduce((sum, campaign) => sum + campaign.calls_booked, 0)],
+                    ["Quotes sent", campaigns.reduce((sum, campaign) => sum + campaign.quotes_sent, 0)],
+                    ["Deals closed", campaigns.reduce((sum, campaign) => sum + campaign.deals_closed, 0)],
+                  ];
+                  const top = steps[0][1] || 1;
+                  return <Funnel stages={steps.map(([label, count], index) => ({ label, count, pct: pct(count, top), conv: index === 0 ? null : pct(count, steps[index - 1][1] || 1) }))} />;
+                })()}
+              </div>
+            </DeckCard>
+            <DeckCard padding="p-4"><PanelHeader title="Content by Status" /><div className="mt-3"><BarList items={distribution(content, (item) => item.status)} tone="mixed" /></div></DeckCard>
+          </div>
+        ) : null}
         <Card>
           <h2 className="mb-4 text-lg font-semibold text-white">
             Campaign performance

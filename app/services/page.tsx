@@ -76,10 +76,17 @@ export default async function Services() {
                     </p>
                   </div>
                   <div className="flex items-center gap-3">
-                    <p className="text-sm text-slate-300">
-                      {money(service.base_once_off_cents)} /{" "}
-                      {money(service.base_monthly_cents)} mo
-                    </p>
+                    <div className="text-right text-sm text-slate-300">
+                      <p>
+                        {money(service.base_once_off_cents)} /{" "}
+                        {money(service.base_monthly_cents)} mo
+                      </p>
+                      {service.hourly_rate_cents > 0 || service.estimated_hours > 0 ? (
+                        <p className="font-mono text-xs text-deck-muted">
+                          {money(service.hourly_rate_cents)}/hr · {service.estimated_hours}h est
+                        </p>
+                      ) : null}
+                    </div>
                     <StatusBadge value={service.is_active ? "ACTIVE" : "INACTIVE"} />
                   </div>
                 </summary>

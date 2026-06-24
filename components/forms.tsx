@@ -1893,6 +1893,25 @@ export function ServiceForm({ service }: { service?: Service }) {
           defaultValue={rands(service?.base_monthly_cents ?? 0)}
         />
       </Field>
+      <Field label="Billable hourly rate (R)">
+        <input
+          className={inputClass}
+          name="hourlyRateRands"
+          type="number"
+          min="0"
+          defaultValue={rands(service?.hourly_rate_cents ?? 0)}
+        />
+      </Field>
+      <Field label="Estimated hours">
+        <input
+          className={inputClass}
+          name="estimatedHours"
+          type="number"
+          min="0"
+          step="0.5"
+          defaultValue={String(service?.estimated_hours ?? 0)}
+        />
+      </Field>
       <Field label="Description">
         <textarea
           className={inputClass}

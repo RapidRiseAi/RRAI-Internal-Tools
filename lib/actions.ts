@@ -44,6 +44,7 @@ import {
   invoiceSchema,
   goalSchema,
   knowledgeBaseSchema,
+  logTimeSchema,
   messageSchema,
   selfNoteSchema,
   leadCallSchema,
@@ -629,6 +630,78 @@ export async function deleteSelfNoteAction(formData: FormData) {
   }
   revalidatePath("/my-panel");
   redirect("/my-panel");
+}
+
+export async function clockInAction(formData: FormData) {
+  const user = await requirePermission(permissions.dashboard);
+  const admin = getSupabaseAdmin();
+  // Only one running entry at a time — close any open one first.
+  await admin.from("time_entries").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
+  const { error } = await admin.from("time_entries").insert({
+    user_id: user.id,
+    task_id: str(formData, "taskId") || null,
+    project_id: str(formData, "projectId") || null,
+    client_id: str(formData, "clientId") || null,
+    description: str(formData, "description") || null,
+    started_at: new Date().toISOString(),
+    ended_at: null,
+    is_billable: bool(formData, "isBillable"),
+  });
+  if (error) throw error;
+  revalidatePath("/time");
+  revalidatePath("/my-panel");
+  redirect(path(formData, "/my-panel"));
+}
+
+export async function clockOutAction(formData: FormData) {
+  const user = await requirePermission(permissions.dashboard);
+  const { error } = await getSupabaseAdmin().from("time_entries").update({ ended_at: new Date().toISOString() }).eq("user_id", user.id).is("ended_at", null);
+  if (error) throw error;
+  revalidatePath("/time");
+  revalidatePath("/my-panel");
+  if (str(formData, "redirectTo")) redirect(str(formData, "redirectTo"));
+}
+
+export async function logTimeAction(formData: FormData) {
+  const user = await requirePermission(permissions.dashboard);
+  const parsed = logTimeSchema.parse({
+    taskId: str(formData, "taskId"),
+    projectId: str(formData, "projectId"),
+    clientId: str(formData, "clientId"),
+    description: str(formData, "description"),
+    startedAt: str(formData, "startedAt"),
+    endedAt: str(formData, "endedAt"),
+    isBillable: bool(formData, "isBillable"),
+  });
+  const startedIso = parseAppDateTime(parsed.startedAt);
+  const endedIso = parsed.endedAt ? parseAppDateTime(parsed.endedAt) : null;
+  if (!startedIso) throw new Error("Please provide a valid start time.");
+  const { error } = await getSupabaseAdmin().from("time_entries").insert({
+    user_id: user.id,
+    task_id: parsed.taskId ?? null,
+    project_id: parsed.projectId ?? null,
+    client_id: parsed.clientId ?? null,
+    description: parsed.description ?? null,
+    started_at: startedIso,
+    ended_at: endedIso,
+    is_billable: parsed.isBillable ?? true,
+  });
+  if (error) throw error;
+  revalidatePath("/time");
+  revalidatePath("/my-panel");
+  redirect(path(formData, "/time"));
+}
+
+export async function deleteTimeEntryAction(formData: FormData) {
+  const user = await requirePermission(permissions.dashboard);
+  const id = str(formData, "id");
+  if (id) {
+    const { error } = await getSupabaseAdmin().from("time_entries").delete().eq("id", id).eq("user_id", user.id);
+    if (error) throw error;
+  }
+  revalidatePath("/time");
+  revalidatePath("/my-panel");
+  redirect(path(formData, "/time"));
 }
 
 export async function updateOwnLoginDetails(formData: FormData) {
@@ -2534,6 +2607,8 @@ export async function upsertService(formData: FormData) {
     description: str(formData, "description"),
     baseOnceOffCents: randsToCents(formData.get("baseOnceOffRands")),
     baseMonthlyCents: randsToCents(formData.get("baseMonthlyRands")),
+    hourlyRateCents: randsToCents(formData.get("hourlyRateRands")),
+    estimatedHours: str(formData, "estimatedHours") || 0,
     isActive: bool(formData, "isActive"),
   });
   const payload = {
@@ -2542,6 +2617,8 @@ export async function upsertService(formData: FormData) {
     description: parsed.description,
     base_once_off_cents: parsed.baseOnceOffCents,
     base_monthly_cents: parsed.baseMonthlyCents,
+    hourly_rate_cents: parsed.hourlyRateCents,
+    estimated_hours: parsed.estimatedHours,
     is_active: parsed.isActive,
   };
   const { error } = id
