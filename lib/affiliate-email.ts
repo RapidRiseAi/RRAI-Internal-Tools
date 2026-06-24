@@ -77,5 +77,6 @@ export async function affiliateAuthUserId(affiliateId: string) {
 
 export function affiliateAgreementUrl() {
   const configured = process.env.NEXT_PUBLIC_AFFILIATE_PORTAL_URL || 'https://affiliate-system.vercel.app';
-  return new URL('/affiliate/agreement', configured).toString();
+  const normalized = configured.replace('://affaliate-system.vercel.app', '://affiliate-system.vercel.app');
+  return new URL('/affiliate/agreement', normalized).toString();
 }
