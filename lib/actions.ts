@@ -1060,8 +1060,43 @@ export async function upsertTask(formData: FormData) {
 
 export async function syncMyGoogleCalendar(formData?: FormData) {
   const user = await requireUser();
-  await materializeAssignedAutomaticRecurringTasks(user.id);
-  const result = await syncAssignedTasksToGoogleCalendar(user.id);
+  const result = {
+    attempted: 0,
+    synced: 0,
+    skipped: 0,
+    failed: 0,
+    errors: [] as string[],
+  };
+
+  try {
+    await materializeAssignedAutomaticRecurringTasks(user.id);
+  } catch (error) {
+    console.error("Unable to prepare recurring tasks before Google Calendar sync", { userId: user.id, error });
+    result.failed += 1;
+    result.errors.push(
+      error instanceof Error
+        ? `Unable to prepare recurring tasks before Google Calendar sync: ${error.message}`
+        : "Unable to prepare recurring tasks before Google Calendar sync.",
+    );
+  }
+
+  try {
+    const syncResult = await syncAssignedTasksToGoogleCalendar(user.id);
+    result.attempted += syncResult.attempted;
+    result.synced += syncResult.synced;
+    result.skipped += syncResult.skipped;
+    result.failed += syncResult.failed;
+    result.errors.push(...syncResult.errors);
+  } catch (error) {
+    console.error("Unexpected Google Calendar batch sync failure", { userId: user.id, error });
+    result.failed += 1;
+    result.errors.push(
+      error instanceof Error
+        ? `Unexpected Google Calendar sync failure: ${error.message}`
+        : "Unexpected Google Calendar sync failure.",
+    );
+  }
+
   revalidatePath("/settings");
   revalidatePath("/calendar");
   revalidatePath("/tasks");
