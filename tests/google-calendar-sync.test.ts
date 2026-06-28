@@ -50,4 +50,33 @@ describe("Google Calendar sync helpers", () => {
     expect(payload.start).toEqual({ dateTime: "2026-06-20T19:00:00", timeZone: "Africa/Johannesburg" });
     expect(payload.end).toEqual({ dateTime: "2026-06-20T20:00:00", timeZone: "Africa/Johannesburg" });
   });
+  it("adds a Google RRULE for automatic weekly parent tasks", () => {
+    const payload = taskGoogleCalendarPayload({
+      id: "task-1",
+      title: "Weekly ops review",
+      due_date: "2026-06-22T09:00:00.000Z",
+      recurrence: "WEEKLY",
+      recurrence_interval: 1,
+      recurrence_day_of_week: 1,
+      recurrence_completion_required: false,
+      recurrence_parent_task_id: null,
+    });
+
+    expect(payload.recurrence).toEqual(["RRULE:FREQ=WEEKLY;INTERVAL=1;BYDAY=MO"]);
+  });
+
+  it("keeps completion-required recurring tasks as one-off Google events", () => {
+    const payload = taskGoogleCalendarPayload({
+      id: "task-1",
+      title: "Complete then repeat",
+      due_date: "2026-06-22T09:00:00.000Z",
+      recurrence: "WEEKLY",
+      recurrence_interval: 1,
+      recurrence_day_of_week: 1,
+      recurrence_completion_required: true,
+    });
+
+    expect(payload).not.toHaveProperty("recurrence");
+  });
+
 });

@@ -1081,11 +1081,10 @@ export async function syncMyGoogleCalendar(formData?: FormData) {
     await materializeAssignedAutomaticRecurringTasks(user.id);
   } catch (error) {
     console.error("Unable to prepare recurring tasks before Google Calendar sync", { userId: user.id, error });
-    result.failed += 1;
     result.errors.push(
       error instanceof Error
-        ? `Unable to prepare recurring tasks before Google Calendar sync: ${error.message}`
-        : "Unable to prepare recurring tasks before Google Calendar sync.",
+        ? `Recurring task prefill warning: ${error.message}`
+        : "Recurring task prefill warning: unable to prepare individual recurring task rows.",
     );
   }
 
