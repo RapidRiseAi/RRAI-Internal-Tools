@@ -32,6 +32,12 @@ export function taskGoogleCalendarPayload(task: {
   priority?: string | null;
   due_date: string;
   duration_minutes?: number | null;
+  recurrence?: "NONE" | "WEEKLY" | "MONTHLY" | null;
+  recurrence_interval?: number | null;
+  recurrence_day_of_week?: number | null;
+  recurrence_day_of_month?: number | null;
+  recurrence_completion_required?: boolean | null;
+  recurrence_parent_task_id?: string | null;
 }, files: { filename: string; url: string }[] = [], timeZone = appTimeZone()) {
   const zone = normalizeTimeZone(timeZone);
   const start = new Date(task.due_date);
@@ -44,7 +50,28 @@ export function taskGoogleCalendarPayload(task: {
     end: { dateTime: formatDateTimeForGoogle(end, zone), timeZone: zone },
     colorId: googleColorByPriority[String(task.priority ?? "MEDIUM")] ?? googleColorByPriority.MEDIUM,
     extendedProperties: { private: { rapidRiseTaskId: task.id } },
+    ...taskGoogleCalendarRecurrence(task),
   };
+}
+
+function taskGoogleCalendarRecurrence(task: {
+  recurrence?: "NONE" | "WEEKLY" | "MONTHLY" | null;
+  recurrence_interval?: number | null;
+  recurrence_day_of_week?: number | null;
+  recurrence_day_of_month?: number | null;
+  recurrence_completion_required?: boolean | null;
+  recurrence_parent_task_id?: string | null;
+}) {
+  if (!task.recurrence || task.recurrence === "NONE" || task.recurrence_completion_required || task.recurrence_parent_task_id) return {};
+  const interval = Math.max(1, Number(task.recurrence_interval ?? 1));
+  const parts = [`FREQ=${task.recurrence}`, `INTERVAL=${interval}`];
+  if (task.recurrence === "WEEKLY" && typeof task.recurrence_day_of_week === "number") {
+    parts.push(`BYDAY=${["SU", "MO", "TU", "WE", "TH", "FR", "SA"][task.recurrence_day_of_week]}`);
+  }
+  if (task.recurrence === "MONTHLY" && typeof task.recurrence_day_of_month === "number") {
+    parts.push(`BYMONTHDAY=${task.recurrence_day_of_month}`);
+  }
+  return { recurrence: [`RRULE:${parts.join(";")}`] };
 }
 
 function taskCalendarDescription(task: { description?: string | null; id?: string; type?: string | null; priority?: string | null; status?: string | null }, files: { filename: string; url: string }[]) {
@@ -253,7 +280,7 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
     if (!hasGoogleConfig()) return syncResult("skipped", taskId, "Google OAuth is not configured.");
     const { data: task, error: taskError } = await getSupabaseAdmin()
       .from("tasks")
-      .select("id,title,description,type,status,priority,due_date,duration_minutes,assigned_to,google_calendar_event_id,google_calendar_user_id")
+      .select("id,title,description,type,status,priority,due_date,duration_minutes,assigned_to,recurrence,recurrence_interval,recurrence_day_of_week,recurrence_day_of_month,recurrence_completion_required,recurrence_parent_task_id,google_calendar_event_id,google_calendar_user_id")
       .eq("id", taskId)
       .maybeSingle();
     if (taskError) {
@@ -416,7 +443,7 @@ export async function syncAssignedTasksToGoogleCalendar(userId: string): Promise
   }
   const { data: tasks, error } = await getSupabaseAdmin()
     .from("tasks")
-    .select("id")
+    .select("id,recurrence_parent_task_id,recurrence_completion_required")
     .eq("assigned_to", userId)
     .not("due_date", "is", null)
     .neq("status", "SCRAPPED");
@@ -427,6 +454,7 @@ export async function syncAssignedTasksToGoogleCalendar(userId: string): Promise
     return result;
   }
   for (const task of tasks ?? []) {
+    if (task.recurrence_parent_task_id && !task.recurrence_completion_required) continue;
     result.attempted += 1;
     const taskResult = await syncTaskToGoogleCalendar(task.id as string);
     if (taskResult.status === "synced") result.synced += 1;
