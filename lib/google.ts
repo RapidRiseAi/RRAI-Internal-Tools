@@ -169,6 +169,15 @@ export async function accessTokenForUser(userId: string) {
 
 export type GoogleCalendarSyncStatus = "synced" | "skipped" | "failed";
 
+export type GoogleCalendarExternalEvent = {
+  id: string;
+  title: string;
+  start: string;
+  end: string | null;
+  description: string | null;
+  htmlLink: string | null;
+};
+
 export type GoogleCalendarSyncResult = {
   status: GoogleCalendarSyncStatus;
   taskId: string;
@@ -340,6 +349,58 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
     console.error("Unexpected Google Calendar task sync failure", { taskId, error });
     return syncResult("failed", taskId, error instanceof Error ? error.message : "Unexpected Google Calendar sync failure.");
   }
+}
+
+export async function listGoogleCalendarEventsForUser(userId: string, rangeStart: Date, rangeEnd: Date): Promise<GoogleCalendarExternalEvent[]> {
+  if (!hasGoogleConfig()) return [];
+  const accessToken = await accessTokenForUser(userId);
+  if (!accessToken) return [];
+
+  const params = new URLSearchParams({
+    singleEvents: "true",
+    orderBy: "startTime",
+    timeMin: rangeStart.toISOString(),
+    timeMax: rangeEnd.toISOString(),
+    maxResults: "250",
+  });
+  const response = await fetch(`https://www.googleapis.com/calendar/v3/calendars/primary/events?${params.toString()}`, {
+    headers: { authorization: `Bearer ${accessToken}` },
+    cache: "no-store",
+  });
+  if (!response.ok) {
+    const error = await googleErrorMessage(response);
+    console.error("Unable to read Google Calendar events", { userId, status: response.status, error });
+    return [];
+  }
+
+  const payload = await response.json() as {
+    items?: {
+      id?: string;
+      summary?: string;
+      description?: string;
+      htmlLink?: string;
+      start?: { dateTime?: string; date?: string };
+      end?: { dateTime?: string; date?: string };
+      status?: string;
+      extendedProperties?: { private?: { rapidRiseTaskId?: string } };
+    }[];
+  };
+
+  return (payload.items ?? [])
+    .filter((event) => event.status !== "cancelled" && !event.extendedProperties?.private?.rapidRiseTaskId)
+    .map((event) => {
+      const start = event.start?.dateTime ?? (event.start?.date ? `${event.start.date}T00:00:00` : null);
+      if (!event.id || !start) return null;
+      return {
+        id: event.id,
+        title: event.summary?.trim() || "Google Calendar event",
+        start,
+        end: event.end?.dateTime ?? (event.end?.date ? `${event.end.date}T00:00:00` : null),
+        description: event.description ?? null,
+        htmlLink: event.htmlLink ?? null,
+      };
+    })
+    .filter((event): event is GoogleCalendarExternalEvent => Boolean(event));
 }
 
 export async function syncAssignedTasksToGoogleCalendar(userId: string): Promise<GoogleCalendarBatchSyncResult> {

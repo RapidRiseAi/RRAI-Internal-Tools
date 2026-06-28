@@ -6,6 +6,7 @@ import { genericList, listClients, listTasks } from "@/lib/data";
 import { money } from "@/lib/format";
 import type { Expense, Invoice, Project, Retainer, Task } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
+import { listGoogleCalendarEventsForUser } from "@/lib/google";
 import { permissions } from "@/lib/constants";
 import { appTimeZone, dateKeyInTimeZone, formatDateTimeLocal } from "@/lib/timezone";
 
@@ -18,7 +19,7 @@ type CalendarItem = {
   id: string;
   title: string;
   date: string;
-  kind: "Task" | "Recurring task" | "Project deadline" | "Invoice due" | "Retainer due" | "Expense due";
+  kind: "Task" | "Recurring task" | "Google Calendar" | "Project deadline" | "Invoice due" | "Retainer due" | "Expense due";
   priority: string;
   description: string | null;
   href?: string;
@@ -31,6 +32,7 @@ type CalendarItem = {
 const kindTone: Record<CalendarItem["kind"], Tone> = {
   Task: "cyan",
   "Recurring task": "cyan",
+  "Google Calendar": "neutral",
   "Project deadline": "copper",
   "Invoice due": "pos",
   "Retainer due": "pos",
@@ -109,7 +111,7 @@ function recurringOccurrencesInRange(task: Task, tasks: Task[], rangeStart: Date
 }
 
 export default async function CalendarPage({ searchParams }: { searchParams: Promise<{ date?: string; view?: string }> }) {
-  await requirePagePermission(permissions.tasksRead);
+  const user = await requirePagePermission(permissions.tasksRead);
   const params = await searchParams;
   const view = params.view === "week" ? "week" : "month";
   const focusDate = params.date ? new Date(`${params.date}T00:00:00`) : new Date();
@@ -127,19 +129,21 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
   const rangeEnd = new Date(days[days.length - 1]);
   rangeEnd.setHours(23, 59, 59, 999);
 
-  const [tasks, clients, projects, invoices, retainers, expenses] = await Promise.all([
+  const [tasks, clients, projects, invoices, retainers, expenses, googleEvents] = await Promise.all([
     listTasks(),
     listClients(),
     genericList<Project>("projects"),
     genericList<Invoice>("invoices"),
     genericList<Retainer>("retainers"),
     genericList<Expense>("expenses"),
+    listGoogleCalendarEventsForUser(user.id, rangeStart, rangeEnd),
   ]);
 
   const taskItems: CalendarItem[] = tasks
     .filter((task) => task.due_date && !inactiveTaskStatuses.has(task.status))
     .map((task) => ({ id: task.id, title: task.title, date: task.due_date!, kind: task.recurrence === "NONE" ? "Task" : "Recurring task", priority: task.priority, description: task.description, href: `/tasks/${task.id}`, assigneeName: task.assignee?.name ?? "Unassigned", clientId: task.client_id, projectId: task.project_id }));
   const recurringItems = tasks.flatMap((task) => recurringOccurrencesInRange(task, tasks, rangeStart, rangeEnd));
+  const googleItems: CalendarItem[] = googleEvents.map((event) => ({ id: `google-${event.id}`, title: event.title, date: event.start, kind: "Google Calendar", priority: "MEDIUM", description: event.description ?? null, href: event.htmlLink ?? undefined }));
   const projectItems: CalendarItem[] = projects
     .filter((project) => project.deadline && project.status !== "COMPLETED")
     .map((project) => ({ id: `project-${project.id}`, title: project.name, date: project.deadline!, kind: "Project deadline", priority: project.priority, description: project.blocker ? `Blocker: ${project.blocker}` : null, href: `/projects/${project.id}`, projectId: project.id, clientId: project.client_id }));
@@ -153,7 +157,7 @@ export default async function CalendarPage({ searchParams }: { searchParams: Pro
     .filter((expense) => (expense.next_due_date ?? expense.expense_date) && expense.status !== "PAID")
     .map((expense) => ({ id: `expense-${expense.id}`, title: expense.vendor, date: (expense.next_due_date ?? expense.expense_date)!, kind: "Expense due", priority: "MEDIUM", description: `${expense.category} • ${money(expense.amount_cents)}`, href: `/billing`, clientId: expense.client_id, projectId: expense.project_id, amountCents: expense.amount_cents }));
 
-  const allItems = [...taskItems, ...recurringItems, ...projectItems, ...invoiceItems, ...retainerItems, ...expenseItems];
+  const allItems = [...taskItems, ...recurringItems, ...googleItems, ...projectItems, ...invoiceItems, ...retainerItems, ...expenseItems];
   const itemsByDay = new Map<string, CalendarItem[]>();
   for (const item of allItems) {
     const key = dayKeyOf(item.date);
