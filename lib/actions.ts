@@ -898,9 +898,9 @@ async function materializeRecurringTasks(taskId: string, actorId: string) {
       .eq("recurrence_parent_task_id", task.id)
       .gte("due_date", dueDate.slice(0, 10))
       .lt("due_date", new Date(cursor.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
-      .maybeSingle();
+      .limit(1);
     if (existingError) throw existingError;
-    if (!existing) {
+    if (!existing?.length) {
       occurrences.push({
         ...task,
         status: "TO_DO",
@@ -937,7 +937,16 @@ async function materializeAssignedAutomaticRecurringTasks(userId: string) {
     .eq("recurrence_completion_required", false)
     .is("recurrence_parent_task_id", null);
   if (error) throw error;
-  await Promise.all((tasks ?? []).map((task) => materializeRecurringTasks(task.id as string, userId)));
+  const results = await Promise.allSettled((tasks ?? []).map((task) => materializeRecurringTasks(task.id as string, userId)));
+  results.forEach((result, index) => {
+    if (result.status === "rejected") {
+      console.error("Unable to materialize recurring task before Google Calendar sync", {
+        userId,
+        taskId: tasks?.[index]?.id,
+        error: result.reason,
+      });
+    }
+  });
 }
 
 export async function upsertTask(formData: FormData) {
