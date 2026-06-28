@@ -6,9 +6,10 @@ import { appTimeZone, formatDateTimeForGoogle, normalizeTimeZone } from "./timez
 const calendarEventsScope = "https://www.googleapis.com/auth/calendar.events";
 const driveMetadataScope = "https://www.googleapis.com/auth/drive.metadata.readonly";
 
-export function googleScopes() {
-  const scopes = ["openid", "email", "profile", calendarEventsScope];
-  if (process.env.GOOGLE_ENABLE_DRIVE_SCOPE === "true") scopes.push(driveMetadataScope);
+export function googleScopes(options: { includeCalendar?: boolean } = {}) {
+  const scopes = ["openid", "email", "profile"];
+  if (options.includeCalendar) scopes.push(calendarEventsScope);
+  if (options.includeCalendar && process.env.GOOGLE_ENABLE_DRIVE_SCOPE === "true") scopes.push(driveMetadataScope);
   return scopes;
 }
 
@@ -62,7 +63,10 @@ function taskCalendarDescription(task: { description?: string | null; id?: strin
 }
 
 function baseUrl() {
-  return process.env.NEXT_PUBLIC_APP_URL || (process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000");
+  const configuredUrl = process.env.NEXT_PUBLIC_APP_URL?.trim();
+  const fallbackUrl = process.env.VERCEL_URL ? `https://${process.env.VERCEL_URL}` : "http://localhost:3000";
+  const url = configuredUrl || fallbackUrl;
+  return /^https?:\/\//i.test(url) ? url.replace(/\/$/, "") : `https://${url.replace(/\/$/, "")}`;
 }
 
 export function hasGoogleConfig() {
@@ -74,7 +78,7 @@ export function googleOAuthUrl(mode: "login" | "connect", returnTo?: string) {
     client_id: process.env.GOOGLE_CLIENT_ID || "",
     redirect_uri: `${baseUrl()}/api/auth/google/callback`,
     response_type: "code",
-    scope: googleScopes().join(" "),
+    scope: googleScopes({ includeCalendar: mode === "connect" }).join(" "),
     access_type: "offline",
     prompt: "consent",
     state: returnTo ? `${mode}:${returnTo}` : mode,
@@ -111,7 +115,7 @@ export async function getGoogleUser(accessToken: string) {
 
 export async function upsertGoogleConnection(input: { userId: string; googleUser: GoogleUser; tokens: TokenResponse }) {
   const expiresAt = new Date(Date.now() + input.tokens.expires_in * 1000).toISOString();
-  const grantedScopes = input.tokens.scope ? input.tokens.scope.split(" ") : googleScopes();
+  const grantedScopes = input.tokens.scope ? input.tokens.scope.split(" ") : googleScopes({ includeCalendar: true });
   const payload = {
     user_id: input.userId,
     google_sub: input.googleUser.sub,

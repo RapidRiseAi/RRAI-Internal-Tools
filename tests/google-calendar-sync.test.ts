@@ -15,8 +15,12 @@ describe("Google Calendar sync helpers", () => {
     );
   });
 
-  it("requests Calendar scope by default without Drive scope", () => {
-    expect(googleScopes()).toEqual([
+  it("requests only identity scopes for Google login by default", () => {
+    expect(googleScopes()).toEqual(["openid", "email", "profile"]);
+  });
+
+  it("requests Calendar scope for Google connect", () => {
+    expect(googleScopes({ includeCalendar: true })).toEqual([
       "openid",
       "email",
       "profile",
@@ -24,9 +28,10 @@ describe("Google Calendar sync helpers", () => {
     ]);
   });
 
-  it("only includes Drive scope when explicitly enabled", () => {
+  it("only includes Drive scope for Google connect when explicitly enabled", () => {
     process.env.GOOGLE_ENABLE_DRIVE_SCOPE = "true";
-    expect(googleScopes()).toContain("https://www.googleapis.com/auth/drive.metadata.readonly");
+    expect(googleScopes({ includeCalendar: true })).toContain("https://www.googleapis.com/auth/drive.metadata.readonly");
+    expect(googleScopes()).not.toContain("https://www.googleapis.com/auth/drive.metadata.readonly");
   });
 
   it("builds a Johannesburg one-hour task payload at the intended wall-clock time", () => {
