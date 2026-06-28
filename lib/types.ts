@@ -95,6 +95,7 @@ export type Task = {
   recurrence_day_of_month: number | null;
   recurrence_next_due_at: string | null;
   recurrence_parent_task_id: string | null;
+  recurrence_completion_required: boolean;
   created_at: string;
   updated_at: string;
   assignee?: Pick<User, "id" | "name"> | null;

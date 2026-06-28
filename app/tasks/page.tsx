@@ -130,7 +130,7 @@ export default async function TasksPage({ searchParams }: { searchParams?: Promi
                         {dateShort(task.due_date)}
                       </td>
                       <td className="text-slate-300">
-                        {task.recurrence === "NONE" ? "—" : `${task.recurrence.toLowerCase()}${task.recurrence_next_due_at ? ` · next ${dateShort(task.recurrence_next_due_at)}` : ""}`}
+                        {task.recurrence === "NONE" ? "—" : `${task.recurrence.toLowerCase()} · ${task.recurrence_completion_required ? "completion required" : "3-month prefill"}${task.recurrence_next_due_at ? ` · next ${dateShort(task.recurrence_next_due_at)}` : ""}`}
                       </td>
                       <td className="py-2">
                         <div className="flex flex-wrap gap-2">
