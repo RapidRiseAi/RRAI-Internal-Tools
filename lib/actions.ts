@@ -864,6 +864,82 @@ function nextRecurringDueDate({
   return candidate;
 }
 
+async function materializeRecurringTasks(taskId: string, actorId: string) {
+  const { data: task, error } = await getSupabaseAdmin()
+    .from("tasks")
+    .select("id,title,description,type,priority,due_date,duration_minutes,client_id,project_id,assigned_to,created_by,recurrence,recurrence_interval,recurrence_day_of_week,recurrence_day_of_month,recurrence_completion_required")
+    .eq("id", taskId)
+    .single();
+  if (error) throw error;
+  if (!task || task.recurrence === "NONE" || task.recurrence_completion_required || !task.due_date) return [];
+
+  const horizon = new Date();
+  horizon.setUTCMonth(horizon.getUTCMonth() + 3);
+  const occurrences: Array<typeof task & { due_date: string; recurrence_parent_task_id: string; status: string; recurrence_next_due_at: string | null }> = [];
+  let cursor = nextRecurringDueDate({
+    baseDate: new Date(task.due_date),
+    recurrence: task.recurrence,
+    interval: task.recurrence_interval,
+    dayOfWeek: task.recurrence_day_of_week,
+    dayOfMonth: task.recurrence_day_of_month,
+  });
+  while (cursor && cursor <= horizon && occurrences.length < 120) {
+    const followingDueAt = nextRecurringDueDate({
+      baseDate: cursor,
+      recurrence: task.recurrence,
+      interval: task.recurrence_interval,
+      dayOfWeek: task.recurrence_day_of_week,
+      dayOfMonth: task.recurrence_day_of_month,
+    });
+    const dueDate = cursor.toISOString();
+    const { data: existing, error: existingError } = await getSupabaseAdmin()
+      .from("tasks")
+      .select("id")
+      .eq("recurrence_parent_task_id", task.id)
+      .gte("due_date", dueDate.slice(0, 10))
+      .lt("due_date", new Date(cursor.getTime() + 24 * 60 * 60 * 1000).toISOString().slice(0, 10))
+      .maybeSingle();
+    if (existingError) throw existingError;
+    if (!existing) {
+      occurrences.push({
+        ...task,
+        status: "TO_DO",
+        due_date: dueDate,
+        created_by: task.created_by ?? actorId,
+        recurrence_next_due_at: followingDueAt?.toISOString() ?? null,
+        recurrence_parent_task_id: task.id,
+      });
+    }
+    cursor = followingDueAt;
+  }
+  if (!occurrences.length) return [];
+  const { data: inserted, error: insertError } = await getSupabaseAdmin()
+    .from("tasks")
+    .insert(
+      occurrences.map((occurrence) => {
+        const payload = { ...occurrence };
+        delete (payload as Partial<typeof occurrence>).id;
+        return payload;
+      }),
+    )
+    .select("id");
+  if (insertError) throw insertError;
+  await Promise.all((inserted ?? []).map((row) => syncTaskToGoogleCalendar(row.id as string)));
+  return inserted ?? [];
+}
+
+async function materializeAssignedAutomaticRecurringTasks(userId: string) {
+  const { data: tasks, error } = await getSupabaseAdmin()
+    .from("tasks")
+    .select("id")
+    .eq("assigned_to", userId)
+    .neq("recurrence", "NONE")
+    .eq("recurrence_completion_required", false)
+    .is("recurrence_parent_task_id", null);
+  if (error) throw error;
+  await Promise.all((tasks ?? []).map((task) => materializeRecurringTasks(task.id as string, userId)));
+}
+
 export async function upsertTask(formData: FormData) {
   const user = await requirePermission(permissions.tasksWrite);
   const id = str(formData, "id") || undefined;
@@ -884,6 +960,7 @@ export async function upsertTask(formData: FormData) {
     recurrenceInterval: str(formData, "recurrenceInterval") || "1",
     recurrenceDayOfWeek: str(formData, "recurrenceDayOfWeek") || undefined,
     recurrenceDayOfMonth: str(formData, "recurrenceDayOfMonth") || undefined,
+    recurrenceCompletionRequired: str(formData, "recurrenceCompletionRequired") || "false",
   });
   const instructions = str(formData, "instructions").trim();
   const expectedOutcome = str(formData, "expectedOutcome").trim();
@@ -916,6 +993,7 @@ export async function upsertTask(formData: FormData) {
     recurrence_day_of_week: parsed.recurrence === "WEEKLY" ? parsed.recurrenceDayOfWeek ?? taskDueDate?.getUTCDay() ?? null : null,
     recurrence_day_of_month: parsed.recurrence === "MONTHLY" ? parsed.recurrenceDayOfMonth ?? taskDueDate?.getUTCDate() ?? null : null,
     recurrence_next_due_at: parsed.recurrence === "NONE" ? null : recurrenceNextDueAt?.toISOString() ?? null,
+    recurrence_completion_required: parsed.recurrence === "NONE" ? false : parsed.recurrenceCompletionRequired,
     client_id: parsed.clientId ?? null,
     project_id: parsed.projectId ?? null,
     assigned_to: parsed.assignedToId ?? null,
@@ -958,6 +1036,9 @@ export async function upsertTask(formData: FormData) {
     if (linkError) throw linkError;
   }
   await syncTaskToGoogleCalendar(result.data.id);
+  if (parsed.recurrence !== "NONE" && !parsed.recurrenceCompletionRequired) {
+    await materializeRecurringTasks(result.data.id, user.id);
+  }
   await logActivity({
     action:
       parsed.status === "DONE"
@@ -979,6 +1060,7 @@ export async function upsertTask(formData: FormData) {
 
 export async function syncMyGoogleCalendar(formData?: FormData) {
   const user = await requireUser();
+  await materializeAssignedAutomaticRecurringTasks(user.id);
   const result = await syncAssignedTasksToGoogleCalendar(user.id);
   revalidatePath("/settings");
   revalidatePath("/calendar");
@@ -2962,10 +3044,10 @@ export async function updateTaskStatus(formData: FormData) {
         : null,
     })
     .eq("id", parsed.id)
-    .select("id,title,description,type,priority,due_date,duration_minutes,client_id,project_id,assigned_to,created_by,recurrence,recurrence_interval,recurrence_day_of_week,recurrence_day_of_month")
+    .select("id,title,description,type,priority,due_date,duration_minutes,client_id,project_id,assigned_to,created_by,recurrence,recurrence_interval,recurrence_day_of_week,recurrence_day_of_month,recurrence_completion_required")
     .single();
   if (error) throw error;
-  if (parsed.status === "DONE" && previousTask.status !== "DONE" && data.recurrence !== "NONE") {
+  if (parsed.status === "DONE" && previousTask.status !== "DONE" && data.recurrence !== "NONE" && data.recurrence_completion_required) {
     const nextDueAt = nextRecurringDueDate({
       baseDate: data.due_date ? new Date(data.due_date) : new Date(),
       recurrence: data.recurrence,
@@ -2998,6 +3080,7 @@ export async function updateTaskStatus(formData: FormData) {
       recurrence_day_of_month: data.recurrence_day_of_month,
       recurrence_next_due_at: followingDueAt?.toISOString() ?? null,
       recurrence_parent_task_id: data.id,
+      recurrence_completion_required: data.recurrence_completion_required,
     }).select("id").single();
     if (recurrenceError) throw recurrenceError;
     if (recurrenceTask?.id) await syncTaskToGoogleCalendar(recurrenceTask.id as string);

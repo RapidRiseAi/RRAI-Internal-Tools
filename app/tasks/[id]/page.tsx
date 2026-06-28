@@ -110,6 +110,7 @@ export default async function TaskDetail({ params }: { params: Promise<{ id: str
             <p>Updated: {dateShort(task.updated_at)}</p>
             <p>Completed: {dateShort(task.completed_at)}</p>
             <p>Recurrence: {task.recurrence === "NONE" ? "None" : task.recurrence}</p>
+            {task.recurrence !== "NONE" ? <p>Schedule mode: {task.recurrence_completion_required ? "Completion required" : "3-month calendar prefill"}</p> : null}
             {task.recurrence !== "NONE" ? <p>Next occurrence: {dateShort(task.recurrence_next_due_at)}</p> : null}
           </div>
         </Card>

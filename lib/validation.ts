@@ -113,6 +113,7 @@ export const taskSchema = z.object({
   recurrenceInterval: z.coerce.number().int().min(1).max(52).default(1),
   recurrenceDayOfWeek: z.coerce.number().int().min(0).max(6).optional(),
   recurrenceDayOfMonth: z.coerce.number().int().min(1).max(31).optional(),
+  recurrenceCompletionRequired: z.coerce.boolean().default(false),
 });
 
 export const userSchema = z.object({

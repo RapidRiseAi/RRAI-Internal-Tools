@@ -517,8 +517,14 @@ export function TaskForm({
               <input className={inputClass} type="number" min="1" max="31" name="recurrenceDayOfMonth" defaultValue={task?.recurrence_day_of_month ?? 1} />
             </Field>
           )}
+          <Field label="Recurring schedule mode">
+            <select className={inputClass} name="recurrenceCompletionRequired" defaultValue={task?.recurrence_completion_required ? "true" : "false"}>
+              <option value="false">Recommended: fill the next 3 months automatically</option>
+              <option value="true">Require completion before adding the next task</option>
+            </select>
+          </Field>
           <p className="md:col-span-3 rounded-2xl border border-rapid-cyan/20 bg-rapid-cyan/10 p-3 text-sm text-rapid-cyan">
-            When this task is completed, the next occurrence will be created automatically with the same core fields, assignee, client and project.
+            Recommended mode keeps your calendar populated for the next 3 months whether or not the last occurrence was completed. Completion-required mode only creates the next occurrence after you mark the task done.
           </p>
         </>
       ) : null}
