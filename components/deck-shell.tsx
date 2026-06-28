@@ -191,7 +191,7 @@ export function DeckShell({
       </aside>
 
       <div className={clsx("flex h-screen flex-col transition-[padding] duration-200", collapsed ? "xl:pl-[4.75rem]" : "xl:pl-64")}>
-        <header className="shrink-0 border-b border-hairline bg-deck-bg/80 px-4 py-3 backdrop-blur-md md:px-6">
+        <header className="relative z-[100] shrink-0 border-b border-hairline bg-deck-bg/80 px-4 py-3 backdrop-blur-md md:px-6">
           <div className="flex items-center justify-between gap-3">
             <Link href="/dashboard" className="hidden min-w-[20rem] items-center gap-3 rounded-lg border border-hairline bg-white/[0.03] px-4 py-2 text-sm text-deck-muted transition hover:border-accent-cyan/40 hover:text-deck-text md:flex md:max-w-md md:flex-1">
               <Search className="size-4 text-accent-cyan" />
@@ -279,8 +279,8 @@ export function DeckShell({
 function DropdownPanel({ children, onClose, align = "right", width = "w-80" }: { children: React.ReactNode; onClose: () => void; align?: "left" | "right"; width?: string }) {
   return (
     <>
-      <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-40 cursor-default" onClick={onClose} />
-      <div className={clsx("absolute top-full z-50 mt-2 overflow-hidden rounded-xl border border-hairline bg-deck-panel shadow-2xl shadow-black/50", width, align === "right" ? "right-0" : "left-0")}>
+      <button type="button" aria-hidden tabIndex={-1} className="fixed inset-0 z-[900] cursor-default" onClick={onClose} />
+      <div className={clsx("absolute top-full z-[1000] mt-2 overflow-hidden rounded-xl border border-hairline bg-deck-panel shadow-2xl shadow-black/50", width, align === "right" ? "right-0" : "left-0")}>
         {children}
       </div>
     </>
