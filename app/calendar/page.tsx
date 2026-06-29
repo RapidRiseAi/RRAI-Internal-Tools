@@ -89,7 +89,9 @@ function hasActualOccurrence(tasks: Task[], parentId: string, occurrenceDate: Da
   return tasks.some((task) => task.recurrence_parent_task_id === parentId && sameDay(task.due_date, occurrenceDate));
 }
 function recurringOccurrencesInRange(task: Task, tasks: Task[], rangeStart: Date, rangeEnd: Date): CalendarItem[] {
-  if (task.recurrence === "NONE" || inactiveTaskStatuses.has(task.status)) return [];
+  // Completion-required series have no scheduled future: the next occurrence only
+  // exists once the current one is completed, so we never project them forward.
+  if (task.recurrence === "NONE" || task.recurrence_completion_required || inactiveTaskStatuses.has(task.status)) return [];
   const firstDate = task.due_date ?? task.recurrence_next_due_at;
   if (!firstDate) return [];
   const occurrences: CalendarItem[] = [];
