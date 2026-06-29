@@ -924,7 +924,9 @@ async function materializeRecurringTasks(taskId: string, actorId: string) {
     )
     .select("id");
   if (insertError) throw insertError;
-  await Promise.all((inserted ?? []).map((row) => syncTaskToGoogleCalendar(row.id as string)));
+  // Child occurrences are NOT pushed to Google individually: the parent task carries an
+  // RRULE recurring series that already covers every occurrence. Syncing them here would
+  // double-book each meeting. They exist only as concrete in-app rows for the calendar.
   return inserted ?? [];
 }
 

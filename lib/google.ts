@@ -140,23 +140,68 @@ export async function getGoogleUser(accessToken: string) {
   return response.json() as Promise<GoogleUser>;
 }
 
+type ExistingGoogleConnection = {
+  scopes?: string[] | null;
+  calendar_connected?: boolean | null;
+  drive_connected?: boolean | null;
+} | null;
+
+/**
+ * Decide the connection flags/scopes for an OAuth callback without clobbering an
+ * existing Calendar grant.
+ *
+ * A Google *login* only requests identity scopes (openid/email/profile), while a
+ * *connect* also requests `calendar.events`. Because both flows write the same row,
+ * a plain overwrite means logging in with Google downgrades a connected Calendar back
+ * to `calendar_connected = false` — which silently breaks every future sync. So when
+ * the incoming grant lacks the calendar scope but the user already has Calendar
+ * connected, we preserve the calendar grant instead of tearing it down.
+ */
+export function mergeGoogleConnectionState(existing: ExistingGoogleConnection, grantedScopes: string[]) {
+  const grantIncludesCalendar = grantedScopes.includes(calendarEventsScope);
+  const grantIncludesDrive = grantedScopes.includes(driveMetadataScope);
+  const preserveCalendar = !grantIncludesCalendar && Boolean(existing?.calendar_connected);
+  return {
+    preserveCalendar,
+    scopes: Array.from(new Set([...(existing?.scopes ?? []), ...grantedScopes])),
+    calendar_connected: grantIncludesCalendar || preserveCalendar,
+    drive_connected: grantIncludesDrive || (preserveCalendar && Boolean(existing?.drive_connected)),
+  };
+}
+
 export async function upsertGoogleConnection(input: { userId: string; googleUser: GoogleUser; tokens: TokenResponse }) {
-  const expiresAt = new Date(Date.now() + input.tokens.expires_in * 1000).toISOString();
+  const admin = getSupabaseAdmin();
+  const { data: existing } = await admin
+    .from("google_connections")
+    .select("access_token,refresh_token,token_expires_at,scopes,calendar_connected,drive_connected")
+    .eq("user_id", input.userId)
+    .maybeSingle();
+
   const grantedScopes = input.tokens.scope ? input.tokens.scope.split(" ") : googleScopes({ includeCalendar: true });
+  const merged = mergeGoogleConnectionState(existing as ExistingGoogleConnection, grantedScopes);
+  const expiresAt = new Date(Date.now() + input.tokens.expires_in * 1000).toISOString();
+
+  // When preserving an existing Calendar connection, keep the calendar-capable
+  // tokens too — an identity-only login token cannot call the Calendar API, and the
+  // identity refresh token can only mint more identity tokens.
+  const keepCalendarTokens = merged.preserveCalendar && Boolean(existing?.access_token);
+
   const payload = {
     user_id: input.userId,
     google_sub: input.googleUser.sub,
     google_email: input.googleUser.email.toLowerCase(),
     google_name: input.googleUser.name ?? null,
-    access_token: input.tokens.access_token,
-    ...(input.tokens.refresh_token ? { refresh_token: input.tokens.refresh_token } : {}),
-    token_expires_at: expiresAt,
-    scopes: grantedScopes,
-    calendar_connected: grantedScopes.includes(calendarEventsScope),
-    drive_connected: grantedScopes.includes(driveMetadataScope),
+    access_token: keepCalendarTokens ? (existing!.access_token as string) : input.tokens.access_token,
+    token_expires_at: keepCalendarTokens ? (existing!.token_expires_at as string | null) : expiresAt,
+    ...(keepCalendarTokens
+      ? (existing?.refresh_token ? { refresh_token: existing.refresh_token as string } : {})
+      : (input.tokens.refresh_token ? { refresh_token: input.tokens.refresh_token } : {})),
+    scopes: merged.scopes,
+    calendar_connected: merged.calendar_connected,
+    drive_connected: merged.drive_connected,
     updated_at: new Date().toISOString(),
   };
-  const { error } = await getSupabaseAdmin().from("google_connections").upsert(payload, { onConflict: "user_id" });
+  const { error } = await admin.from("google_connections").upsert(payload, { onConflict: "user_id" });
   if (error) throw error;
 }
 
@@ -293,6 +338,24 @@ export async function syncTaskToGoogleCalendar(taskId: string): Promise<GoogleCa
       return syncResult("failed", taskId, `Unable to load task: ${taskError.message}`);
     }
     if (!task) return syncResult("skipped", taskId, "Task was not found.");
+
+    // Automatic recurring occurrences are represented in Google by their parent task's
+    // RRULE series, so they must never be pushed as their own one-off events — doing so
+    // makes every occurrence appear twice (once from the parent series, once from the
+    // child). If a child still carries an event from older behavior, delete it so the
+    // parent series stays the single source of truth.
+    if (task.recurrence_parent_task_id && !task.recurrence_completion_required) {
+      const childEventId = task.google_calendar_event_id as string | null;
+      const childEventUserId = task.google_calendar_user_id as string | null;
+      if (childEventId && childEventUserId) {
+        await deleteGoogleCalendarEvent(childEventUserId, childEventId);
+        await getSupabaseAdmin()
+          .from("tasks")
+          .update({ google_calendar_event_id: null, google_calendar_event_url: null, google_calendar_user_id: null, google_calendar_synced_at: null })
+          .eq("id", taskId);
+      }
+      return syncResult("skipped", taskId, "Automatic recurring occurrence is covered by its parent's Google Calendar series.");
+    }
 
     const existingEventId = task.google_calendar_event_id as string | null;
     const existingUserId = task.google_calendar_user_id as string | null;
@@ -441,6 +504,19 @@ export async function syncAssignedTasksToGoogleCalendar(userId: string): Promise
     result.errors.push("Google OAuth is not configured.");
     return result;
   }
+
+  // Every task assigned to this user syncs under this user's token. If Calendar
+  // isn't actually connected (e.g. the account was only used for "Sign in with
+  // Google", or a login downgraded the grant), each task would skip with no visible
+  // reason. Detect it once up front and report an actionable message instead of a
+  // silent "skipped N".
+  if (!(await accessTokenForUser(userId))) {
+    result.errors.push(
+      'Google Calendar isn’t connected for your account. Open Settings and click “Connect Google” to grant calendar access, then sync again.',
+    );
+    return result;
+  }
+
   const { data: tasks, error } = await getSupabaseAdmin()
     .from("tasks")
     .select("id,recurrence_parent_task_id,recurrence_completion_required")
@@ -453,16 +529,25 @@ export async function syncAssignedTasksToGoogleCalendar(userId: string): Promise
     result.errors.push(`Unable to load assigned tasks: ${error.message}`);
     return result;
   }
+  const skipReasons: string[] = [];
   for (const task of tasks ?? []) {
     if (task.recurrence_parent_task_id && !task.recurrence_completion_required) continue;
     result.attempted += 1;
     const taskResult = await syncTaskToGoogleCalendar(task.id as string);
     if (taskResult.status === "synced") result.synced += 1;
-    if (taskResult.status === "skipped") result.skipped += 1;
+    if (taskResult.status === "skipped") {
+      result.skipped += 1;
+      skipReasons.push(taskResult.message);
+    }
     if (taskResult.status === "failed") {
       result.failed += 1;
       result.errors.push(taskResult.message);
     }
+  }
+  // If nothing synced but tasks were skipped, surface the reasons so a silent
+  // "skipped N" can never again hide a real problem.
+  if (result.synced === 0 && result.skipped > 0) {
+    result.errors.push(...skipReasons);
   }
   return result;
 }

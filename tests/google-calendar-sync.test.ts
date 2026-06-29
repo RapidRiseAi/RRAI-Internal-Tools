@@ -2,7 +2,10 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("server-only", () => ({}));
 
-const { googleScopes, summarizeGoogleCalendarSyncErrors, taskGoogleCalendarPayload } = await import("../lib/google");
+const { googleScopes, summarizeGoogleCalendarSyncErrors, taskGoogleCalendarPayload, mergeGoogleConnectionState } = await import("../lib/google");
+
+const CALENDAR_SCOPE = "https://www.googleapis.com/auth/calendar.events";
+const IDENTITY_SCOPES = ["openid", "email", "profile"];
 
 describe("Google Calendar sync helpers", () => {
   beforeEach(() => {
@@ -79,4 +82,39 @@ describe("Google Calendar sync helpers", () => {
     expect(payload).not.toHaveProperty("recurrence");
   });
 
+});
+
+describe("mergeGoogleConnectionState", () => {
+  it("does not downgrade an existing Calendar connection on an identity-only login", () => {
+    const merged = mergeGoogleConnectionState(
+      { scopes: [...IDENTITY_SCOPES, CALENDAR_SCOPE], calendar_connected: true, drive_connected: false },
+      IDENTITY_SCOPES,
+    );
+    expect(merged.preserveCalendar).toBe(true);
+    expect(merged.calendar_connected).toBe(true);
+    expect(merged.scopes).toContain(CALENDAR_SCOPE);
+  });
+
+  it("leaves a never-connected account disconnected after a Google login", () => {
+    const merged = mergeGoogleConnectionState(null, IDENTITY_SCOPES);
+    expect(merged.preserveCalendar).toBe(false);
+    expect(merged.calendar_connected).toBe(false);
+  });
+
+  it("connects Calendar when the grant includes the calendar scope", () => {
+    const merged = mergeGoogleConnectionState(
+      { scopes: IDENTITY_SCOPES, calendar_connected: false, drive_connected: false },
+      [...IDENTITY_SCOPES, CALENDAR_SCOPE],
+    );
+    expect(merged.calendar_connected).toBe(true);
+    expect(merged.preserveCalendar).toBe(false);
+  });
+
+  it("keeps Calendar disconnected for an identity login when it was never connected", () => {
+    const merged = mergeGoogleConnectionState(
+      { scopes: IDENTITY_SCOPES, calendar_connected: false, drive_connected: false },
+      IDENTITY_SCOPES,
+    );
+    expect(merged.calendar_connected).toBe(false);
+  });
 });
