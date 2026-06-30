@@ -205,7 +205,6 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     quotesResult,
     projectsResult,
     paymentsResult,
-    authUsersResult,
   ] = await Promise.all([
     supabase.from("affiliates").select("*").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_partner_applications").select("*").order("submitted_at", { ascending: false }).limit(100),
@@ -228,21 +227,27 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     supabase.from("quotes").select("*").order("updated_at", { ascending: false }),
     supabase.from("projects").select("*").order("updated_at", { ascending: false }),
     supabase.from("payments").select("*").order("created_at", { ascending: false }),
-    supabase.auth.admin.listUsers({ page: 1, perPage: 1000 }),
   ]);
 
-  if (authUsersResult.error) {
-    throw new Error(`Load applicant Auth users: ${authUsersResult.error.message}`);
+  const loadedApplications = dataOrThrow<PortalApplication[]>(applicationsResult, "Load partner applications");
+  // Check verification only for the loaded applicants (not all auth users), so this
+  // stays correct and cheap regardless of how many auth users exist.
+  const applicantAuthIds = loadedApplications.map((application) => application.auth_user_id);
+  const verifiedAuthUserIds = new Set<string>();
+  if (applicantAuthIds.length) {
+    const { data: verifiedRows, error: verifiedError } = await supabase.rpc(
+      "affiliate_portal_admin_verified_auth_users",
+      { p_auth_user_ids: applicantAuthIds },
+    );
+    if (verifiedError) throw new Error(`Load applicant verification: ${verifiedError.message}`);
+    for (const row of (verifiedRows ?? []) as Array<{ auth_user_id: string }>) {
+      verifiedAuthUserIds.add(row.auth_user_id);
+    }
   }
-  const authUsers = authUsersResult.data?.users ?? [];
-  const verifiedAuthUserIds = new Set(
-    authUsers.filter((user) => Boolean(user.email_confirmed_at)).map((user) => user.id),
-  );
-  const applications = dataOrThrow<PortalApplication[]>(applicationsResult, "Load partner applications")
-    .map((application) => ({
-      ...application,
-      email_verified: verifiedAuthUserIds.has(application.auth_user_id),
-    }));
+  const applications = loadedApplications.map((application) => ({
+    ...application,
+    email_verified: verifiedAuthUserIds.has(application.auth_user_id),
+  }));
 
   return {
     affiliates: dataOrThrow<Affiliate[]>(affiliatesResult, "Load affiliates"),
