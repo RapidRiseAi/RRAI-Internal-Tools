@@ -2181,7 +2181,7 @@ export async function approvePortalApplication(formData: FormData) {
   });
   const supabase = getSupabaseAdmin();
   const { data: application } = await supabase.from("affiliate_portal_partner_applications").select("auth_user_id,first_name").eq("id", parsed.applicationId).maybeSingle();
-  const { error } = await supabase.rpc(
+  const { data: approval, error } = await supabase.rpc(
     "affiliate_portal_admin_approve_application",
     {
       p_actor_crm_user_id: user.id,
@@ -2192,11 +2192,16 @@ export async function approvePortalApplication(formData: FormData) {
     },
   );
   if (error) throw error;
+  const trackingCode = (approval as Array<{ tracking_code?: string }> | null)?.[0]?.tracking_code;
   if (application) await notifyAffiliateSafely({
     authUserId: application.auth_user_id,
     preference: "application_updates",
     subject: "Your Rapid Rise AI partner application was approved",
-    html: `<h1>Welcome to the partner network</h1><p>Hi ${escapeEmailHtml(application.first_name)}, your application has been approved. You can now sign in to your affiliate portal.</p>`,
+    html: `<h1>Welcome to the partner network</h1>`
+      + `<p>Hi ${escapeEmailHtml(application.first_name)}, your application has been approved.</p>`
+      + (trackingCode ? `<p>Your affiliate tracking code is <strong>${escapeEmailHtml(trackingCode)}</strong> — it identifies every referral you send.</p>` : "")
+      + `<p><strong>Next step:</strong> sign in and review &amp; electronically sign your commission agreement. Commissions can only be earned once your agreement is active.</p>`
+      + `<p><a href="${escapeEmailHtml(affiliateAgreementUrl())}">Open your portal and sign your agreement →</a></p>`,
   });
   revalidatePath("/affiliates");
   redirect("/affiliates");
