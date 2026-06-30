@@ -48,10 +48,10 @@ export type PortalTrackingLink = {
   created_at: string;
 };
 
-export type PortalClick = {
-  id: string;
-  affiliate_id: string | null;
-  occurred_at: string;
+export type AffiliateClickStat = {
+  affiliate_id: string;
+  clicks_total: number;
+  clicks_30d: number;
 };
 
 export type PortalAttribution = {
@@ -139,7 +139,7 @@ export type AffiliateOperationsData = {
   applications: PortalApplication[];
   userLinks: PortalUserLink[];
   trackingLinks: PortalTrackingLink[];
-  clicks: PortalClick[];
+  clickStats: AffiliateClickStat[];
   referrals: Referral[];
   commissions: Commission[];
   snapshots: CommissionSnapshot[];
@@ -165,7 +165,7 @@ function dataOrThrow<T>(result: { data: T | null; error: { message: string } | n
 export async function loadAffiliateOperations(): Promise<AffiliateOperationsData> {
   if (!hasSupabaseConfig()) {
     return {
-      affiliates: [], applications: [], userLinks: [], trackingLinks: [], clicks: [],
+      affiliates: [], applications: [], userLinks: [], trackingLinks: [], clickStats: [],
       referrals: [], commissions: [], snapshots: [], attributions: [], auditEvents: [],
       agreements: [], agreementRates: [], agreementSignatures: [], payoutBatches: [], payoutItems: [], services: [], leads: [], quotes: [], projects: [], payments: [],
     };
@@ -177,7 +177,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     applicationsResult,
     userLinksResult,
     trackingLinksResult,
-    clicksResult,
+    clickStatsResult,
     referralsResult,
     commissionsResult,
     snapshotsResult,
@@ -199,7 +199,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     supabase.from("affiliate_portal_partner_applications").select("*").order("submitted_at", { ascending: false }).limit(100),
     supabase.from("affiliate_portal_user_links").select("auth_user_id,affiliate_id,crm_user_id"),
     supabase.from("affiliate_portal_tracking_links").select("id,affiliate_id,tracking_token,destination_url,private_reference,channel,is_active,created_at").order("created_at", { ascending: false }),
-    supabase.from("affiliate_portal_click_events").select("id,affiliate_id,occurred_at").order("occurred_at", { ascending: false }).limit(5000),
+    supabase.from("affiliate_portal_affiliate_click_stats").select("affiliate_id,clicks_total,clicks_30d"),
     supabase.from("referrals").select("*").order("created_at", { ascending: false }),
     supabase.from("commissions").select("*").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_commission_snapshots").select("commission_id,base_amount_cents,rate_percent,agreement_id,agreement_rate_id,service_id,commission_model"),
@@ -236,7 +236,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     applications,
     userLinks: dataOrThrow<PortalUserLink[]>(userLinksResult, "Load portal user mappings"),
     trackingLinks: dataOrThrow<PortalTrackingLink[]>(trackingLinksResult, "Load tracking links"),
-    clicks: dataOrThrow<PortalClick[]>(clicksResult, "Load click events"),
+    clickStats: dataOrThrow<AffiliateClickStat[]>(clickStatsResult, "Load click stats"),
     referrals: dataOrThrow<Referral[]>(referralsResult, "Load referrals"),
     commissions: dataOrThrow<Commission[]>(commissionsResult, "Load commissions"),
     snapshots: dataOrThrow<CommissionSnapshot[]>(snapshotsResult, "Load commission snapshots"),

@@ -369,7 +369,7 @@ function PayoutManagement({ data }: { data: AffiliateOperationsData }) {
 export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) {
   const now = Date.now();
   const thirtyDaysAgo = now - 30 * 24 * 60 * 60 * 1000;
-  const clicksLast30Days = data.clicks.filter((click) => new Date(click.occurred_at).getTime() >= thirtyDaysAgo).length;
+  const clicksLast30Days = data.clickStats.reduce((sum, stat) => sum + stat.clicks_30d, 0);
   const pendingCommissionCents = data.commissions
     .filter((commission) => !["PAID", "CANCELLED"].includes(commission.status))
     .reduce((sum, commission) => sum + commission.amount_cents, 0);
@@ -377,10 +377,11 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
     .filter((commission) => commission.status === "PAID")
     .reduce((sum, commission) => sum + commission.amount_cents, 0);
   const referralsByAffiliate = new Map<string, number>();
-  const clicksByAffiliate = new Map<string, number>();
+  const clicksByAffiliate = new Map<string, number>(
+    data.clickStats.map((stat) => [stat.affiliate_id, stat.clicks_total]),
+  );
   const commissionsByAffiliate = new Map<string, number>();
   for (const referral of data.referrals) referralsByAffiliate.set(referral.affiliate_id, (referralsByAffiliate.get(referral.affiliate_id) ?? 0) + 1);
-  for (const click of data.clicks) if (click.affiliate_id) clicksByAffiliate.set(click.affiliate_id, (clicksByAffiliate.get(click.affiliate_id) ?? 0) + 1);
   for (const commission of data.commissions) commissionsByAffiliate.set(commission.affiliate_id, (commissionsByAffiliate.get(commission.affiliate_id) ?? 0) + commission.amount_cents);
   const snapshotByCommission = new Map(data.snapshots.map((snapshot) => [snapshot.commission_id, snapshot]));
   const affiliateById = new Map(data.affiliates.map((affiliate) => [affiliate.id, affiliate]));
