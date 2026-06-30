@@ -64,6 +64,7 @@ import {
   portalPayoutBatchSchema,
   portalPayoutStatusSchema,
   portalTrackingLinkStatusSchema,
+  portalAttributionFraudSchema,
   payrollItemSchema,
   payrollRunSchema,
   projectChecklistSchema,
@@ -2146,6 +2147,23 @@ export async function deleteAffiliateAgreementRate(formData: FormData) {
   const parsed = portalAgreementRateDeleteSchema.parse({ agreementRateId: str(formData, "agreementRateId") });
   const { error } = await getSupabaseAdmin().rpc("affiliate_portal_admin_delete_agreement_rate", {
     p_actor_crm_user_id: user.id, p_agreement_rate_id: parsed.agreementRateId,
+  });
+  if (error) throw error;
+  revalidatePath("/affiliates");
+}
+
+export async function setAttributionFraud(formData: FormData) {
+  const user = await requirePermission(permissions.settingsManage);
+  const parsed = portalAttributionFraudSchema.parse({
+    attributionId: str(formData, "attributionId"),
+    fraud: str(formData, "fraud"),
+    reason: str(formData, "reason"),
+  });
+  const { error } = await getSupabaseAdmin().rpc("affiliate_portal_admin_set_attribution_fraud", {
+    p_actor_crm_user_id: user.id,
+    p_attribution_id: parsed.attributionId,
+    p_fraud: parsed.fraud,
+    p_reason: parsed.reason ?? null,
   });
   if (error) throw error;
   revalidatePath("/affiliates");

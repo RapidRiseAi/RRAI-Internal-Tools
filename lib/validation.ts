@@ -347,6 +347,11 @@ export const portalTrackingLinkStatusSchema = z.object({
 export const portalAgreementRateDeleteSchema = z.object({
   agreementRateId: z.string().uuid(),
 });
+export const portalAttributionFraudSchema = z.object({
+  attributionId: z.string().uuid(),
+  fraud: z.enum(["true", "false"]).transform((value) => value === "true"),
+  reason: z.string().trim().max(500).optional(),
+});
 export const campaignSchema = z.object({
   name: z.string().trim().min(2),
   platform: z.string().trim().min(2),

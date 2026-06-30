@@ -9,6 +9,7 @@ import {
   saveAffiliateAgreement,
   saveAffiliateAgreementRate,
   sendAffiliateAgreementForSignature,
+  setAttributionFraud,
   setPortalTrackingLinkActive,
   updatePortalAffiliate,
   updateAffiliateAgreementStatus,
@@ -385,7 +386,7 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
   for (const commission of data.commissions) commissionsByAffiliate.set(commission.affiliate_id, (commissionsByAffiliate.get(commission.affiliate_id) ?? 0) + commission.amount_cents);
   const snapshotByCommission = new Map(data.snapshots.map((snapshot) => [snapshot.commission_id, snapshot]));
   const affiliateById = new Map(data.affiliates.map((affiliate) => [affiliate.id, affiliate]));
-  const payoutMethodByAffiliate = new Map(data.payoutMethods.map((method) => [method.affiliate_id, method]));
+  const referralById = new Map(data.referrals.map((referral) => [referral.id, referral]));
   const serviceById = new Map(data.services.map((service) => [service.id, service]));
 
   return (
@@ -395,7 +396,7 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
           ["Pending applications", data.applications.filter((application) => application.status === "pending_review").length],
           ["Active affiliates", data.affiliates.filter((affiliate) => affiliate.status === "ACTIVE").length],
           ["Clicks · 30 days", clicksLast30Days],
-          ["Attributed leads", data.attributions.length],
+          ["Attributed leads", data.attributions.filter((attribution) => !attribution.fraud_flag).length],
           ["Commission owed", money(pendingCommissionCents)],
           ["Commission paid", money(paidCommissionCents)],
         ].map(([label, value]) => (
@@ -439,6 +440,41 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
             </table>
           </div>
         ) : <div className="mt-5"><EmptyState title="No payout details yet" body="Affiliates add banking details from their portal settings page." /></div>}
+      </Card>
+
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div><h2 className="font-display text-xl font-semibold text-deck-text">Lead attributions &amp; fraud review</h2><p className="mt-1 text-sm text-deck-muted">Flagged attributions are excluded from the attributed-leads metric. Flagging does not change commissions.</p></div>
+          <span className="font-mono text-xs text-deck-muted">{data.attributions.filter((a) => a.fraud_flag).length} flagged</span>
+        </div>
+        {data.attributions.length ? (
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[820px] text-left text-sm">
+              <thead className="border-b border-hairline text-xs uppercase tracking-wider text-deck-muted"><tr><th className="px-3 py-3">Affiliate</th><th className="px-3 py-3">Source</th><th className="px-3 py-3">Attributed</th><th className="px-3 py-3">Status</th><th className="px-3 py-3">Action</th></tr></thead>
+              <tbody className="divide-y divide-hairline">
+                {data.attributions.slice(0, 25).map((attribution) => {
+                  const referral = referralById.get(attribution.crm_referral_id);
+                  const affiliate = referral ? affiliateById.get(referral.affiliate_id) : undefined;
+                  return (
+                    <tr key={attribution.id} className={`transition-colors hover:bg-white/[0.025] ${attribution.fraud_flag ? "bg-red-500/[0.04]" : ""}`}>
+                      <td className="px-3 py-3"><p className="font-semibold text-deck-text">{affiliate?.name ?? "—"}</p><p className="text-xs text-deck-muted">{affiliate?.tracking_code ?? ""}</p></td>
+                      <td className="px-3 py-3">{labelize(attribution.attribution_source)}{attribution.manual_attribution_reason ? <span className="block text-xs text-deck-muted">{attribution.manual_attribution_reason}</span> : null}</td>
+                      <td className="px-3 py-3 font-mono text-xs">{dateTime(attribution.created_at)}</td>
+                      <td className="px-3 py-3">{attribution.fraud_flag ? <StatusBadge value="FRAUD" /> : <span className="text-xs text-deck-muted">OK</span>}</td>
+                      <td className="px-3 py-3">
+                        <form action={setAttributionFraud} className="flex items-center gap-2">
+                          <input type="hidden" name="attributionId" value={attribution.id} />
+                          <input type="hidden" name="fraud" value={attribution.fraud_flag ? "false" : "true"} />
+                          <SubmitButton className="min-h-9 whitespace-nowrap" pendingLabel="Saving…">{attribution.fraud_flag ? "Clear flag" : "Flag fraud"}</SubmitButton>
+                        </form>
+                      </td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="mt-5"><EmptyState title="No attributions yet" body="Attributed referrals from tracking links and manual entries will appear here." /></div>}
       </Card>
 
       <AffiliateControls data={data} />
