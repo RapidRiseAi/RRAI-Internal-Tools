@@ -385,6 +385,7 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
   for (const commission of data.commissions) commissionsByAffiliate.set(commission.affiliate_id, (commissionsByAffiliate.get(commission.affiliate_id) ?? 0) + commission.amount_cents);
   const snapshotByCommission = new Map(data.snapshots.map((snapshot) => [snapshot.commission_id, snapshot]));
   const affiliateById = new Map(data.affiliates.map((affiliate) => [affiliate.id, affiliate]));
+  const payoutMethodByAffiliate = new Map(data.payoutMethods.map((method) => [method.affiliate_id, method]));
   const serviceById = new Map(data.services.map((service) => [service.id, service]));
 
   return (
@@ -409,6 +410,37 @@ export function AffiliateDashboard({ data }: { data: AffiliateOperationsData }) 
       <AgreementManagement data={data} />
       <ManualOperations data={data} />
       <PayoutManagement data={data} />
+
+      <Card>
+        <div className="flex items-center justify-between gap-3">
+          <div><h2 className="font-display text-xl font-semibold text-deck-text">Payout details on file</h2><p className="mt-1 text-sm text-deck-muted">Banking details affiliates entered in their portal. Use these when paying a batch.</p></div>
+          <span className="font-mono text-xs text-deck-muted">{data.payoutMethods.length} on file</span>
+        </div>
+        {data.payoutMethods.length ? (
+          <div className="mt-5 overflow-x-auto">
+            <table className="w-full min-w-[820px] text-left text-sm">
+              <thead className="border-b border-hairline text-xs uppercase tracking-wider text-deck-muted"><tr><th className="px-3 py-3">Affiliate</th><th className="px-3 py-3">Account holder</th><th className="px-3 py-3">Bank</th><th className="px-3 py-3">Account</th><th className="px-3 py-3">Branch</th><th className="px-3 py-3">Tax</th><th className="px-3 py-3">PayPal</th></tr></thead>
+              <tbody className="divide-y divide-hairline">
+                {data.payoutMethods.map((method) => {
+                  const affiliate = affiliateById.get(method.affiliate_id);
+                  return (
+                    <tr key={method.affiliate_id} className="transition-colors hover:bg-white/[0.025]">
+                      <td className="px-3 py-3"><p className="font-semibold text-deck-text">{affiliate?.name ?? method.affiliate_id}</p><p className="text-xs text-deck-muted">{affiliate?.tracking_code ?? ""}</p></td>
+                      <td className="px-3 py-3">{method.account_holder}</td>
+                      <td className="px-3 py-3">{method.bank_name}</td>
+                      <td className="px-3 py-3 font-mono">{method.account_number}</td>
+                      <td className="px-3 py-3 font-mono">{method.branch_code}</td>
+                      <td className="px-3 py-3">{method.tax_number ?? "—"}</td>
+                      <td className="px-3 py-3">{method.paypal_email ?? "—"}</td>
+                    </tr>
+                  );
+                })}
+              </tbody>
+            </table>
+          </div>
+        ) : <div className="mt-5"><EmptyState title="No payout details yet" body="Affiliates add banking details from their portal settings page." /></div>}
+      </Card>
+
       <AffiliateControls data={data} />
 
       <Card>

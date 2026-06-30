@@ -134,6 +134,16 @@ export type PortalPayoutItem = {
   amount_cents: number;
 };
 
+export type PayoutMethod = {
+  affiliate_id: string;
+  account_holder: string;
+  bank_name: string;
+  account_number: string;
+  branch_code: string;
+  tax_number: string | null;
+  paypal_email: string | null;
+};
+
 export type AffiliateOperationsData = {
   affiliates: Affiliate[];
   applications: PortalApplication[];
@@ -148,6 +158,7 @@ export type AffiliateOperationsData = {
   agreementSignatures: PortalAgreementSignature[];
   payoutBatches: PortalPayoutBatch[];
   payoutItems: PortalPayoutItem[];
+  payoutMethods: PayoutMethod[];
   services: Service[];
   attributions: PortalAttribution[];
   auditEvents: PortalAuditEvent[];
@@ -167,7 +178,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     return {
       affiliates: [], applications: [], userLinks: [], trackingLinks: [], clickStats: [],
       referrals: [], commissions: [], snapshots: [], attributions: [], auditEvents: [],
-      agreements: [], agreementRates: [], agreementSignatures: [], payoutBatches: [], payoutItems: [], services: [], leads: [], quotes: [], projects: [], payments: [],
+      agreements: [], agreementRates: [], agreementSignatures: [], payoutBatches: [], payoutItems: [], payoutMethods: [], services: [], leads: [], quotes: [], projects: [], payments: [],
     };
   }
 
@@ -186,6 +197,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     agreementSignaturesResult,
     payoutBatchesResult,
     payoutItemsResult,
+    payoutMethodsResult,
     servicesResult,
     attributionsResult,
     auditResult,
@@ -208,6 +220,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     supabase.from("affiliate_portal_agreement_signatures").select("id,agreement_id,signer_name,signer_email,agreement_sha256,consent_version,signed_at"),
     supabase.from("affiliate_portal_payout_batches").select("id,reference,status,scheduled_for,paid_at,notes,created_at").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_payout_items").select("id,payout_batch_id,commission_id,affiliate_id,amount_cents"),
+    supabase.from("affiliate_portal_payout_methods").select("affiliate_id,account_holder,bank_name,account_number,branch_code,tax_number,paypal_email"),
     supabase.from("services").select("id,name,category,description,base_once_off_cents,base_monthly_cents,is_active").eq("is_active", true).order("name"),
     supabase.from("affiliate_portal_lead_attributions").select("id,crm_referral_id,attribution_source,fraud_flag,manual_attribution_reason,created_at").order("created_at", { ascending: false }),
     supabase.from("affiliate_portal_audit_events").select("id,actor_crm_user_id,affiliate_id,action_type,entity_type,entity_id,occurred_at").order("occurred_at", { ascending: false }).limit(50),
@@ -245,6 +258,7 @@ export async function loadAffiliateOperations(): Promise<AffiliateOperationsData
     agreementSignatures: dataOrThrow<PortalAgreementSignature[]>(agreementSignaturesResult, "Load agreement signatures"),
     payoutBatches: dataOrThrow<PortalPayoutBatch[]>(payoutBatchesResult, "Load payout batches"),
     payoutItems: dataOrThrow<PortalPayoutItem[]>(payoutItemsResult, "Load payout items"),
+    payoutMethods: dataOrThrow<PayoutMethod[]>(payoutMethodsResult, "Load payout methods"),
     services: dataOrThrow<Service[]>(servicesResult, "Load CRM services"),
     attributions: dataOrThrow<PortalAttribution[]>(attributionsResult, "Load lead attributions"),
     auditEvents: dataOrThrow<PortalAuditEvent[]>(auditResult, "Load portal audit events"),
