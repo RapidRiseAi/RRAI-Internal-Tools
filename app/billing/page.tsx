@@ -11,8 +11,9 @@ import { ModalPanel } from "@/components/modal-panel";
 import { RecordResourceLink } from "@/components/record-resource-link";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listPayments } from "@/lib/data";
-import { billRetainer, markExpensePaid } from "@/lib/actions";
+import { billRetainer, markExpensePaid, refundPayment, voidInvoice } from "@/lib/actions";
 import { SubmitButton } from "@/components/submit-button";
+import { ConfirmSubmit } from "@/components/confirm-submit";
 import { dateShort, money } from "@/lib/format";
 import type {
   Expense,
@@ -138,14 +139,27 @@ export default async function Billing() {
             <h2 className="mb-4 text-lg font-semibold">Invoices</h2>
             <div className="grid gap-3">
               {invoices.map((invoice) => (
-                <RecordResourceLink
-                  key={invoice.id}
-                  title={invoice.invoice_number}
-                  eyebrow="Invoice"
-                  meta={<span>Due {dateShort(invoice.due_date)} · {money(invoice.amount_cents)} · {invoice.status}</span>}
-                  href={`/billing/${invoice.id}/pdf`}
-                  actionLabel="Open PDF"
-                />
+                <div key={invoice.id} className="grid gap-2">
+                  <RecordResourceLink
+                    title={invoice.invoice_number}
+                    eyebrow="Invoice"
+                    meta={<span>Due {dateShort(invoice.due_date)} · {money(invoice.amount_cents)} · {invoice.status}</span>}
+                    href={`/billing/${invoice.id}/pdf`}
+                    actionLabel="Open PDF"
+                  />
+                  {invoice.status === "PAID" ? (
+                    <form action={voidInvoice} className="flex justify-end">
+                      <input type="hidden" name="invoiceId" value={invoice.id} />
+                      <ConfirmSubmit
+                        message={`Void invoice ${invoice.invoice_number}? Any affiliate commission from this invoice will be reversed automatically (and flagged for clawback if already paid out).`}
+                        pendingLabel="Voiding…"
+                        className="min-h-9 border border-red-400/30 bg-none px-3 py-1.5 text-xs text-red-200 shadow-none hover:bg-red-400/10"
+                      >
+                        Void & reverse commission
+                      </ConfirmSubmit>
+                    </form>
+                  ) : null}
+                </div>
               ))}
             </div>
           </Card>
@@ -198,6 +212,18 @@ export default async function Billing() {
                       {payment.method ?? "No method"} •{" "}
                       {dateShort(payment.paid_at ?? payment.created_at)}
                     </p>
+                    {payment.status === "PAID" ? (
+                      <form action={refundPayment} className="mt-2 flex justify-end">
+                        <input type="hidden" name="paymentId" value={payment.id} />
+                        <ConfirmSubmit
+                          message={`Refund this ${money(payment.amount_cents)} payment? Any affiliate commission it created will be reversed automatically (and flagged for clawback if already paid out).`}
+                          pendingLabel="Refunding…"
+                          className="min-h-8 border border-red-400/30 bg-none px-3 py-1 text-xs text-red-200 shadow-none hover:bg-red-400/10"
+                        >
+                          Refund & reverse
+                        </ConfirmSubmit>
+                      </form>
+                    ) : null}
                   </div>
                 ))}
               </div>

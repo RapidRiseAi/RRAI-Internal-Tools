@@ -1574,6 +1574,111 @@ export async function recordPayment(formData: FormData) {
   redirect("/billing");
 }
 
+// Notify every affiliate whose commissions were just auto-reversed for a payment.
+// The DB trigger has already flipped them to CANCELLED (clean) or DISPUTED
+// (already paid out -> needs clawback); we only surface it to the partner.
+async function notifyAffiliatesOfReversedCommissions(paymentId: string) {
+  const supabase = getSupabaseAdmin();
+  const { data: reversed } = await supabase
+    .from("commissions")
+    .select("affiliate_id,amount_cents,status")
+    .eq("payment_id", paymentId)
+    .in("status", ["CANCELLED", "DISPUTED"]);
+  const totals = new Map<string, number>();
+  for (const commission of reversed ?? [])
+    totals.set(
+      commission.affiliate_id,
+      (totals.get(commission.affiliate_id) ?? 0) + commission.amount_cents,
+    );
+  for (const [affiliateId, amountCents] of totals) {
+    const authUserId = await affiliateAuthUserId(affiliateId);
+    if (authUserId)
+      await notifyAffiliateSafely({
+        authUserId,
+        preference: "commission_status_updates",
+        subject: "A Rapid Rise AI affiliate commission was reversed",
+        html: `<h1>Commission reversed</h1><p>A commission of R${(amountCents / 100).toFixed(2)} was reversed automatically because the underlying client payment was refunded or the invoice was voided.</p>`,
+      });
+  }
+}
+
+// Refund a recorded payment. Flipping it out of PAID fires the DB reversal
+// trigger, which automatically cancels the unpaid commissions it created (or
+// flags already-paid-out ones for clawback) and audits every change — so a
+// refund can never silently leave a partner over-paid.
+export async function refundPayment(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "payment:refund")))
+    redirect("/billing");
+  const paymentId = str(formData, "paymentId");
+  if (!paymentId) redirect("/billing");
+  const supabase = getSupabaseAdmin();
+  const { data: payment } = await supabase
+    .from("payments")
+    .select("id,invoice_id,amount_cents,status")
+    .eq("id", paymentId)
+    .maybeSingle();
+  if (!payment || payment.status !== "PAID") redirect("/billing");
+  const { error } = await supabase
+    .from("payments")
+    .update({ status: "REFUNDED" })
+    .eq("id", payment.id);
+  if (error) throw error;
+  // Keep the invoice consistent with the refund (this is a no-op for the
+  // reversal trigger since the payment is already out of PAID).
+  await supabase.from("invoices").update({ status: "REFUNDED" }).eq("id", payment.invoice_id);
+  await notifyAffiliatesOfReversedCommissions(payment.id);
+  await logActivity({
+    action: "PAYMENT_REFUNDED",
+    entityType: "Payment",
+    entityId: payment.id,
+    actorId: user.id,
+    message: `Payment refunded for invoice ${payment.invoice_id}; affiliate commissions reversed automatically`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing");
+}
+
+// Void a paid invoice. Leaving PAID cascades (invoice -> its PAID payments ->
+// commission reversal) through the DB triggers, again fully automatic + audited.
+export async function voidInvoice(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "invoice:void")))
+    redirect("/billing");
+  const invoiceId = str(formData, "invoiceId");
+  if (!invoiceId) redirect("/billing");
+  const supabase = getSupabaseAdmin();
+  const { data: invoice } = await supabase
+    .from("invoices")
+    .select("id,status,invoice_number")
+    .eq("id", invoiceId)
+    .maybeSingle();
+  if (!invoice) redirect("/billing");
+  // Capture the PAID payments before the void so we know which affiliates to
+  // notify once the trigger reverses their commissions.
+  const { data: paidPayments } = await supabase
+    .from("payments")
+    .select("id")
+    .eq("invoice_id", invoice.id)
+    .eq("status", "PAID");
+  const { error } = await supabase
+    .from("invoices")
+    .update({ status: "CANCELLED" })
+    .eq("id", invoice.id);
+  if (error) throw error;
+  for (const paidPayment of paidPayments ?? [])
+    await notifyAffiliatesOfReversedCommissions(paidPayment.id);
+  await logActivity({
+    action: "INVOICE_VOIDED",
+    entityType: "Invoice",
+    entityId: invoice.id,
+    actorId: user.id,
+    message: `${invoice.invoice_number} voided; affiliate commissions reversed automatically`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing");
+}
+
 export async function upsertVendor(formData: FormData) {
   const user = await requirePermission(permissions.billingWrite);
   if (!(await reserveSubmission(user.id, formData, "vendor:create")))
