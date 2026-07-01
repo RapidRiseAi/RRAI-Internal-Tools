@@ -180,7 +180,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Default rate % (optional)"><input className={inputClass} name="defaultRatePercent" type="number" min="0.01" max="50" step="0.01" /></Field>
             <Field label="Effective from"><input className={inputClass} name="effectiveFrom" type="date" /></Field>
-            <Field label="Effective to"><input className={inputClass} name="effectiveTo" type="date" /></Field>
+            <Field label="Effective to (blank = ongoing)"><input className={inputClass} name="effectiveTo" type="date" /></Field>
           </div>
           <Field label="Negotiated terms"><textarea className={inputClass} name="termsSummary" minLength={3} maxLength={5000} required /></Field>
           <SubmitButton className="min-h-11" pendingLabel="Saving draft…">Save draft</SubmitButton>
@@ -201,7 +201,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
                   <Field label="Model"><select className={inputClass} name="commissionModel" defaultValue={agreement.commission_model}><option value="BUILD_COST">Build-cost</option><option value="LIFETIME">Lifetime</option></select></Field>
                   <Field label="Default %"><input className={inputClass} name="defaultRatePercent" type="number" min="0.01" max="50" step="0.01" defaultValue={agreement.default_rate_percent ?? ""} /></Field>
                   <Field label="Effective from"><input className={inputClass} name="effectiveFrom" type="date" defaultValue={agreement.effective_from ?? ""} /></Field>
-                  <Field label="Effective to"><input className={inputClass} name="effectiveTo" type="date" defaultValue={agreement.effective_to ?? ""} /></Field>
+                  <Field label="Effective to (blank = ongoing)"><input className={inputClass} name="effectiveTo" type="date" defaultValue={agreement.effective_to ?? ""} /></Field>
                 </div>
                 <Field label="Terms"><textarea className={inputClass} name="termsSummary" minLength={3} maxLength={5000} defaultValue={agreement.terms_summary ?? ""} required /></Field>
                 <SubmitButton className="min-h-11" pendingLabel="Updating draft…">Update draft</SubmitButton>
