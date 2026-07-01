@@ -11,7 +11,8 @@ import { ModalPanel } from "@/components/modal-panel";
 import { RecordResourceLink } from "@/components/record-resource-link";
 import { Card, PageHeader, StatusBadge } from "@/components/ui";
 import { genericList, listClients, listPayments } from "@/lib/data";
-import { markExpensePaid } from "@/lib/actions";
+import { billRetainer, markExpensePaid } from "@/lib/actions";
+import { SubmitButton } from "@/components/submit-button";
 import { dateShort, money } from "@/lib/format";
 import type {
   Expense,
@@ -167,6 +168,14 @@ export default async function Billing() {
                       {money(retainer.monthly_amount_cents)} • next{" "}
                       {dateShort(retainer.next_billing_date)}
                     </p>
+                    {retainer.status === "ACTIVE" ? (
+                      <form action={billRetainer} className="mt-2">
+                        <input type="hidden" name="retainerId" value={retainer.id} />
+                        <SubmitButton className="min-h-9 px-3 py-1.5 text-xs" pendingLabel="Billing…">
+                          Bill this month
+                        </SubmitButton>
+                      </form>
+                    ) : null}
                   </div>
                 ))}
               </div>

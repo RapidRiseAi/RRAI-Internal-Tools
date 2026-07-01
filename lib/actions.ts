@@ -142,6 +142,10 @@ function parseInvoiceLineItems(formData: FormData) {
         formData.getAll("invoiceItemUnitCents")[index] ?? null,
         0,
       ),
+      recurring_cents: positiveInt(
+        formData.getAll("invoiceItemRecurringCents")[index] ?? null,
+        0,
+      ),
       sort_order: index,
     }))
     .filter((item) => item.description);
@@ -1391,6 +1395,10 @@ export async function upsertInvoice(
       (sum, item) => sum + item.quantity * item.unit_amount_cents,
       0,
     );
+    const recurringTotalCents = lineItems.reduce(
+      (sum, item) => sum + item.quantity * (item.recurring_cents ?? 0),
+      0,
+    );
     const parsed = invoiceSchema.parse({
       invoiceNumber: str(formData, "invoiceNumber"),
       clientId: str(formData, "clientId"),
@@ -1410,6 +1418,7 @@ export async function upsertInvoice(
       quote_id: parsed.quoteId ?? null,
       status: wantsPaid ? "SENT" : parsed.status,
       amount_cents: parsed.amountCents,
+      revenue_kind: "BUILD",
       due_date: parsed.dueDate?.toISOString() ?? null,
       issued_at: new Date().toISOString(),
     });
@@ -1418,6 +1427,22 @@ export async function upsertInvoice(
       .from("invoice_items")
       .insert(lineItems.map((item) => ({ ...item, invoice_id: data.id })));
     if (itemError && itemError.code !== "42P01") throw itemError;
+    // Any recurring amount on the invoice sets up a monthly retainer automatically,
+    // so ongoing revenue (and recurring/lifetime commissions) is always tracked.
+    if (recurringTotalCents > 0) {
+      const nextBilling = new Date();
+      nextBilling.setUTCDate(nextBilling.getUTCDate() + 30);
+      const { error: retainerError } = await getSupabaseAdmin()
+        .from("retainers")
+        .insert({
+          client_id: parsed.clientId,
+          type: `${data.invoice_number} monthly retainer`,
+          status: "ACTIVE",
+          monthly_amount_cents: recurringTotalCents,
+          next_billing_date: nextBilling.toISOString().slice(0, 10),
+        });
+      if (retainerError && retainerError.code !== "42P01") throw retainerError;
+    }
     if (wantsPaid) {
       const { error: paidError } = await getSupabaseAdmin()
         .from("invoices")
@@ -1436,6 +1461,57 @@ export async function upsertInvoice(
     revalidatePath("/billing");
     redirect("/billing");
   });
+}
+
+export async function billRetainer(formData: FormData) {
+  const user = await requirePermission(permissions.billingWrite);
+  if (!(await reserveSubmission(user.id, formData, "retainer:bill")))
+    redirect("/billing?tab=retainers");
+  const retainerId = str(formData, "retainerId");
+  const supabase = getSupabaseAdmin();
+  const { data: retainer } = await supabase
+    .from("retainers")
+    .select("id,client_id,type,monthly_amount_cents,status,next_billing_date")
+    .eq("id", retainerId)
+    .maybeSingle();
+  if (!retainer || retainer.status !== "ACTIVE" || retainer.monthly_amount_cents <= 0)
+    redirect("/billing?tab=retainers");
+  // A recurring invoice: revenue_kind RECURRING so recurring/lifetime commissions
+  // apply (and build-cost agreements correctly do NOT).
+  const { data: invoice, error } = await insertInvoiceRecord({
+    invoice_number: numberCode("INV"),
+    client_id: retainer.client_id,
+    quote_id: null,
+    status: "SENT",
+    amount_cents: retainer.monthly_amount_cents,
+    revenue_kind: "RECURRING",
+    due_date: null,
+    issued_at: new Date().toISOString(),
+  });
+  if (error) throw error;
+  const { error: itemError } = await supabase.from("invoice_items").insert({
+    invoice_id: invoice.id,
+    description: retainer.type,
+    quantity: 1,
+    unit_amount_cents: retainer.monthly_amount_cents,
+    recurring_cents: 0,
+    sort_order: 0,
+  });
+  if (itemError && itemError.code !== "42P01") throw itemError;
+  await supabase
+    .from("retainers")
+    .update({ next_billing_date: nextRecurringDate(retainer.next_billing_date, "MONTHLY") })
+    .eq("id", retainer.id);
+  await logActivity({
+    action: "RETAINER_BILLED",
+    entityType: "Retainer",
+    entityId: retainer.id,
+    clientId: retainer.client_id,
+    actorId: user.id,
+    message: `${retainer.type} billed — recurring invoice ${invoice.invoice_number} created`,
+  });
+  revalidatePath("/billing");
+  redirect("/billing?tab=retainers");
 }
 
 export async function recordPayment(formData: FormData) {

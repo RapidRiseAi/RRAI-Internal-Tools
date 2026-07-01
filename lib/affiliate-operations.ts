@@ -27,7 +27,7 @@ export type PortalApplication = {
   reviewed_at: string | null;
   rejection_reason: string | null;
   deletion_scheduled_at: string | null;
-  preferred_commission_model: "BUILD_COST" | "LIFETIME" | null;
+  preferred_commission_model: "BUILD_COST" | "LIFETIME" | "RECURRING" | null;
   email_verified: boolean;
 };
 
@@ -70,13 +70,13 @@ export type CommissionSnapshot = {
   agreement_id: string | null;
   agreement_rate_id: string | null;
   service_id: string | null;
-  commission_model: "BUILD_COST" | "LIFETIME" | null;
+  commission_model: "BUILD_COST" | "LIFETIME" | "RECURRING" | null;
 };
 
 export type PortalAgreement = {
   id: string;
   affiliate_id: string;
-  commission_model: "BUILD_COST" | "LIFETIME";
+  commission_model: "BUILD_COST" | "LIFETIME" | "RECURRING";
   default_rate_percent: number | null;
   status: "DRAFT" | "PENDING_SIGNATURE" | "ACTIVE" | "SUSPENDED" | "ENDED";
   effective_from: string | null;

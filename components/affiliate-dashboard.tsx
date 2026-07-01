@@ -41,8 +41,11 @@ function dateTime(value: string | null) {
   }).format(new Date(value));
 }
 
-function modelLabel(value: "BUILD_COST" | "LIFETIME") {
-  return value === "BUILD_COST" ? "Build-cost commission" : "Lifetime commission";
+function modelLabel(value: string | null | undefined) {
+  if (value === "LIFETIME") return "Lifetime commission";
+  if (value === "RECURRING") return "Recurring commission";
+  if (value === "BUILD_COST") return "Build-cost commission";
+  return "Commission";
 }
 
 const commissionTransitions: Record<string, string[]> = {
@@ -176,7 +179,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
           <input type="hidden" name="status" value="DRAFT" />
           <h3 className="font-semibold text-deck-text">Create agreement draft</h3>
           <Field label="Affiliate"><select className={inputClass} name="affiliateId" required><option value="">Choose affiliate</option>{data.affiliates.map((affiliate) => <option key={affiliate.id} value={affiliate.id}>{affiliate.name}</option>)}</select></Field>
-          <Field label="Commission model"><select className={inputClass} name="commissionModel" required><option value="BUILD_COST">Build-cost commission</option><option value="LIFETIME">Lifetime commission</option></select></Field>
+          <Field label="Commission model"><select className={inputClass} name="commissionModel" required><option value="BUILD_COST">Build-cost commission (build only)</option><option value="RECURRING">Recurring commission (post-build only)</option><option value="LIFETIME">Lifetime commission (everything)</option></select></Field>
           <div className="grid gap-3 sm:grid-cols-2">
             <Field label="Default rate % (optional)"><input className={inputClass} name="defaultRatePercent" type="number" min="0.01" max="50" step="0.01" /></Field>
             <Field label="Effective from"><input className={inputClass} name="effectiveFrom" type="date" /></Field>
@@ -198,7 +201,7 @@ function AgreementManagement({ data }: { data: AffiliateOperationsData }) {
                 <SubmissionInput scope={`affiliate-agreement-update:${agreement.id}`} />
                 <input type="hidden" name="agreementId" value={agreement.id} /><input type="hidden" name="affiliateId" value={agreement.affiliate_id} /><input type="hidden" name="status" value="DRAFT" />
                 <div className="grid gap-3 sm:grid-cols-2">
-                  <Field label="Model"><select className={inputClass} name="commissionModel" defaultValue={agreement.commission_model}><option value="BUILD_COST">Build-cost</option><option value="LIFETIME">Lifetime</option></select></Field>
+                  <Field label="Model"><select className={inputClass} name="commissionModel" defaultValue={agreement.commission_model}><option value="BUILD_COST">Build-cost</option><option value="RECURRING">Recurring</option><option value="LIFETIME">Lifetime</option></select></Field>
                   <Field label="Default %"><input className={inputClass} name="defaultRatePercent" type="number" min="0.01" max="50" step="0.01" defaultValue={agreement.default_rate_percent ?? ""} /></Field>
                   <Field label="Effective from"><input className={inputClass} name="effectiveFrom" type="date" defaultValue={agreement.effective_from ?? ""} /></Field>
                   <Field label="Effective to (blank = ongoing)"><input className={inputClass} name="effectiveTo" type="date" defaultValue={agreement.effective_to ?? ""} /></Field>

@@ -293,7 +293,7 @@ export const portalCommissionSchema = z.object({
 export const portalAgreementSchema = z.object({
   agreementId: optionalStrictUuid,
   affiliateId: z.string().uuid(),
-  commissionModel: z.enum(["BUILD_COST", "LIFETIME"]),
+  commissionModel: z.enum(["BUILD_COST", "LIFETIME", "RECURRING"]),
   defaultRatePercent: z.preprocess(
     (value) => value === "" || value === null ? undefined : value,
     z.coerce.number().min(0.01).max(50).optional(),
