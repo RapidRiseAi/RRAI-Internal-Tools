@@ -21,6 +21,7 @@ import type {
   Quote,
   QuoteItem,
   Retainer,
+  Service,
   Vendor,
 } from "@/lib/types";
 import { requirePagePermission } from "@/lib/auth";
@@ -38,6 +39,7 @@ export default async function Billing() {
     expenses,
     projects,
     vendors,
+    services,
   ] = await Promise.all([
     genericList<Invoice>("invoices"),
     listClients(),
@@ -48,6 +50,7 @@ export default async function Billing() {
     genericList<Expense>("expenses", "expense_date"),
     genericList<Project>("projects"),
     genericList<Vendor>("vendors", "name"),
+    genericList<Service>("services", "name"),
   ]);
   const paid = invoices
     .filter((invoice) => invoice.status === "PAID")
@@ -80,6 +83,7 @@ export default async function Billing() {
                 clients={clients}
                 quotes={quotes}
                 quoteItems={quoteItems}
+                services={services.map((service) => ({ id: service.id, name: service.name }))}
               />
             </ModalPanel>
             <ModalPanel

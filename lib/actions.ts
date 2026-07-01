@@ -132,6 +132,7 @@ function parseInvoiceLineItems(formData: FormData) {
     .map((value) => String(value).trim());
   return descriptions
     .map((description, index) => ({
+      service_id: String(formData.getAll("invoiceServiceId")[index] ?? "") || null,
       description,
       quantity: Math.max(
         1,
@@ -1398,11 +1399,16 @@ export async function upsertInvoice(
       amountCents,
       dueDate: str(formData, "dueDate"),
     });
+    // If the invoice is being created already paid, insert it as SENT first, add
+    // the line items, THEN flip it to PAID. The PAID flip fires a DB safety-net
+    // trigger that creates the payment row (with line items present), which drives
+    // affiliate commission automation at the correct product-specific rates.
+    const wantsPaid = parsed.status === "PAID";
     const { data, error } = await insertInvoiceRecord({
       invoice_number: parsed.invoiceNumber ?? numberCode("INV"),
       client_id: parsed.clientId,
       quote_id: parsed.quoteId ?? null,
-      status: parsed.status,
+      status: wantsPaid ? "SENT" : parsed.status,
       amount_cents: parsed.amountCents,
       due_date: parsed.dueDate?.toISOString() ?? null,
       issued_at: new Date().toISOString(),
@@ -1412,6 +1418,13 @@ export async function upsertInvoice(
       .from("invoice_items")
       .insert(lineItems.map((item) => ({ ...item, invoice_id: data.id })));
     if (itemError && itemError.code !== "42P01") throw itemError;
+    if (wantsPaid) {
+      const { error: paidError } = await getSupabaseAdmin()
+        .from("invoices")
+        .update({ status: "PAID" })
+        .eq("id", data.id);
+      if (paidError) throw paidError;
+    }
     await logActivity({
       action: "INVOICE_CREATED",
       entityType: "Invoice",

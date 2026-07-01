@@ -11,7 +11,8 @@ import type { ClientOption } from "./forms";
 import type { QuoteItem } from "@/lib/types";
 
 export type InvoiceQuoteOption = { id: string; title: string; quote_number: string; client_id: string | null; once_off_total_cents: number; monthly_total_cents: number };
-type InvoiceLineItem = { description: string; quantity: string; unitAmountCents: string };
+export type InvoiceServiceOption = { id: string; name: string };
+type InvoiceLineItem = { description: string; quantity: string; unitAmountCents: string; serviceId: string };
 
 const randToCents = (value: string) => Math.round(Number(value || 0) * 100);
 const centsToRand = (value: number) => String(Math.round(value / 100));
@@ -23,9 +24,9 @@ function FormError({ message }: { message?: string }) {
 function FieldError({ messages }: { messages?: string[] }) {
   return messages?.length ? <p className="text-xs font-medium text-red-300">{messages[0]}</p> : null;
 }
-const blankLineItem = (): InvoiceLineItem => ({ description: "", quantity: "1", unitAmountCents: "0" });
+const blankLineItem = (): InvoiceLineItem => ({ description: "", quantity: "1", unitAmountCents: "0", serviceId: "" });
 
-export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOption[]; quotes: InvoiceQuoteOption[]; quoteItems: QuoteItem[] }) {
+export function InvoiceForm({ clients, quotes, quoteItems, services = [] }: { clients: ClientOption[]; quotes: InvoiceQuoteOption[]; quoteItems: QuoteItem[]; services?: InvoiceServiceOption[] }) {
   const [state, formAction] = useActionState(upsertInvoice, { ok: false });
   const submissionKey = useMemo(() => `upsert-invoice:${globalThis.crypto?.randomUUID?.() ?? Math.random().toString(36).slice(2)}`, []);
   const [quoteId, setQuoteId] = useState("");
@@ -45,10 +46,10 @@ export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOp
     setClientId(quote.client_id ?? "");
     setInvoiceNumber(`INV-${quote.quote_number.replace(/^Q-?/, "")}`);
     const quoteRows = quoteItems.filter((item) => item.quote_id === quote.id).flatMap((item) => [
-      item.once_off_cents > 0 ? { description: `${item.description} — once-off`, quantity: String(item.quantity), unitAmountCents: centsToRand(item.once_off_cents) } : null,
-      item.monthly_cents > 0 ? { description: `${item.description} — monthly`, quantity: String(item.quantity), unitAmountCents: centsToRand(item.monthly_cents) } : null,
+      item.once_off_cents > 0 ? { description: `${item.description} — once-off`, quantity: String(item.quantity), unitAmountCents: centsToRand(item.once_off_cents), serviceId: item.service_id ?? "" } : null,
+      item.monthly_cents > 0 ? { description: `${item.description} — monthly`, quantity: String(item.quantity), unitAmountCents: centsToRand(item.monthly_cents), serviceId: item.service_id ?? "" } : null,
     ]).filter(Boolean) as InvoiceLineItem[];
-    setItems(quoteRows.length ? quoteRows : [{ description: quote.title, quantity: "1", unitAmountCents: centsToRand(quote.once_off_total_cents + quote.monthly_total_cents) }]);
+    setItems(quoteRows.length ? quoteRows : [{ description: quote.title, quantity: "1", unitAmountCents: centsToRand(quote.once_off_total_cents + quote.monthly_total_cents), serviceId: "" }]);
   }
 
   const totalCents = items.reduce((sum, item) => sum + Number(item.quantity || 1) * randToCents(item.unitAmountCents), 0);
@@ -71,8 +72,9 @@ export function InvoiceForm({ clients, quotes, quoteItems }: { clients: ClientOp
         <button type="button" onClick={() => setItems((current) => [...current, blankLineItem()])} className="inline-flex items-center gap-2 rounded-xl border border-rapid-cyan/30 bg-rapid-cyan/10 px-3 py-2 text-sm font-semibold text-rapid-cyan"><Plus className="size-4" /> Add line item</button>
       </div>
       <div className="mt-4 grid gap-3">
-        {items.map((item, index) => <div key={index} className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/45 p-3 md:grid-cols-[1.5fr_0.35fr_0.65fr_auto]">
+        {items.map((item, index) => <div key={index} className="grid gap-3 rounded-xl border border-white/10 bg-slate-950/45 p-3 md:grid-cols-[1.3fr_0.9fr_0.3fr_0.6fr_auto]">
           <Field label="Description"><input className={inputClass} name="invoiceItemDescription" value={item.description} onChange={(event) => updateItem(index, { description: event.target.value })} required /></Field>
+          <Field label="Service (for commission rate)"><select className={inputClass} name="invoiceServiceId" value={item.serviceId} onChange={(event) => updateItem(index, { serviceId: event.target.value })}><option value="">None / default rate</option>{services.map((service) => <option key={service.id} value={service.id}>{service.name}</option>)}</select></Field>
           <Field label="Qty"><input className={inputClass} name="invoiceItemQuantity" type="number" min="1" value={item.quantity} onChange={(event) => updateItem(index, { quantity: event.target.value })} required /></Field>
           <Field label="Unit amount (R)"><input className={inputClass} type="number" min="0" value={item.unitAmountCents} onChange={(event) => updateItem(index, { unitAmountCents: event.target.value })} required /><input type="hidden" name="invoiceItemUnitCents" value={randToCents(item.unitAmountCents)} /></Field>
           <button type="button" disabled={items.length === 1} onClick={() => setItems((current) => current.filter((_, itemIndex) => itemIndex !== index))} className="self-end rounded-xl border border-white/10 p-2 text-slate-300 hover:bg-white/10 disabled:cursor-not-allowed disabled:opacity-40" aria-label="Remove line item"><Trash2 className="size-4" /></button>
